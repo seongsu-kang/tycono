@@ -5,9 +5,8 @@ import SidePanel from '../components/office/SidePanel';
 import OperationsPanel from '../components/office/OperationsPanel';
 import ProjectPanel from '../components/office/ProjectPanel';
 import AssignTaskModal from '../components/office/AssignTaskModal';
-import ExecutionPanel from '../components/office/ExecutionPanel';
+import ActivityPanel from '../components/office/ActivityPanel';
 import WaveModal from '../components/office/WaveModal';
-import WaveExecutionPanel from '../components/office/WaveExecutionPanel';
 import HireRoleModal from '../components/office/HireRoleModal';
 import FireRoleModal from '../components/office/FireRoleModal';
 import TerminalPanel from '../components/terminal/TerminalPanel';
@@ -80,11 +79,10 @@ export default function OfficePage() {
   const [panel, setPanel] = useState<PanelState>({ type: 'none' });
   const [selectedRole, setSelectedRole] = useState<RoleDetail | null>(null);
 
-  /* Phase 2: Execution state */
+  /* Phase 2: Execution state — now job-based */
   const [assignModal, setAssignModal] = useState<{ roleId: string; roleName: string; mode: 'assign' | 'ask' } | null>(null);
-  const [execution, setExecution] = useState<{ roleId: string; roleName: string; task: string; readOnly?: boolean } | null>(null);
+  const [jobStack, setJobStack] = useState<Array<{ jobId: string; title: string; color: string }>>([]);
   const [showWaveModal, setShowWaveModal] = useState(false);
-  const [waveExecution, setWaveExecution] = useState<string | null>(null);
   const [showHireModal, setShowHireModal] = useState(false);
   const [fireTarget, setFireTarget] = useState<{ roleId: string; roleName: string } | null>(null);
 
@@ -179,11 +177,19 @@ export default function OfficePage() {
     setAssignModal({ roleId, roleName, mode: 'ask' });
   };
 
-  const handleExecutionStart = (roleId: string, task: string) => {
+  const handleExecutionStart = async (roleId: string, task: string) => {
     const role = roles.find((r) => r.id === roleId);
     const isAsk = assignModal?.mode === 'ask';
-    setExecution({ roleId, roleName: role?.name ?? roleId, task, readOnly: isAsk });
     setAssignModal(null);
+
+    try {
+      const { jobId } = await api.startJob({ type: 'assign', roleId, task, readOnly: isAsk });
+      const color = ROLE_COLORS[roleId] ?? '#666';
+      const title = `${roleId.toUpperCase()} · ${role?.name ?? roleId}`;
+      setJobStack([{ jobId, title, color }]);
+    } catch (err) {
+      addToast(`Failed to start job: ${err instanceof Error ? err.message : 'unknown'}`, '#C62828');
+    }
   };
 
   const addToast = (message: string, color: string) => {
@@ -193,20 +199,25 @@ export default function OfficePage() {
   };
 
   const handleExecutionDone = () => {
-    if (execution) {
-      addToast(`${execution.roleId.toUpperCase()} completed task`, ROLE_COLORS[execution.roleId] ?? '#666');
+    const current = jobStack[jobStack.length - 1];
+    if (current) {
+      addToast(`${current.title} completed`, current.color);
     }
     api.getStandups().then(setStandups).catch(console.error);
     api.getCompany().then((c) => setRoles(c.roles)).catch(console.error);
   };
 
-  const handleWaveDispatch = (directive: string) => {
-    setWaveExecution(directive);
+  const handleWaveDispatch = async (directive: string) => {
     setShowWaveModal(false);
+    try {
+      const { jobId } = await api.startJob({ type: 'wave', directive });
+      setJobStack([{ jobId, title: 'CEO WAVE', color: '#B71C1C' }]);
+    } catch (err) {
+      addToast(`Failed to start wave: ${err instanceof Error ? err.message : 'unknown'}`, '#C62828');
+    }
   };
 
-  const handleWaveDone = () => {
-    addToast('CEO Wave dispatched successfully', '#B71C1C');
+  const handleJobDone = () => {
     api.getWaves().then(setWaves).catch(console.error);
     api.getStandups().then(setStandups).catch(console.error);
   };
@@ -729,16 +740,48 @@ export default function OfficePage() {
         />
       )}
 
-      {/* Phase 2: Execution Streaming Panel */}
-      {execution && (
-        <ExecutionPanel
-          roleId={execution.roleId}
-          roleName={execution.roleName}
-          task={execution.task}
-          readOnly={execution.readOnly}
-          onClose={() => setExecution(null)}
-          onDone={handleExecutionDone}
-        />
+      {/* Phase 2: Activity Panel (replaces ExecutionPanel + WaveExecutionPanel) */}
+      {jobStack.length > 0 && (() => {
+        const current = jobStack[jobStack.length - 1];
+        return (
+          <ActivityPanel
+            key={current.jobId}
+            jobId={current.jobId}
+            title={jobStack.length > 1
+              ? `${'< '.repeat(0)}${current.title}`
+              : current.title
+            }
+            color={current.color}
+            variant="modal"
+            onClose={() => setJobStack([])}
+            onDone={() => { handleExecutionDone(); handleJobDone(); }}
+            onNavigateToJob={(childJobId) => {
+              // Navigate deeper into dispatch chain
+              api.getJob(childJobId).then((info) => {
+                const childColor = ROLE_COLORS[info.roleId] ?? '#888';
+                setJobStack((prev) => [...prev, {
+                  jobId: childJobId,
+                  title: `${info.roleId.toUpperCase()} · ${info.task.slice(0, 40)}`,
+                  color: childColor,
+                }]);
+              }).catch(console.error);
+            }}
+          />
+        );
+      })()}
+
+      {/* Back button overlay for drill-down navigation */}
+      {jobStack.length > 1 && (
+        <div className="fixed top-[5%] left-1/2 -translate-x-1/2 w-[720px] max-w-[95vw] z-[62] pointer-events-none">
+          <div className="pointer-events-auto">
+            <button
+              onClick={() => setJobStack((prev) => prev.slice(0, -1))}
+              className="mt-2 ml-2 px-3 py-1 text-xs font-bold text-[var(--terminal-text)] bg-[var(--terminal-bg)] border border-[var(--terminal-border)] rounded-lg cursor-pointer hover:bg-[var(--terminal-inline-bg)]"
+            >
+              {'\u2190'} Back to {jobStack[jobStack.length - 2]?.title}
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Phase 2: Wave Modal */}
@@ -746,15 +789,6 @@ export default function OfficePage() {
         <WaveModal
           onClose={() => setShowWaveModal(false)}
           onDispatch={handleWaveDispatch}
-        />
-      )}
-
-      {/* Phase 2: Wave Execution Panel */}
-      {waveExecution && (
-        <WaveExecutionPanel
-          directive={waveExecution}
-          onClose={() => setWaveExecution(null)}
-          onDone={handleWaveDone}
         />
       )}
 

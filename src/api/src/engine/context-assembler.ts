@@ -276,21 +276,48 @@ function buildDispatchSection(orgTree: OrgTree, roleId: string, subordinates: st
     return sub ? `- **${sub.name}** (\`${id}\`): ${sub.persona.split('\n')[0]}` : `- ${id}`;
   }).join('\n');
 
+  const exampleSubId = subordinates[0] ?? 'engineer';
+
   return `# Dispatch (Team Management)
 
-You can assign tasks to your direct reports using the \`dispatch\` tool.
+You can assign tasks to your direct reports. They will execute independently and return results.
 
 ## Available Team Members
 ${subInfo}
 
 ## How to Dispatch
-Call dispatch with the role ID and task description:
+
+**Use Bash to run the dispatch command:**
+
+\`\`\`bash
+python3 "$DISPATCH_CMD" ${exampleSubId} "Task description here"
 \`\`\`
-dispatch({ roleId: "engineer", task: "Implement the context assembler module" })
+
+**IMPORTANT**: Always use \`python3 "$DISPATCH_CMD"\` — this is the ONLY way to dispatch tasks to subordinates.
+
+The command will:
+1. Start a job for the subordinate
+2. Wait up to ~100 seconds for completion
+3. Return the subordinate's output if done, or a job ID to check later
+
+If the subordinate takes longer than 100s, you'll get a job ID. Check the result with:
+\`\`\`bash
+python3 "$DISPATCH_CMD" --check <jobId>
+\`\`\`
+
+## Examples
+
+\`\`\`bash
+# Assign a task and wait for result
+python3 "$DISPATCH_CMD" ${exampleSubId} "프로젝트 현황을 확인하고 보고서를 작성해"
+
+# Check a previously dispatched job result
+python3 "$DISPATCH_CMD" --check job-xxx-123
 \`\`\`
 
 ## Rules
-- Only dispatch to your direct reports or their subordinates
+- Only dispatch to your direct reports listed above
 - Include clear task description, acceptance criteria, and relevant file paths
-- The dispatched agent will work independently and return results to you`;
+- The dispatched agent will work independently and return results to you
+- After receiving results, synthesize and report back`;
 }
