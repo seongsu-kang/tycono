@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '../api/client';
-import type { Role, RoleDetail, Project, Standup, Wave, Decision, Session, Message, StreamEvent, CreateRoleInput } from '../types';
+import type { Role, RoleDetail, Project, Standup, Wave, Decision, Session, Message, StreamEvent, CreateRoleInput, ImportJob } from '../types';
 import SidePanel from '../components/office/SidePanel';
 import OperationsPanel from '../components/office/OperationsPanel';
 import ProjectPanel from '../components/office/ProjectPanel';
@@ -66,7 +66,7 @@ type PanelState =
 
 /* ─── Page ───────────────────────────────── */
 
-export default function OfficePage() {
+export default function OfficePage({ importJob, onImportDone }: { importJob?: ImportJob | null; onImportDone?: () => void }) {
   const [roles, setRoles] = useState<Role[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [standups, setStandups] = useState<Standup[]>([]);
@@ -90,6 +90,113 @@ export default function OfficePage() {
   const [roleStatuses, setRoleStatuses] = useState<Record<string, string>>({});
   const [activeExecs, setActiveExecs] = useState<{ roleId: string; task: string }[]>([]);
   const [toasts, setToasts] = useState<{ id: number; message: string; color: string }[]>([]);
+
+  /* Knowledge import state */
+  interface ImportLogEntry {
+    id: number;
+    type: 'scan' | 'process' | 'created' | 'done' | 'error';
+    text: string;
+    detail?: string;
+  }
+  const [importProgress, setImportProgress] = useState<{ index: number; total: number } | null>(null);
+  const [importBanner, setImportBanner] = useState<string | null>(null);
+  const [importLogs, setImportLogs] = useState<ImportLogEntry[]>([]);
+  const [importPanelOpen, setImportPanelOpen] = useState(false);
+  const importStarted = useRef(false);
+  const importLogEnd = useRef<HTMLDivElement>(null);
+  let logId = useRef(0);
+
+  const addImportLog = (type: ImportLogEntry['type'], text: string, detail?: string) => {
+    const entry: ImportLogEntry = { id: logId.current++, type, text, detail };
+    setImportLogs(prev => [...prev, entry]);
+  };
+
+  // Auto-scroll import log
+  useEffect(() => {
+    if (importPanelOpen) importLogEnd.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [importLogs, importPanelOpen]);
+
+  /* Knowledge import SSE */
+  useEffect(() => {
+    if (!importJob || importStarted.current) return;
+    importStarted.current = true;
+
+    setImportBanner('Scanning knowledge sources...');
+    addImportLog('scan', 'Starting knowledge import...');
+
+    const controller = new AbortController();
+
+    fetch('/api/setup/import-knowledge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paths: importJob.paths, companyRoot: importJob.companyRoot }),
+      signal: controller.signal,
+    }).then(async (res) => {
+      const reader = res.body?.getReader();
+      if (!reader) return;
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        let eventName = '';
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            eventName = line.slice(7).trim();
+          } else if (line.startsWith('data: ') && eventName) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              switch (eventName) {
+                case 'scanning':
+                  setImportBanner(`Scanning: ${data.path} (${data.fileCount} files)`);
+                  addImportLog('scan', `Found ${data.fileCount} files`, data.path);
+                  break;
+                case 'processing':
+                  setImportProgress({ index: data.index, total: data.total });
+                  setImportBanner(`Importing knowledge... (${data.index}/${data.total})`);
+                  addImportLog('process', `Processing: ${data.file}`, `${data.index} / ${data.total}`);
+                  break;
+                case 'created':
+                  addImportLog('created', data.title, data.summary);
+                  break;
+                case 'done':
+                  setImportBanner(null);
+                  setImportProgress(null);
+                  addImportLog('done', `Import complete! ${data.created} created, ${data.skipped} skipped.`);
+                  addToast(`Knowledge import complete! ${data.created} documents imported.`, '#2E7D32');
+                  onImportDone?.();
+                  break;
+                case 'error':
+                  setImportBanner(null);
+                  setImportProgress(null);
+                  addImportLog('error', data.message);
+                  addToast(`Import failed: ${data.message}`, '#B71C1C');
+                  onImportDone?.();
+                  break;
+              }
+            } catch { /* ignore parse errors */ }
+            eventName = '';
+          }
+        }
+      }
+    }).catch((err) => {
+      if (err.name !== 'AbortError') {
+        setImportBanner(null);
+        addImportLog('error', err.message);
+        addToast(`Import error: ${err.message}`, '#B71C1C');
+        onImportDone?.();
+      }
+    });
+
+    return () => controller.abort();
+  }, [importJob]);
 
   /* View mode: card grid vs isometric */
   const [viewMode, setViewMode] = useState<'card' | 'iso'>('card');
@@ -494,6 +601,79 @@ export default function OfficePage() {
           <span>{today}</span>
         </div>
       </div>
+
+      {/* ─── Knowledge Import Banner + Log Panel ─── */}
+      {(importBanner || importLogs.length > 0) && (
+        <div className="shrink-0 z-[44]">
+          {/* Banner bar — clickable */}
+          <div
+            className="flex items-center gap-3 px-5 py-2 text-xs cursor-pointer select-none"
+            style={{ background: 'var(--accent)', color: '#fff', fontFamily: 'var(--pixel-font)' }}
+            onClick={() => setImportPanelOpen(prev => !prev)}
+          >
+            {importBanner ? (
+              <div className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin shrink-0" />
+            ) : (
+              <span className="shrink-0">{'\u2705'}</span>
+            )}
+            <span className="flex-1">{importBanner || 'Knowledge import finished'}</span>
+            {importProgress && (
+              <div className="w-24 h-1.5 rounded-full overflow-hidden shrink-0" style={{ background: 'rgba(255,255,255,0.3)' }}>
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{ width: `${(importProgress.index / importProgress.total) * 100}%`, background: '#fff' }}
+                />
+              </div>
+            )}
+            <span className="text-[10px] opacity-70 shrink-0">{importPanelOpen ? '\u25B2' : '\u25BC'}</span>
+          </div>
+
+          {/* Expandable log panel */}
+          {importPanelOpen && (
+            <div
+              className="overflow-y-auto text-xs"
+              style={{
+                background: 'var(--terminal-bg)',
+                borderBottom: '2px solid var(--accent)',
+                maxHeight: 240,
+                fontFamily: 'var(--pixel-font)',
+              }}
+            >
+              {importLogs.map(log => (
+                <div
+                  key={log.id}
+                  className="flex items-start gap-2 px-5 py-1.5"
+                  style={{ borderBottom: '1px solid var(--terminal-border)' }}
+                >
+                  <span className="shrink-0 mt-0.5" style={{ width: 14, textAlign: 'center' }}>
+                    {log.type === 'scan' && '\uD83D\uDD0D'}
+                    {log.type === 'process' && '\u2699\uFE0F'}
+                    {log.type === 'created' && '\u2705'}
+                    {log.type === 'done' && '\uD83C\uDF89'}
+                    {log.type === 'error' && '\u274C'}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div style={{ color: log.type === 'error' ? '#EF4444' : log.type === 'done' ? 'var(--active-green)' : 'var(--terminal-text)' }}>
+                      {log.text}
+                    </div>
+                    {log.detail && (
+                      <div className="text-[10px] truncate" style={{ color: 'var(--terminal-text-muted)' }}>
+                        {log.detail}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <div ref={importLogEnd} />
+              {importLogs.length === 0 && (
+                <div className="px-5 py-4 text-center" style={{ color: 'var(--terminal-text-muted)' }}>
+                  Waiting for events...
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ─── Main content: Office Floor + Terminal ─── */}
       <div className="flex-1 overflow-hidden flex relative">

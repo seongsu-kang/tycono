@@ -6,6 +6,8 @@
  */
 import express from 'express';
 import cors from 'cors';
+import fs from 'node:fs';
+import path from 'node:path';
 import { COMPANY_ROOT } from './services/file-reader.js';
 import { rolesRouter } from './routes/roles.js';
 import { projectsRouter } from './routes/projects.js';
@@ -13,6 +15,7 @@ import { operationsRouter } from './routes/operations.js';
 import { companyRouter } from './routes/company.js';
 import { engineRouter } from './routes/engine.js';
 import { sessionsRouter } from './routes/sessions.js';
+import { setupRouter } from './routes/setup.js';
 
 export function createApp() {
   const app = express();
@@ -20,6 +23,24 @@ export function createApp() {
   const corsOrigin = process.env.NODE_ENV === 'production' ? true : /^http:\/\/localhost:\d+$/;
   app.use(cors({ origin: corsOrigin }));
   app.use(express.json());
+
+  // Setup / onboarding (always available)
+  app.use('/api/setup', setupRouter);
+
+  // Status — frontend checks this to decide wizard vs office
+  app.get('/api/status', (_req, res) => {
+    const claudeMdPath = path.join(COMPANY_ROOT, 'CLAUDE.md');
+    const initialized = fs.existsSync(claudeMdPath);
+    let companyName: string | null = null;
+    if (initialized) {
+      try {
+        const content = fs.readFileSync(claudeMdPath, 'utf-8');
+        const match = content.match(/^#\s+(.+)/m);
+        if (match) companyName = match[1].trim();
+      } catch { /* ignore */ }
+    }
+    res.json({ initialized, companyName, engine: process.env.EXECUTION_ENGINE || 'none', companyRoot: COMPANY_ROOT });
+  });
 
   app.use('/api/roles', rolesRouter);
   app.use('/api/projects', projectsRouter);

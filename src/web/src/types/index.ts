@@ -144,3 +144,83 @@ export interface Session {
   createdAt: string;
   updatedAt: string;
 }
+
+/* ─── Onboarding / Setup Types ──────────── */
+
+export interface CompanyStatus {
+  initialized: boolean;
+  companyName: string | null;
+  engine: string;
+  companyRoot: string;
+}
+
+export interface EngineDetection {
+  claudeCli: boolean;
+  apiKey: boolean;
+  recommended: 'claude-cli' | 'direct-api' | 'none';
+}
+
+export interface PathValidation {
+  valid: boolean;
+  path?: string;
+  hasClaudeMd?: boolean;
+  files?: string[];
+  error?: string;
+}
+
+export interface ScaffoldInput {
+  companyName: string;
+  description: string;
+  apiKey?: string;
+  team: 'startup' | 'research' | 'agency' | 'custom';
+  existingProjectPath?: string;
+  knowledgePaths?: string[];
+}
+
+export interface ScaffoldResult {
+  ok: boolean;
+  companyName: string;
+  projectRoot: string;
+  created: string[];
+}
+
+export interface TeamTemplate {
+  id: string;
+  roles: { id: string; name: string; level: string }[];
+}
+
+export interface BrowseResult {
+  current: string;
+  parent: string | null;
+  dirs: { name: string; path: string }[];
+  hasClaudeMd: boolean;
+}
+
+/* ─── Knowledge Import Types ─────────────────── */
+
+export interface ImportJob {
+  paths: string[];
+  companyRoot: string;
+}
+
+export interface KnowledgeImportEvent {
+  type: 'scanning' | 'processing' | 'created' | 'done' | 'error';
+  path?: string;
+  fileCount?: number;
+  file?: string;
+  index?: number;
+  total?: number;
+  title?: string;
+  summary?: string;
+  imported?: number;
+  created?: number;
+  skipped?: number;
+  message?: string;
+}
+
+export interface ConnectAkbResult {
+  ok: boolean;
+  companyName: string;
+  companyRoot: string;
+  error?: string;
+}

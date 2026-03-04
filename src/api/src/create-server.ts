@@ -5,6 +5,7 @@
  * 반환된 서버 인스턴스는 listen()을 직접 호출하지 않으므로,
  * 호출자가 포트를 지정해서 기동할 수 있다.
  */
+import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +19,7 @@ import { companyRouter } from './routes/company.js';
 import { handleExecRequest } from './routes/execute.js';
 import { engineRouter } from './routes/engine.js';
 import { sessionsRouter } from './routes/sessions.js';
+import { setupRouter } from './routes/setup.js';
 import { getAllActivities, completeActivity } from './services/activity-tracker.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -47,6 +49,24 @@ export function createHttpServer(): http.Server {
 
   app.use(cors({ origin: corsOrigin }));
   app.use(express.json());
+
+  // Setup / onboarding
+  app.use('/api/setup', setupRouter);
+
+  // Status — frontend checks this to decide wizard vs office
+  app.get('/api/status', (_req, res) => {
+    const claudeMdPath = path.join(COMPANY_ROOT, 'CLAUDE.md');
+    const initialized = fs.existsSync(claudeMdPath);
+    let companyName: string | null = null;
+    if (initialized) {
+      try {
+        const content = fs.readFileSync(claudeMdPath, 'utf-8');
+        const match = content.match(/^#\s+(.+)/m);
+        if (match) companyName = match[1].trim();
+      } catch { /* ignore */ }
+    }
+    res.json({ initialized, companyName, engine: process.env.EXECUTION_ENGINE || 'none', companyRoot: COMPANY_ROOT });
+  });
 
   app.use('/api/roles', rolesRouter);
   app.use('/api/projects', projectsRouter);

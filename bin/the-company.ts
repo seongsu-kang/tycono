@@ -100,28 +100,20 @@ async function startServer(): Promise<void> {
     process.env.COMPANY_ROOT = process.cwd();
   }
 
-  // Check for CLAUDE.md
+  // Check for CLAUDE.md (soft — server starts regardless for onboarding wizard)
   const claudeMdPath = path.join(process.env.COMPANY_ROOT, 'CLAUDE.md');
-  if (!fs.existsSync(claudeMdPath)) {
-    console.error(`
-  No company found in current directory.
-  Run "the-company init" to create one, or cd into a company directory.
-`);
-    process.exit(1);
-  }
+  const initialized = fs.existsSync(claudeMdPath);
 
-  // Production mode + auto-detect execution engine
+  // Production mode + auto-detect execution engine (soft-fail)
   process.env.NODE_ENV = 'production';
   const auth = detectAuth();
-  if (auth.engine === 'none') {
-    console.error(`
-  No AI engine available.
-  Either install Claude Code (https://claude.ai/download)
-  or set ANTHROPIC_API_KEY in your .env file.
+  if (auth.engine === 'none' && initialized) {
+    console.warn(`
+  Warning: No AI engine detected.
+  Configure one via the web dashboard or set ANTHROPIC_API_KEY in .env.
 `);
-    process.exit(1);
   }
-  process.env.EXECUTION_ENGINE = auth.engine === 'claude-cli' ? 'claude-cli' : 'direct-api';
+  process.env.EXECUTION_ENGINE = auth.engine === 'claude-cli' ? 'claude-cli' : auth.engine === 'direct-api' ? 'direct-api' : 'none';
 
   // Determine port
   const port = process.env.PORT ? Number(process.env.PORT) : await findFreePort();
@@ -129,16 +121,31 @@ async function startServer(): Promise<void> {
 
   // Detect company name from CLAUDE.md
   let companyName = 'My Company';
-  try {
-    const claudeContent = fs.readFileSync(claudeMdPath, 'utf-8');
-    const titleMatch = claudeContent.match(/^#\s+(.+)/m);
-    if (titleMatch) companyName = titleMatch[1].trim();
-  } catch {
-    // ignore
+  if (initialized) {
+    try {
+      const claudeContent = fs.readFileSync(claudeMdPath, 'utf-8');
+      const titleMatch = claudeContent.match(/^#\s+(.+)/m);
+      if (titleMatch) companyName = titleMatch[1].trim();
+    } catch {
+      // ignore
+    }
   }
 
   const url = `http://localhost:${port}`;
-  printBanner(companyName, port, url, auth.engine);
+  if (initialized) {
+    printBanner(companyName, port, url, auth.engine);
+  } else {
+    console.log(`
+  ┌─────────────────────────────────────────────┐
+  │                                             │
+  │   the-company v${VERSION.padEnd(29)}│
+  │                                             │
+  │   No company found — starting setup wizard  │
+  │   URL:      ${url.padEnd(31)}│
+  │                                             │
+  └─────────────────────────────────────────────┘
+`);
+  }
 
   // Import and start server
   const { createHttpServer } = await import('../src/api/src/create-server.js');

@@ -1,4 +1,4 @@
-import type { Company, Role, RoleDetail, Project, ProjectDetail, Standup, Wave, Decision, Session, CreateRoleInput, JobInfo } from '../types';
+import type { Company, Role, RoleDetail, Project, ProjectDetail, Standup, Wave, Decision, Session, CreateRoleInput, JobInfo, CompanyStatus, EngineDetection, PathValidation, ScaffoldInput, ScaffoldResult, TeamTemplate, BrowseResult, ConnectAkbResult } from '../types';
 
 const BASE = '/api';
 
@@ -72,4 +72,13 @@ export const api = {
     return get<{ jobs: JobInfo[] }>(`/jobs${qs ? '?' + qs : ''}`);
   },
   abortJob: (id: string) => del<{ ok: boolean }>(`/jobs/${id}`),
+
+  // Setup / Onboarding
+  getStatus: () => get<CompanyStatus>('/status'),
+  detectEngine: () => post<EngineDetection>('/setup/detect-engine', {}),
+  validatePath: (path: string) => post<PathValidation>('/setup/validate-path', { path }),
+  scaffold: (input: ScaffoldInput) => post<ScaffoldResult>('/setup/scaffold', input),
+  getTeams: () => get<TeamTemplate[]>('/setup/teams'),
+  browse: (path?: string) => post<BrowseResult>('/setup/browse', { path }),
+  connectAkb: (path: string) => post<ConnectAkbResult>('/setup/connect-akb', { path }),
 };
