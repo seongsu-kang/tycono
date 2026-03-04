@@ -89,7 +89,7 @@ export function buildOrgTree(companyRoot: string): OrgTree {
         id: raw.id || entry.name,
         name: raw.name || entry.name,
         level: (raw.level as OrgNode['level']) || 'member',
-        reportsTo: raw.reports_to || 'ceo',
+        reportsTo: (raw.reports_to || 'ceo').toLowerCase(),
         children: [],
         persona: raw.persona || '',
         authority: {

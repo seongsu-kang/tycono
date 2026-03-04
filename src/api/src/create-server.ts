@@ -87,25 +87,25 @@ export function createHttpServer(): http.Server {
     const url = req.url ?? '';
     const method = req.method ?? '';
 
-    // SSE 엔드포인트: Express 우회하여 raw HTTP로 처리
-    if (url.startsWith('/api/exec/') && method === 'POST') {
+    // SSE/Job 엔드포인트: Express 우회하여 raw HTTP로 처리
+    if ((url.startsWith('/api/exec/') || url.startsWith('/api/jobs')) && method === 'POST') {
       setExecCors(req, res);
       handleExecRequest(req, res);
       return;
     }
 
-    // CORS preflight for exec endpoints
-    if (url.startsWith('/api/exec/') && method === 'OPTIONS') {
+    // CORS preflight for exec/jobs endpoints
+    if ((url.startsWith('/api/exec/') || url.startsWith('/api/jobs')) && method === 'OPTIONS') {
       setExecCors(req, res);
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
       res.writeHead(204);
       res.end();
       return;
     }
 
-    // Non-SSE exec endpoints (GET /api/exec/status)
-    if (url.startsWith('/api/exec/') && method === 'GET') {
+    // Non-SSE exec/jobs endpoints (GET, DELETE)
+    if ((url.startsWith('/api/exec/') || url.startsWith('/api/jobs')) && (method === 'GET' || method === 'DELETE')) {
       setExecCors(req, res);
       handleExecRequest(req, res);
       return;

@@ -98,6 +98,42 @@ export interface CreateRoleInput {
   reports: { daily: string; weekly: string };
 }
 
+/* ─── Activity Stream Types ──────────────── */
+
+export type ActivityEventType =
+  | 'job:start' | 'job:done' | 'job:error'
+  | 'text' | 'thinking'
+  | 'tool:start' | 'tool:result'
+  | 'dispatch:start' | 'dispatch:done'
+  | 'turn:complete'
+  | 'import:scan' | 'import:process' | 'import:created'
+  | 'stderr';
+
+export interface ActivityEvent {
+  seq: number;
+  ts: string;
+  type: ActivityEventType;
+  roleId: string;
+  parentJobId?: string;
+  data: Record<string, unknown>;
+}
+
+export type JobType = 'assign' | 'wave' | 'session-message';
+export type JobStatus = 'running' | 'done' | 'error';
+
+export interface JobInfo {
+  id: string;
+  type: JobType;
+  roleId: string;
+  task: string;
+  status: JobStatus;
+  parentJobId?: string;
+  childJobIds: string[];
+  createdAt: string;
+}
+
+/* ─── Terminal Session Types ─────────────── */
+
 export interface Session {
   id: string;
   roleId: string;

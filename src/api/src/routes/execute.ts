@@ -9,24 +9,15 @@ import {
   updateMessage,
   type Message,
 } from '../services/session-store.js';
+import { jobManager } from '../services/job-manager.js';
+import { ActivityStream, type ActivityEvent } from '../services/activity-stream.js';
 
-/* ─── Shared Runner instance ────────────────── */
+/* ─── Shared Runner instance (for session messages that still use direct SSE) ── */
 
 const runner = createRunner();
 
-/* ─── Active execution tracking ──────────────── */
+/* ─── Active execution tracking (legacy, kept for /api/exec/status compat) ──── */
 
-interface Execution {
-  id: string;
-  roleId: string;
-  task: string;
-  status: 'running' | 'done' | 'error';
-  startedAt: string;
-  output: string;
-  abort?: () => void;
-}
-
-const activeExecutions = new Map<string, Execution>();
 const roleStatus = new Map<string, 'idle' | 'working' | 'done'>();
 
 /* ─── Raw HTTP handler (Express 5 SSE 호환 문제 우회) ─── */
@@ -35,8 +26,13 @@ export function handleExecRequest(req: IncomingMessage, res: ServerResponse): vo
   const url = req.url ?? '';
   const method = req.method ?? '';
 
-  // Route dispatch
-  // Session message: POST /api/exec/session/{id}/message
+  // ── /api/jobs/* routes ──
+  if (url.startsWith('/api/jobs')) {
+    handleJobsRequest(url, method, req, res);
+    return;
+  }
+
+  // ── Legacy /api/exec/* routes ──
   const sessionMatch = url.match(/\/api\/exec\/session\/([^/]+)\/message$/);
 
   if (sessionMatch && method === 'POST') {
@@ -54,6 +50,215 @@ export function handleExecRequest(req: IncomingMessage, res: ServerResponse): vo
     res.end(JSON.stringify({ error: 'Not found' }));
   }
 }
+
+/* ═══════════════════════════════════════════════
+   /api/jobs/* — Job-based API
+   ═══════════════════════════════════════════════ */
+
+function handleJobsRequest(url: string, method: string, req: IncomingMessage, res: ServerResponse): void {
+  // Strip query string for matching
+  const [path, queryString] = url.split('?');
+
+  // POST /api/jobs — start a new job
+  if (method === 'POST' && path === '/api/jobs') {
+    readBody(req).then((body) => handleStartJob(body, res));
+    return;
+  }
+
+  // GET /api/jobs — list jobs
+  if (method === 'GET' && path === '/api/jobs') {
+    const params = new URLSearchParams(queryString ?? '');
+    handleListJobs(params, res);
+    return;
+  }
+
+  // Match /api/jobs/:id/stream
+  const streamMatch = path.match(/^\/api\/jobs\/([^/]+)\/stream$/);
+  if (streamMatch && method === 'GET') {
+    const params = new URLSearchParams(queryString ?? '');
+    const fromSeq = parseInt(params.get('from') ?? '0', 10);
+    handleJobStream(streamMatch[1], fromSeq, req, res);
+    return;
+  }
+
+  // Match /api/jobs/:id/history
+  const historyMatch = path.match(/^\/api\/jobs\/([^/]+)\/history$/);
+  if (historyMatch && method === 'GET') {
+    handleJobHistory(historyMatch[1], res);
+    return;
+  }
+
+  // Match /api/jobs/:id
+  const idMatch = path.match(/^\/api\/jobs\/([^/]+)$/);
+  if (idMatch && method === 'GET') {
+    handleGetJob(idMatch[1], res);
+    return;
+  }
+  if (idMatch && method === 'DELETE') {
+    handleAbortJob(idMatch[1], res);
+    return;
+  }
+
+  res.writeHead(404);
+  res.end(JSON.stringify({ error: 'Not found' }));
+}
+
+/* ─── POST /api/jobs ─────────────────────── */
+
+function handleStartJob(body: Record<string, unknown>, res: ServerResponse): void {
+  const type = (body.type as string) ?? 'assign';
+  const roleId = body.roleId as string;
+  const task = body.task as string;
+  const directive = body.directive as string;
+  const sourceRole = (body.sourceRole as string) || 'ceo';
+  const readOnly = body.readOnly === true;
+  const targetRole = (body.targetRole as string) || 'cto';
+  const parentJobId = body.parentJobId as string | undefined;
+
+  // Wave shorthand
+  if (type === 'wave') {
+    if (!directive) {
+      jsonResponse(res, 400, { error: 'directive is required for wave jobs' });
+      return;
+    }
+
+    const orgTree = buildOrgTree(COMPANY_ROOT);
+    if (!canDispatchTo(orgTree, 'ceo', targetRole)) {
+      jsonResponse(res, 403, { error: `CEO cannot dispatch to ${targetRole}.` });
+      return;
+    }
+
+    const job = jobManager.startJob({
+      type: 'wave',
+      roleId: targetRole,
+      task: `[CEO Wave] ${directive}`,
+      sourceRole: 'ceo',
+      parentJobId,
+    });
+
+    roleStatus.set(targetRole, 'working');
+    jsonResponse(res, 200, { jobId: job.id });
+    return;
+  }
+
+  // Assign
+  if (!roleId || !task) {
+    jsonResponse(res, 400, { error: 'roleId and task are required' });
+    return;
+  }
+
+  const orgTree = buildOrgTree(COMPANY_ROOT);
+  if (!canDispatchTo(orgTree, sourceRole, roleId)) {
+    jsonResponse(res, 403, { error: `${sourceRole} cannot dispatch to ${roleId}.` });
+    return;
+  }
+
+  const job = jobManager.startJob({
+    type: 'assign',
+    roleId,
+    task,
+    sourceRole,
+    readOnly,
+    parentJobId,
+  });
+
+  roleStatus.set(roleId, 'working');
+  jsonResponse(res, 200, { jobId: job.id });
+}
+
+/* ─── GET /api/jobs ──────────────────────── */
+
+function handleListJobs(params: URLSearchParams, res: ServerResponse): void {
+  const status = params.get('status') as 'running' | 'done' | 'error' | null;
+  const roleId = params.get('roleId') ?? undefined;
+
+  const jobs = jobManager.listJobs({
+    status: status ?? undefined,
+    roleId,
+  });
+
+  jsonResponse(res, 200, { jobs });
+}
+
+/* ─── GET /api/jobs/:id ──────────────────── */
+
+function handleGetJob(jobId: string, res: ServerResponse): void {
+  const info = jobManager.getJobInfo(jobId);
+  if (!info) {
+    jsonResponse(res, 404, { error: 'Job not found' });
+    return;
+  }
+  jsonResponse(res, 200, info);
+}
+
+/* ─── GET /api/jobs/:id/stream ───────────── */
+
+function handleJobStream(jobId: string, fromSeq: number, req: IncomingMessage, res: ServerResponse): void {
+  const job = jobManager.getJob(jobId);
+
+  // Start SSE
+  startSSE(res);
+
+  // Replay historical events from file
+  const pastEvents = ActivityStream.readFrom(jobId, fromSeq);
+  for (const event of pastEvents) {
+    sendSSE(res, 'activity', event);
+  }
+
+  // If the job is not running (or doesn't exist in memory), send end and close
+  if (!job || job.status !== 'running') {
+    sendSSE(res, 'stream:end', { reason: job ? job.status : 'not-found' });
+    res.end();
+    return;
+  }
+
+  // Subscribe for live events
+  const subscriber = (event: ActivityEvent) => {
+    if (event.seq >= fromSeq) {
+      sendSSE(res, 'activity', event);
+    }
+    // Auto-close SSE when job ends
+    if (event.type === 'job:done' || event.type === 'job:error') {
+      sendSSE(res, 'stream:end', { reason: event.type === 'job:done' ? 'done' : 'error' });
+      res.end();
+      job.stream.unsubscribe(subscriber);
+    }
+  };
+
+  job.stream.subscribe(subscriber);
+
+  // Client disconnect → just unsubscribe (job keeps running)
+  req.on('close', () => {
+    job.stream.unsubscribe(subscriber);
+  });
+}
+
+/* ─── GET /api/jobs/:id/history ──────────── */
+
+function handleJobHistory(jobId: string, res: ServerResponse): void {
+  if (!ActivityStream.exists(jobId)) {
+    jsonResponse(res, 404, { error: 'Job history not found' });
+    return;
+  }
+  const events = ActivityStream.readAll(jobId);
+  jsonResponse(res, 200, { events });
+}
+
+/* ─── DELETE /api/jobs/:id ───────────────── */
+
+function handleAbortJob(jobId: string, res: ServerResponse): void {
+  const success = jobManager.abortJob(jobId);
+  if (!success) {
+    jsonResponse(res, 404, { error: 'Job not found or not running' });
+    return;
+  }
+  jsonResponse(res, 200, { ok: true });
+}
+
+/* ═══════════════════════════════════════════════
+   Legacy /api/exec/* — kept for backward compat
+   Now internally delegates to JobManager where possible
+   ═══════════════════════════════════════════════ */
 
 /* ─── Body parser ────────────────────────────── */
 
@@ -89,6 +294,7 @@ function startSSE(res: ServerResponse): void {
 }
 
 /* ─── POST /api/exec/assign ──────────────────── */
+/* Now delegates to JobManager, streams events back via SSE for backward compat */
 
 function handleAssign(body: Record<string, unknown>, req: IncomingMessage, res: ServerResponse): void {
   const roleId = body.roleId as string;
@@ -110,87 +316,54 @@ function handleAssign(body: Record<string, unknown>, req: IncomingMessage, res: 
     return;
   }
 
-  startSSE(res);
-
-  const execId = `exec-${Date.now()}`;
+  // Start job via JobManager
+  const job = jobManager.startJob({ type: 'assign', roleId, task, sourceRole, readOnly });
   roleStatus.set(roleId, 'working');
-  setActivity(roleId, task);
 
-  const execution: Execution = {
-    id: execId, roleId, task,
-    status: 'running',
-    startedAt: new Date().toISOString(),
-    output: '',
-  };
-  activeExecutions.set(execId, execution);
+  // Bridge: stream job events as legacy SSE format
+  startSSE(res);
+  sendSSE(res, 'start', { id: job.id, roleId, task, sourceRole });
 
-  sendSSE(res, 'start', { id: execId, roleId, task, sourceRole });
-
-  const handle = runner.execute(
-    { companyRoot: COMPANY_ROOT, roleId, task, sourceRole, orgTree, readOnly, model: orgTree.nodes.get(roleId)?.model },
-    {
-      onText: (text) => {
-        execution.output += text;
-        updateActivity(roleId, execution.output);
-        sendSSE(res, 'output', { text });
-      },
-      onThinking: (text) => {
-        sendSSE(res, 'thinking', { text });
-      },
-      onToolUse: (name, input) => {
-        sendSSE(res, 'tool', { name, input: input ? summarizeInput(input) : undefined });
-      },
-      onDispatch: (subRoleId, subTask) => {
-        roleStatus.set(subRoleId, 'working');
-        setActivity(subRoleId, subTask);
-        sendSSE(res, 'dispatch', { roleId: subRoleId, task: subTask });
-      },
-      onTurnComplete: (turn) => {
-        sendSSE(res, 'turn', { turn });
-      },
-      onError: (error) => {
-        sendSSE(res, 'stderr', { message: error });
-      },
-    },
-  );
-
-  execution.abort = handle.abort;
-
-  handle.promise
-    .then((result: RunnerResult) => {
-      execution.status = 'done';
-      roleStatus.set(roleId, 'idle');
-      completeActivity(roleId);
-
-      for (const d of result.dispatches) {
-        roleStatus.set(d.roleId, 'idle');
-        completeActivity(d.roleId);
-      }
-
-      sendSSE(res, 'done', {
-        output: execution.output.slice(-1000),
-        turns: result.turns,
-        tokens: result.totalTokens,
-        toolCalls: result.toolCalls.length,
-        dispatches: result.dispatches.map((d) => ({ roleId: d.roleId, task: d.task })),
-      });
-      res.end();
-    })
-    .catch((err: Error) => {
-      execution.status = 'error';
-      roleStatus.set(roleId, 'idle');
-      completeActivity(roleId);
-      sendSSE(res, 'error', { message: err.message });
-      res.end();
-    });
-
-  req.on('close', () => {
-    if (execution.status === 'running') {
-      execution.abort?.();
-      execution.status = 'error';
-      roleStatus.set(roleId, 'idle');
-      completeActivity(roleId);
+  const subscriber = (event: ActivityEvent) => {
+    switch (event.type) {
+      case 'text':
+        sendSSE(res, 'output', { text: event.data.text });
+        break;
+      case 'thinking':
+        sendSSE(res, 'thinking', { text: event.data.text });
+        break;
+      case 'tool:start':
+        sendSSE(res, 'tool', { name: event.data.name, input: event.data.input });
+        break;
+      case 'dispatch:start':
+        sendSSE(res, 'dispatch', { roleId: event.data.targetRoleId, task: event.data.task, childJobId: event.data.childJobId });
+        break;
+      case 'turn:complete':
+        sendSSE(res, 'turn', { turn: event.data.turn });
+        break;
+      case 'stderr':
+        sendSSE(res, 'stderr', { message: event.data.message });
+        break;
+      case 'job:done':
+        roleStatus.set(roleId, 'idle');
+        sendSSE(res, 'done', event.data);
+        res.end();
+        job.stream.unsubscribe(subscriber);
+        break;
+      case 'job:error':
+        roleStatus.set(roleId, 'idle');
+        sendSSE(res, 'error', { message: event.data.message });
+        res.end();
+        job.stream.unsubscribe(subscriber);
+        break;
     }
+  };
+
+  job.stream.subscribe(subscriber);
+
+  // Client disconnect → unsubscribe only (job keeps running!)
+  req.on('close', () => {
+    job.stream.unsubscribe(subscriber);
   });
 }
 
@@ -214,66 +387,59 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
     return;
   }
 
-  startSSE(res);
-
-  const execId = `wave-${Date.now()}`;
+  // Start job via JobManager
+  const job = jobManager.startJob({
+    type: 'wave',
+    roleId: target,
+    task: `[CEO Wave] ${directive}`,
+    sourceRole: 'ceo',
+  });
   roleStatus.set(target, 'working');
-  setActivity(target, `[CEO Wave] ${directive}`);
 
-  sendSSE(res, 'start', { id: execId, directive, targetRole: target });
+  // Bridge: stream job events as legacy SSE
+  startSSE(res);
+  sendSSE(res, 'start', { id: job.id, directive, targetRole: target });
 
-  const handle = runner.execute(
-    {
-      companyRoot: COMPANY_ROOT,
-      roleId: target,
-      task: `[CEO Wave] ${directive}`,
-      sourceRole: 'ceo',
-      orgTree,
-      model: orgTree.nodes.get(target)?.model,
-    },
-    {
-      onText: (text) => { sendSSE(res, 'output', { text }); },
-      onThinking: (text) => { sendSSE(res, 'thinking', { text }); },
-      onToolUse: (name, input) => {
-        sendSSE(res, 'tool', { name, input: input ? summarizeInput(input) : undefined });
-      },
-      onDispatch: (subRoleId, subTask) => {
-        roleStatus.set(subRoleId, 'working');
-        setActivity(subRoleId, subTask);
-        sendSSE(res, 'dispatch', { roleId: subRoleId, task: subTask });
-      },
-      onTurnComplete: (turn) => { sendSSE(res, 'turn', { turn }); },
-      onError: (error) => { sendSSE(res, 'stderr', { message: error }); },
-    },
-  );
+  const subscriber = (event: ActivityEvent) => {
+    switch (event.type) {
+      case 'text':
+        sendSSE(res, 'output', { text: event.data.text });
+        break;
+      case 'thinking':
+        sendSSE(res, 'thinking', { text: event.data.text });
+        break;
+      case 'tool:start':
+        sendSSE(res, 'tool', { name: event.data.name, input: event.data.input });
+        break;
+      case 'dispatch:start':
+        sendSSE(res, 'dispatch', { roleId: event.data.targetRoleId, task: event.data.task, childJobId: event.data.childJobId });
+        break;
+      case 'turn:complete':
+        sendSSE(res, 'turn', { turn: event.data.turn });
+        break;
+      case 'stderr':
+        sendSSE(res, 'stderr', { message: event.data.message });
+        break;
+      case 'job:done':
+        roleStatus.set(target, 'idle');
+        sendSSE(res, 'done', event.data);
+        res.end();
+        job.stream.unsubscribe(subscriber);
+        break;
+      case 'job:error':
+        roleStatus.set(target, 'idle');
+        sendSSE(res, 'error', { message: event.data.message });
+        res.end();
+        job.stream.unsubscribe(subscriber);
+        break;
+    }
+  };
 
-  handle.promise
-    .then((result: RunnerResult) => {
-      roleStatus.set(target, 'idle');
-      completeActivity(target);
-      for (const d of result.dispatches) {
-        roleStatus.set(d.roleId, 'idle');
-        completeActivity(d.roleId);
-      }
-      sendSSE(res, 'done', {
-        output: result.output.slice(-1000),
-        turns: result.turns,
-        tokens: result.totalTokens,
-        dispatches: result.dispatches.map((d) => ({ roleId: d.roleId, task: d.task })),
-      });
-      res.end();
-    })
-    .catch((err: Error) => {
-      roleStatus.set(target, 'idle');
-      completeActivity(target);
-      sendSSE(res, 'error', { message: err.message });
-      res.end();
-    });
+  job.stream.subscribe(subscriber);
 
+  // Client disconnect → unsubscribe only (job keeps running!)
   req.on('close', () => {
-    handle.abort();
-    roleStatus.set(target, 'idle');
-    completeActivity(target);
+    job.stream.unsubscribe(subscriber);
   });
 }
 
@@ -286,6 +452,7 @@ function handleStatus(res: ServerResponse): void {
     statuses[roleId] = status;
   }
 
+  // Merge with file-backed activity tracker
   const fileActivities = getAllActivities();
   for (const activity of fileActivities) {
     if (!statuses[activity.roleId] || statuses[activity.roleId] === 'idle') {
@@ -293,26 +460,20 @@ function handleStatus(res: ServerResponse): void {
     }
   }
 
-  const memoryExecs = Array.from(activeExecutions.values())
-    .filter((e) => e.status === 'running')
-    .map(({ id, roleId, task, startedAt }) => ({ id, roleId, task, startedAt }));
+  // Merge JobManager running jobs
+  const runningJobs = jobManager.listJobs({ status: 'running' });
+  for (const job of runningJobs) {
+    statuses[job.roleId] = 'working';
+  }
 
-  const fileExecs = fileActivities
-    .filter((a) => a.status === 'working')
-    .map((a) => ({
-      id: `file-${a.roleId}`,
-      roleId: a.roleId,
-      task: a.currentTask,
-      startedAt: a.startedAt,
-    }));
+  const activeExecs = runningJobs.map((j) => ({
+    id: j.id,
+    roleId: j.roleId,
+    task: j.task,
+    startedAt: j.createdAt,
+  }));
 
-  const memoryRoleIds = new Set(memoryExecs.map((e) => e.roleId));
-  const mergedExecs = [
-    ...memoryExecs,
-    ...fileExecs.filter((e) => !memoryRoleIds.has(e.roleId)),
-  ];
-
-  jsonResponse(res, 200, { statuses, activeExecutions: mergedExecs });
+  jsonResponse(res, 200, { statuses, activeExecutions: activeExecs });
 }
 
 /* ─── POST /api/exec/activity ────────────────── */
@@ -368,14 +529,12 @@ function handleSessionMessage(
   const roleId = session.roleId;
   const readOnly = mode === 'talk';
 
-  // Authority check — Talk mode skips (CEO can chat with anyone)
   const orgTree = buildOrgTree(COMPANY_ROOT);
   if (mode === 'do' && !canDispatchTo(orgTree, 'ceo', roleId)) {
     jsonResponse(res, 403, { error: `CEO cannot dispatch to ${roleId}. Use Talk mode or dispatch via their manager.` });
     return;
   }
 
-  // Add CEO message to session
   const ceoMsg: Message = {
     id: `msg-${Date.now()}-ceo`,
     from: 'ceo',
@@ -386,13 +545,11 @@ function handleSessionMessage(
   };
   addMessage(sessionId, ceoMsg);
 
-  // Build conversation context from history
   const contextWindow = buildConversationContext(session.messages, ceoMsg);
   const fullTask = contextWindow
     ? `${contextWindow}\n[Current Message]\nCEO: ${content}`
     : content;
 
-  // Create role response message placeholder
   const roleMsg: Message = {
     id: `msg-${Date.now() + 1}-role`,
     from: 'role',
@@ -403,7 +560,6 @@ function handleSessionMessage(
   };
   addMessage(sessionId, roleMsg, true);
 
-  // Start SSE
   startSSE(res);
   sendSSE(res, 'session', { sessionId, ceoMessageId: ceoMsg.id, roleMessageId: roleMsg.id });
 
@@ -482,7 +638,7 @@ function buildConversationContext(messages: Message[], currentMsg?: Message): st
 
   if (history.length === 0) return '';
 
-  let selected: Message[] = [];
+  const selected: Message[] = [];
   let totalChars = 0;
   for (let i = history.length - 1; i >= 0; i--) {
     const msg = history[i];

@@ -1,4 +1,4 @@
-import type { Company, Role, RoleDetail, Project, ProjectDetail, Standup, Wave, Decision, Session, CreateRoleInput } from '../types';
+import type { Company, Role, RoleDetail, Project, ProjectDetail, Standup, Wave, Decision, Session, CreateRoleInput, JobInfo } from '../types';
 
 const BASE = '/api';
 
@@ -59,4 +59,17 @@ export const api = {
   deleteSession: (id: string) => del<{ ok: boolean }>(`/sessions/${id}`),
   updateSession: (id: string, patch: { title?: string; mode?: 'talk' | 'do' }) =>
     patch_<Session>(`/sessions/${id}`, patch),
+
+  // Jobs
+  startJob: (params: { type?: string; roleId?: string; task?: string; directive?: string; sourceRole?: string; readOnly?: boolean; targetRole?: string }) =>
+    post<{ jobId: string }>('/jobs', params),
+  getJob: (id: string) => get<JobInfo>(`/jobs/${id}`),
+  listJobs: (filter?: { status?: string; roleId?: string }) => {
+    const params = new URLSearchParams();
+    if (filter?.status) params.set('status', filter.status);
+    if (filter?.roleId) params.set('roleId', filter.roleId);
+    const qs = params.toString();
+    return get<{ jobs: JobInfo[] }>(`/jobs${qs ? '?' + qs : ''}`);
+  },
+  abortJob: (id: string) => del<{ ok: boolean }>(`/jobs/${id}`),
 };

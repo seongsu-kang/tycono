@@ -3,7 +3,116 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { assembleContext } from '../context-assembler.js';
+import { getSubordinates } from '../org-tree.js';
 import type { ExecutionRunner, RunnerConfig, RunnerCallbacks, RunnerHandle, RunnerResult } from './types.js';
+
+/* ─── Dispatch Bridge Script (Python3) ────── */
+
+const DISPATCH_SCRIPT = `#!/usr/bin/env python3
+"""dispatch-bridge: CLI runner가 하위 Role에게 작업을 할당하는 브릿지 스크립트.
+
+2가지 모드:
+  dispatch <roleId> "<task>"           — Job 시작 + 결과 대기 (최대 100초)
+  dispatch --check <jobId>             — 완료된 Job 결과 조회
+
+환경변수:
+  DISPATCH_API_URL    — API 서버 URL (default: http://localhost:3001)
+  DISPATCH_PARENT_JOB — 부모 Job ID (자동 설정)
+  DISPATCH_SOURCE_ROLE — 현재 Role ID (자동 설정)
+"""
+import sys, os, json, time, urllib.request, urllib.error
+sys.stdout.reconfigure(line_buffering=True)
+
+api = os.environ.get('DISPATCH_API_URL', 'http://localhost:3001')
+
+def log(msg):
+    print(msg, flush=True)
+
+def get_result(job_id):
+    try:
+        history = json.loads(urllib.request.urlopen(f'{api}/api/jobs/{job_id}/history', timeout=10).read())
+        events = history.get('events', [])
+        text_parts = []
+        for e in events:
+            if e['type'] == 'text':
+                text_parts.append(e['data'].get('text', ''))
+            elif e['type'] == 'job:error':
+                text_parts.append('\\nERROR: ' + e['data'].get('message', ''))
+        return ''.join(text_parts) or '(No text output)'
+    except Exception as e:
+        return f'ERROR: Failed to get result: {e}'
+
+# Mode: --check <jobId>
+if len(sys.argv) >= 3 and sys.argv[1] == '--check':
+    job_id = sys.argv[2]
+    try:
+        info = json.loads(urllib.request.urlopen(f'{api}/api/jobs/{job_id}', timeout=10).read())
+        status = info.get('status', 'unknown')
+        if status == 'running':
+            log(f'Job {job_id} is still running. Try again later.')
+        else:
+            log(f'=== Job {job_id}: {status} ===')
+            log(get_result(job_id))
+    except Exception as e:
+        log(f'ERROR: {e}')
+    sys.exit(0)
+
+# Mode: dispatch <roleId> "<task>"
+if len(sys.argv) < 3:
+    log('Usage: dispatch <roleId> "<task>"')
+    log('       dispatch --check <jobId>')
+    subs = os.environ.get('DISPATCH_SUBORDINATES', '')
+    if subs:
+        log(f'Available subordinates: {subs}')
+    sys.exit(1)
+
+role_id = sys.argv[1]
+task = ' '.join(sys.argv[2:])
+parent_job = os.environ.get('DISPATCH_PARENT_JOB', '')
+source_role = os.environ.get('DISPATCH_SOURCE_ROLE', 'ceo')
+
+# Start job
+body = json.dumps({
+    'type': 'assign',
+    'roleId': role_id,
+    'task': task,
+    'sourceRole': source_role,
+    'parentJobId': parent_job if parent_job else None,
+}).encode()
+
+try:
+    req = urllib.request.Request(f'{api}/api/jobs', body, {'Content-Type': 'application/json'})
+    resp = json.loads(urllib.request.urlopen(req, timeout=10).read())
+    job_id = resp['jobId']
+except Exception as e:
+    log(f'ERROR: Failed to start dispatch job: {e}')
+    sys.exit(1)
+
+log(f'=== Dispatched to {role_id.upper()} ===')
+log(f'Task: {task[:120]}')
+log(f'Job ID: {job_id}')
+
+# Wait for completion (max ~100s to stay within Bash timeout)
+status = 'running'
+waited = 0
+while waited < 100:
+    try:
+        info = json.loads(urllib.request.urlopen(f'{api}/api/jobs/{job_id}', timeout=5).read())
+        status = info.get('status', 'unknown')
+        if status in ('done', 'error'):
+            break
+    except Exception:
+        pass
+    time.sleep(3)
+    waited += 3
+
+if status in ('done', 'error'):
+    log(f'\\n=== {role_id.upper()} Result ({status}) ===')
+    log(get_result(job_id))
+else:
+    log(f'\\n{role_id.upper()} is still working (waited {waited}s).')
+    log(f'Check result later: python3 "$DISPATCH_CMD" --check {job_id}')
+`;
 
 /* ─── Claude CLI Runner ──────────────────────── */
 
@@ -13,9 +122,8 @@ import type { ExecutionRunner, RunnerConfig, RunnerCallbacks, RunnerHandle, Runn
  * - Context Assembler가 조립한 시스템 프롬프트를 --system-prompt로 전달
  * - claude -p (print mode)로 실행, stdout의 stream-json을 파싱
  * - Claude Code가 내장 도구(Read, Write, Edit, Bash 등)를 자체적으로 실행
+ * - Dispatch Bridge: 하위 Role 할당 시 API를 통해 자식 Job 생성
  * - 구독 기반이므로 API 비용 부담 없음
- *
- * 향후 EXECUTION_ENGINE=direct-api로 전환 시 direct-api.ts로 교체.
  */
 export class ClaudeCliRunner implements ExecutionRunner {
   execute(config: RunnerConfig, callbacks: RunnerCallbacks): RunnerHandle {
@@ -36,7 +144,14 @@ export class ClaudeCliRunner implements ExecutionRunner {
       taskPrompt = `[READ-ONLY MODE: 파일 수정/생성 금지. 읽기와 분석만 수행]\n\n${task}`;
     }
 
-    // 4. Playwright MCP 설정 — 각 runner 인스턴스가 독립 브라우저 사용
+    // 4. Dispatch Bridge 스크립트 생성 (하위 Role이 있는 경우)
+    const subordinates = getSubordinates(orgTree, roleId);
+    const dispatchScript = path.join(tmpDir, `dispatch-${roleId}-${Date.now()}.py`);
+    if (subordinates.length > 0 && !readOnly) {
+      fs.writeFileSync(dispatchScript, DISPATCH_SCRIPT, { mode: 0o755 });
+    }
+
+    // 5. Playwright MCP 설정 — 각 runner 인스턴스가 독립 브라우저 사용
     const runnerOutputDir = path.join(tmpDir, `playwright-${roleId}-${Date.now()}`);
     fs.mkdirSync(runnerOutputDir, { recursive: true });
     const mcpConfig = JSON.stringify({
@@ -49,7 +164,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
       },
     });
 
-    // 5. CLI args 구성
+    // 6. CLI args 구성
     const args = [
       '-p',
       '--system-prompt', fs.readFileSync(promptFile, 'utf-8'),
@@ -62,12 +177,23 @@ export class ClaudeCliRunner implements ExecutionRunner {
       taskPrompt,
     ];
 
-    // 6. 프로세스 생성 — 중첩 세션 방지를 위해 CLAUDECODE 환경변수 제거
+    // 7. 프로세스 생성 — 중첩 세션 방지를 위해 CLAUDECODE 환경변수 제거
     const cleanEnv = { ...process.env };
     delete cleanEnv.CLAUDECODE;
 
+    // Dispatch Bridge 환경변수 설정
+    const apiPort = process.env.PORT || '3001';
+    cleanEnv.DISPATCH_API_URL = `http://localhost:${apiPort}`;
+    cleanEnv.DISPATCH_SOURCE_ROLE = roleId;
+    cleanEnv.DISPATCH_SUBORDINATES = subordinates.join(', ');
+    if (config.jobId) {
+      cleanEnv.DISPATCH_PARENT_JOB = config.jobId;
+    }
+    // dispatch 명령어 경로를 PATH에 추가하지 않고 절대 경로로 사용
+    cleanEnv.DISPATCH_CMD = dispatchScript;
+
     const modelName = config.model ?? 'claude-sonnet-4-5';
-    console.log(`[Runner] Spawning claude -p: role=${roleId}, model=${modelName}, prompt=${(args[2]?.length ?? 0)}chars`);
+    console.log(`[Runner] Spawning claude -p: role=${roleId}, model=${modelName}, jobId=${config.jobId ?? 'none'}, subordinates=[${subordinates.join(',')}]`);
 
     const proc = spawn('claude', args, {
       cwd: companyRoot,
@@ -96,7 +222,18 @@ export class ClaudeCliRunner implements ExecutionRunner {
             const event = JSON.parse(line);
             processStreamEvent(event, callbacks, {
               appendOutput: (t) => { output += t; },
-              addToolCall: (name, input) => { toolCalls.push({ name, input }); },
+              addToolCall: (name, input) => {
+                toolCalls.push({ name, input });
+                // Detect dispatch calls via Bash (dispatch bridge)
+                if (name === 'Bash' && typeof input?.command === 'string') {
+                  const cmd = input.command;
+                  const dispatchMatch = cmd.match(/dispatch(?:\.py)?\s+(\S+)\s+["'](.+?)["']/);
+                  if (dispatchMatch || cmd.includes('DISPATCH_CMD') || cmd.includes('dispatch')) {
+                    // Will fire onDispatch when we can parse the output
+                    // For now, mark as potential dispatch
+                  }
+                }
+              },
               incrementTurn: () => { turnCount++; callbacks.onTurnComplete?.(turnCount); },
             });
           } catch {
@@ -130,6 +267,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
 
         // 임시 파일 정리
         try { fs.unlinkSync(promptFile); } catch { /* ignore */ }
+        try { fs.unlinkSync(dispatchScript); } catch { /* ignore */ }
         try { fs.rmSync(runnerOutputDir, { recursive: true, force: true }); } catch { /* ignore */ }
 
         // 비정상 종료 시에도 결과 반환 (output이 있을 수 있으므로)
@@ -144,6 +282,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
 
       proc.on('error', (err) => {
         try { fs.unlinkSync(promptFile); } catch { /* ignore */ }
+        try { fs.unlinkSync(dispatchScript); } catch { /* ignore */ }
         try { fs.rmSync(runnerOutputDir, { recursive: true, force: true }); } catch { /* ignore */ }
         reject(err);
       });
@@ -198,7 +337,6 @@ function processStreamEvent(
     case 'result': {
       // 최종 결과: { type: "result", result: "..." }
       // result 텍스트는 assistant 이벤트에서 이미 전달됨 — 중복 방지를 위해 스킵
-      // (result는 최종 요약이므로 별도 처리 불필요)
       break;
     }
 

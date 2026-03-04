@@ -23,6 +23,7 @@ export interface RunnerConfig {
   readOnly?: boolean;
   maxTurns?: number;
   model?: string;
+  jobId?: string;
 }
 
 /* ─── Callbacks ───────────────────────────────── */
