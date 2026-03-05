@@ -593,6 +593,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
             <div className="text-gray-600 font-semibold text-xs">LOADING OFFICE...</div>
           </div>
         </div>
+      </div>
     );
   }
 
