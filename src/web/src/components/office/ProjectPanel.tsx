@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { api } from '../../api/client';
 import type { ProjectDetail } from '../../types';
 import OfficeMarkdown from './OfficeMarkdown';
+import { usePanelResize } from './KnowledgePanel';
 
 interface Props {
   projectId: string;
@@ -12,9 +13,7 @@ interface Props {
 export default function ProjectPanel({ projectId, onClose, terminalWidth = 0 }: Props) {
   const [project, setProject] = useState<ProjectDetail | null>(null);
 
-  const hasTerminal = terminalWidth > 0;
-  const panelRight = hasTerminal ? terminalWidth : 0;
-  const panelWidth = hasTerminal ? Math.max(360, 500 - (terminalWidth - 480) / 2) : 500;
+  const { panelRight, panelWidth, isResizing, handleResizeStart } = usePanelResize(terminalWidth);
 
   useEffect(() => {
     api.getProject(projectId).then(setProject).catch(console.error);
@@ -41,9 +40,14 @@ export default function ProjectPanel({ projectId, onClose, terminalWidth = 0 }: 
     <>
       <div className="dimmer fixed top-0 left-0 bottom-0 bg-black/30 z-40 open" style={{ right: panelRight }} onClick={onClose} />
 
-      <div className="side-panel open fixed top-0 h-full z-50 flex flex-col bg-[var(--wall)] border-l-[3px] border-[var(--meeting-blue)] shadow-[-4px_0_20px_rgba(0,0,0,0.2)]"
+      <div className={`side-panel open fixed top-0 h-full z-50 flex flex-col bg-[var(--wall)] border-l-[3px] border-[var(--meeting-blue)] shadow-[-4px_0_20px_rgba(0,0,0,0.2)] ${isResizing ? 'resizing' : ''}`}
         style={{ right: panelRight, width: panelWidth }}
       >
+        {/* Resize handle */}
+        <div
+          className={`absolute top-0 -left-[5px] w-[10px] h-full cursor-col-resize z-[60] transition-colors ${isResizing ? 'bg-black/10' : 'hover:bg-black/5'}`}
+          onMouseDown={handleResizeStart}
+        />
         {/* Header */}
         <div className="p-5 bg-[var(--meeting-blue)] text-white relative">
           <button
