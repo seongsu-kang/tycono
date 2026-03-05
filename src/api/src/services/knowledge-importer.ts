@@ -6,7 +6,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 
 /* ─── Types ──────────────────────────────────── */
 
@@ -77,7 +77,7 @@ function collectFiles(dirPath: string): string[] {
 
 /* ─── LLM Processing via claude -p ───────────── */
 
-function processDocumentWithCli(filePath: string): DocumentResult | null {
+async function processDocumentWithCli(filePath: string): Promise<DocumentResult | null> {
   let content: string;
   try {
     content = fs.readFileSync(filePath, 'utf-8');
@@ -99,18 +99,23 @@ function processDocumentWithCli(filePath: string): DocumentResult | null {
     const env = { ...process.env };
     delete env.CLAUDECODE;
 
-    const result = execFileSync('claude', [
-      '-p',
-      '--system-prompt', CLASSIFY_PROMPT,
-      '--output-format', 'text',
-      '--model', 'claude-haiku-4-5-20251001',
-      '--max-turns', '1',
-      userMessage,
-    ], {
-      timeout: 30_000,
-      env,
-      encoding: 'utf-8',
-      maxBuffer: 1024 * 1024,
+    const result = await new Promise<string>((resolve, reject) => {
+      execFile('claude', [
+        '-p',
+        '--system-prompt', CLASSIFY_PROMPT,
+        '--output-format', 'text',
+        '--model', 'claude-haiku-4-5-20251001',
+        '--max-turns', '1',
+        userMessage,
+      ], {
+        timeout: 30_000,
+        env,
+        encoding: 'utf-8',
+        maxBuffer: 1024 * 1024,
+      }, (err, stdout) => {
+        if (err) reject(err);
+        else resolve(stdout);
+      });
     });
 
     const jsonMatch = result.match(/\{[\s\S]*\}/);
