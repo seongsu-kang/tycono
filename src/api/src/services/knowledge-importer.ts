@@ -1,12 +1,12 @@
 /**
  * knowledge-importer.ts — AI-powered document import service
  *
- * Scans directories for documents, uses LLM to summarize/categorize them,
+ * Scans directories for documents, uses claude -p to summarize/categorize them,
  * and creates AKB-formatted knowledge files.
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { LLMAdapter } from '../engine/llm-adapter.js';
+import { execFileSync } from 'node:child_process';
 
 /* ─── Types ──────────────────────────────────── */
 
@@ -14,6 +14,7 @@ export interface ImportCallbacks {
   onScanning: (scanPath: string, fileCount: number) => void;
   onProcessing: (file: string, index: number, total: number) => void;
   onCreated: (filePath: string, title: string, summary: string) => void;
+  onSkipped: (file: string, reason: string) => void;
   onDone: (stats: { imported: number; created: number; skipped: number }) => void;
   onError: (message: string) => void;
 }
@@ -31,18 +32,12 @@ const SUPPORTED_EXTENSIONS = new Set(['.md', '.txt', '.json', '.yaml', '.yml', '
 const MAX_FILE_SIZE = 100_000; // 100KB
 const MAX_CONTENT_FOR_LLM = 8_000; // chars to send to LLM
 
-const SYSTEM_PROMPT = `You are a knowledge organizer. Given a document, you must:
-1. Classify it into one category: market, tech, process, domain, competitor, financial, or general
-2. Create a short title (max 60 chars)
-3. Write a one-line TL;DR summary (max 120 chars)
-4. Reformat the content into AKB knowledge format
-
-Respond in JSON only:
+const CLASSIFY_PROMPT = `You are a knowledge organizer. Given a document, respond ONLY in JSON (no markdown fences):
 {
   "category": "market|tech|process|domain|competitor|financial|general",
-  "title": "Short Title",
-  "summary": "One-line TL;DR",
-  "content": "# Title\\n\\n> TL;DR summary\\n\\n---\\n\\n(reformatted content)"
+  "title": "Short Title (max 60 chars)",
+  "summary": "One-line TL;DR (max 120 chars)",
+  "content": "# Title\\n\\n> TL;DR summary\\n\\n---\\n\\n(reformatted content in markdown)"
 }`;
 
 /* ─── File Collection ────────────────────────── */
@@ -80,9 +75,9 @@ function collectFiles(dirPath: string): string[] {
   return files;
 }
 
-/* ─── LLM Processing ────────────────────────── */
+/* ─── LLM Processing via claude -p ───────────── */
 
-async function processDocument(llm: LLMAdapter, filePath: string): Promise<DocumentResult | null> {
+function processDocumentWithCli(filePath: string): DocumentResult | null {
   let content: string;
   try {
     content = fs.readFileSync(filePath, 'utf-8');
@@ -97,15 +92,28 @@ async function processDocument(llm: LLMAdapter, filePath: string): Promise<Docum
     : content;
 
   const fileName = path.basename(filePath);
+  const userMessage = `File: ${fileName}\n\n${truncated}`;
 
   try {
-    const response = await llm.chat(
-      SYSTEM_PROMPT,
-      [{ role: 'user', content: `File: ${fileName}\n\n${truncated}` }],
-    );
+    // Remove CLAUDECODE to avoid nested session issues
+    const env = { ...process.env };
+    delete env.CLAUDECODE;
 
-    const text = response.content.find(b => b.type === 'text')?.text ?? '';
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const result = execFileSync('claude', [
+      '-p',
+      '--system-prompt', CLASSIFY_PROMPT,
+      '--output-format', 'text',
+      '--model', 'claude-haiku-4-5-20251001',
+      '--max-turns', '1',
+      userMessage,
+    ], {
+      timeout: 30_000,
+      env,
+      encoding: 'utf-8',
+      maxBuffer: 1024 * 1024,
+    });
+
+    const jsonMatch = result.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return null;
 
     const parsed = JSON.parse(jsonMatch[0]);
@@ -116,7 +124,47 @@ async function processDocument(llm: LLMAdapter, filePath: string): Promise<Docum
       content: parsed.content || content,
     };
   } catch {
+    // CLI failed — fallback to simple import
     return null;
+  }
+}
+
+/** Fallback: import without LLM classification */
+function processDocumentSimple(filePath: string): DocumentResult | null {
+  let content: string;
+  try {
+    content = fs.readFileSync(filePath, 'utf-8');
+  } catch {
+    return null;
+  }
+
+  if (content.trim().length < 20) return null;
+
+  const fileName = path.basename(filePath, path.extname(filePath));
+  const title = fileName.replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+  // Extract first non-empty line as summary
+  const firstLine = content.split('\n').find(l => l.trim().length > 0 && !l.startsWith('#'))?.trim() ?? '';
+  const summary = firstLine.slice(0, 120);
+
+  return {
+    category: 'general',
+    title,
+    summary,
+    content: content,
+  };
+}
+
+/* ─── Check if claude CLI is available ───────── */
+
+function isClaudeCliAvailable(): boolean {
+  try {
+    const env = { ...process.env };
+    delete env.CLAUDECODE;
+    execFileSync('claude', ['--version'], { timeout: 5000, env, encoding: 'utf-8' });
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -127,7 +175,7 @@ export async function importKnowledge(
   companyRoot: string,
   callbacks: ImportCallbacks,
 ): Promise<void> {
-  const llm = new LLMAdapter();
+  const useCli = isClaudeCliAvailable();
   const allFiles: string[] = [];
 
   // Phase 1: Scan
@@ -166,9 +214,18 @@ export async function importKnowledge(
     const file = allFiles[i];
     callbacks.onProcessing(path.basename(file), i + 1, allFiles.length);
 
-    const result = await processDocument(llm, file);
+    // Try CLI first, fallback to simple import
+    let result: DocumentResult | null = null;
+    if (useCli) {
+      result = processDocumentWithCli(file);
+    }
+    if (!result) {
+      result = processDocumentSimple(file);
+    }
+
     if (!result) {
       skipped++;
+      callbacks.onSkipped(path.basename(file), 'Too short or unreadable');
       continue;
     }
 

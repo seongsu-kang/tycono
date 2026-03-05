@@ -166,6 +166,9 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
                 case 'created':
                   addImportLog('created', data.title, data.summary);
                   break;
+                case 'skipped':
+                  addImportLog('process', `Skipped: ${data.file}`, data.reason);
+                  break;
                 case 'done':
                   setImportBanner(null);
                   setImportProgress(null);

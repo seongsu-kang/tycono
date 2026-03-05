@@ -223,6 +223,7 @@ setupRouter.post('/import-knowledge', (req, res) => {
     onScanning: (scanPath, fileCount) => sendSSE('scanning', { path: scanPath, fileCount }),
     onProcessing: (file, index, total) => sendSSE('processing', { file, index, total }),
     onCreated: (filePath, title, summary) => sendSSE('created', { path: filePath, title, summary }),
+    onSkipped: (file, reason) => sendSSE('skipped', { file, reason }),
     onDone: (stats) => {
       sendSSE('done', stats);
       res.end();
