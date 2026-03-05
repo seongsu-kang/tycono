@@ -501,17 +501,79 @@ function DocDetail({
   onBack,
   onDocUpdated,
   onDelete,
+  onNavigateDoc,
+  allDocs,
 }: {
   docId: string;
   onBack: () => void;
   onDocUpdated: () => void;
   onDelete: (docId: string) => void;
+  onNavigateDoc: (docId: string) => void;
+  allDocs: KnowledgeDoc[];
 }) {
   const [detail, setDetail] = useState<KnowledgeDocDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const docIdSet = new Set(allDocs.map((d) => d.id));
+
+  // Resolve a relative .md/.html href to a knowledge doc ID
+  const resolveDocHref = useCallback((href: string): string | null => {
+    // Strip hash fragments
+    const clean = href.split('#')[0];
+    if (!clean.match(/\.(md|html)$/)) return null;
+
+    // Resolve relative to current doc's directory
+    const currentDir = docId.includes('/') ? docId.replace(/\/[^/]+$/, '') : '';
+    let resolved: string;
+
+    if (clean.startsWith('./')) {
+      resolved = currentDir ? `${currentDir}/${clean.slice(2)}` : clean.slice(2);
+    } else if (clean.startsWith('../')) {
+      // Walk up directories
+      const parts = currentDir.split('/').filter(Boolean);
+      let rel = clean;
+      while (rel.startsWith('../')) {
+        if (parts.length > 0) parts.pop();
+        rel = rel.slice(3);
+      }
+      resolved = parts.length > 0 ? `${parts.join('/')}/${rel}` : rel;
+    } else {
+      resolved = clean;
+    }
+
+    // Check if this doc exists in KB
+    if (docIdSet.has(resolved)) return resolved;
+    // Try just the filename
+    const basename = resolved.split('/').pop() ?? '';
+    const match = allDocs.find((d) => d.id === basename || d.id.endsWith('/' + basename));
+    return match ? match.id : null;
+  }, [docId, docIdSet, allDocs]);
+
+  // Intercept link clicks in rendered markdown content
+  const handleContentClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    const anchor = target.closest('a');
+    if (!anchor) return;
+
+    const href = anchor.getAttribute('href');
+    if (!href) return;
+
+    // Only intercept relative .md/.html links
+    if (href.startsWith('http://') || href.startsWith('https://')) return;
+
+    // Always prevent default navigation for relative .md/.html links
+    if (!href.match(/\.(md|html)(#.*)?$/)) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const targetDocId = resolveDocHref(href);
+    if (targetDocId) {
+      onNavigateDoc(targetDocId);
+    }
+  }, [resolveDocHref, onNavigateDoc]);
 
   useEffect(() => {
     setLoading(true);
@@ -659,7 +721,7 @@ function DocDetail({
             spellCheck={false}
           />
         ) : (
-          <div className="text-xs text-gray-700 leading-relaxed">
+          <div className="text-xs text-gray-700 leading-relaxed" onClick={handleContentClick}>
             <OfficeMarkdown content={detail.content} />
           </div>
         )}
@@ -972,6 +1034,8 @@ export default function KnowledgePanel({ docs, onClose, onRefresh, terminalWidth
             onBack={() => setOpenDocId(null)}
             onDocUpdated={onRefresh}
             onDelete={handleDocDeleted}
+            onNavigateDoc={(id) => setOpenDocId(id)}
+            allDocs={docs}
           />
         )}
 
