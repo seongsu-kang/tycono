@@ -224,3 +224,20 @@ export interface ConnectAkbResult {
   companyRoot: string;
   error?: string;
 }
+
+/* ─── Knowledge Base Types ────────────────────── */
+
+export interface KnowledgeDoc {
+  id: string;
+  title: string;
+  akb_type: 'hub' | 'node';
+  status: 'active' | 'draft' | 'deprecated';
+  tags: string[];
+  category: string;
+  tldr: string;
+  links: { text: string; href: string }[];
+}
+
+export interface KnowledgeDocDetail extends KnowledgeDoc {
+  content: string;
+}

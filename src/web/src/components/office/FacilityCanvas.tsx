@@ -1,7 +1,7 @@
 import { useRef, useEffect } from 'react';
-import { drawMeetingTable, drawBulletin, drawCabinet } from './sprites/spriteDrawing';
+import { drawMeetingTable, drawBulletin, drawCabinet, drawKnowledgeShelf } from './sprites/spriteDrawing';
 
-type FacilityType = 'meeting' | 'bulletin' | 'decision';
+type FacilityType = 'meeting' | 'bulletin' | 'decision' | 'knowledge';
 
 interface Config {
   drawFn: (ctx: CanvasRenderingContext2D) => void;
@@ -10,9 +10,10 @@ interface Config {
 }
 
 const FACILITY_CONFIG: Record<FacilityType, Config> = {
-  meeting:  { drawFn: drawMeetingTable, width: 160, height: 80  },
-  bulletin: { drawFn: drawBulletin,     width: 128, height: 96  },
-  decision: { drawFn: drawCabinet,      width: 96,  height: 120 },
+  meeting:   { drawFn: drawMeetingTable,    width: 160, height: 80  },
+  bulletin:  { drawFn: drawBulletin,        width: 128, height: 96  },
+  decision:  { drawFn: drawCabinet,         width: 96,  height: 120 },
+  knowledge: { drawFn: drawKnowledgeShelf,  width: 128, height: 96  },
 };
 
 interface Props {

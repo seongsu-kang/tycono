@@ -1,4 +1,4 @@
-import type { Company, Role, RoleDetail, Project, ProjectDetail, Standup, Wave, Decision, Session, CreateRoleInput, JobInfo, CompanyStatus, EngineDetection, PathValidation, ScaffoldInput, ScaffoldResult, TeamTemplate, BrowseResult, ConnectAkbResult } from '../types';
+import type { Company, Role, RoleDetail, Project, ProjectDetail, Standup, Wave, Decision, Session, CreateRoleInput, JobInfo, CompanyStatus, EngineDetection, PathValidation, ScaffoldInput, ScaffoldResult, TeamTemplate, BrowseResult, ConnectAkbResult, KnowledgeDoc, KnowledgeDocDetail } from '../types';
 
 const BASE = '/api';
 
@@ -81,4 +81,8 @@ export const api = {
   getTeams: () => get<TeamTemplate[]>('/setup/teams'),
   browse: (path?: string) => post<BrowseResult>('/setup/browse', { path }),
   connectAkb: (path: string) => post<ConnectAkbResult>('/setup/connect-akb', { path }),
+
+  // Knowledge Base
+  getKnowledge: () => get<KnowledgeDoc[]>('/knowledge'),
+  getKnowledgeDoc: (id: string) => get<KnowledgeDocDetail>(`/knowledge/${id}`),
 };

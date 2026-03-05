@@ -479,6 +479,88 @@ export function drawBulletin(ctx: CanvasRenderingContext2D): void {
   q(0, 45, 64, 3, '#3a2a1a');
 }
 
+/* Knowledge bookshelf: 128x96 canvas (Q=2, 64x48 grid) */
+export function drawKnowledgeShelf(ctx: CanvasRenderingContext2D): void {
+  ctx.clearRect(0, 0, 128, 96);
+  const Q = 2;
+  function q(x: number, y: number, w: number, h: number, c: string, a?: number): void {
+    if (a !== undefined && a !== 1) ctx.globalAlpha = a;
+    ctx.fillStyle = c;
+    ctx.fillRect(x * Q, y * Q, w * Q, h * Q);
+    if (a !== undefined && a !== 1) ctx.globalAlpha = 1;
+  }
+  // Shelf frame (dark wood)
+  q(2, 0, 60, 48, '#3b1f0a');
+  // Back panel
+  q(4, 2, 56, 44, '#5a3310');
+  // Shelf boards
+  q(4, 13, 56, 2, '#2d1508');
+  q(4, 27, 56, 2, '#2d1508');
+  q(4, 41, 56, 2, '#2d1508');
+
+  // Row 1 — books
+  q(5,  3, 4, 10, '#2563EB'); q(5,  3, 4,  2, '#1D4ED8'); // blue
+  q(10, 4, 3, 9,  '#DC2626'); q(10, 4, 3,  2, '#B91C1C'); // red
+  q(14, 3, 5, 10, '#16A34A'); q(14, 3, 5,  2, '#15803D'); // green
+  q(20, 4, 3, 9,  '#9333EA'); q(20, 4, 3,  2, '#7E22CE'); // purple
+  q(24, 3, 4, 10, '#D97706'); q(24, 3, 4,  2, '#B45309'); // amber
+  q(29, 4, 3, 9,  '#0891B2'); q(29, 4, 3,  2, '#0E7490'); // cyan
+  q(33, 3, 5, 10, '#BE123C'); q(33, 3, 5,  2, '#9F1239'); // rose
+  q(39, 4, 4, 9,  '#4F46E5'); q(39, 4, 4,  2, '#3730A3'); // indigo
+  q(44, 3, 3, 10, '#065F46'); q(44, 3, 3,  2, '#064E3B'); // emerald
+  q(48, 4, 4, 9,  '#92400E'); q(48, 4, 4,  2, '#78350F'); // brown
+  q(53, 3, 5, 10, '#1E3A5F'); q(53, 3, 5,  2, '#1e3060'); // navy
+
+  // Row 1 book spines (title lines)
+  q(6,  6, 2, 1, '#BFDBFE', 0.7);
+  q(11, 7, 1, 1, '#FCA5A5', 0.7);
+  q(16, 6, 3, 1, '#BBF7D0', 0.7);
+  q(21, 7, 1, 1, '#D8B4FE', 0.7);
+  q(25, 6, 2, 1, '#FDE68A', 0.7);
+
+  // Row 2 — mixed sizes
+  q(5,  16, 5, 11, '#0F766E'); q(5,  16, 5, 2, '#0D6056');
+  q(11, 17, 3, 10, '#C2410C'); q(11, 17, 3, 2, '#9A3412');
+  q(15, 16, 4, 11, '#7C3AED'); q(15, 16, 4, 2, '#6D28D9');
+  q(20, 17, 3, 10, '#1D4ED8'); q(20, 17, 3, 2, '#1E40AF');
+  q(24, 16, 5, 11, '#166534'); q(24, 16, 5, 2, '#14532D');
+  q(30, 17, 4, 10, '#991B1B'); q(30, 17, 4, 2, '#7F1D1D');
+  q(35, 16, 3, 11, '#854D0E'); q(35, 16, 3, 2, '#713F12');
+  q(39, 17, 4, 10, '#1E40AF'); q(39, 17, 4, 2, '#1E3A8A');
+  q(44, 16, 5, 11, '#065F46'); q(44, 16, 5, 2, '#064E3B');
+  q(50, 17, 3, 10, '#831843'); q(50, 17, 3, 2, '#6B21A8');
+  q(54, 16, 5, 11, '#374151'); q(54, 16, 5, 2, '#1F2937');
+
+  // Row 3 — with some decorative items
+  q(5,  30, 4, 11, '#0E7490'); q(5,  30, 4, 2, '#0C6B7E');
+  q(10, 31, 3, 10, '#B45309'); q(10, 31, 3, 2, '#92400E');
+  q(14, 30, 5, 11, '#6D28D9'); q(14, 30, 5, 2, '#5B21B6');
+  // Small decorative globe
+  q(20, 30, 7, 8, '#1e293b');
+  q(22, 32, 3, 3, '#3b82f6', 0.9);
+  q(22, 32, 1, 3, '#60a5fa', 0.6);
+  // More books
+  q(28, 31, 4, 10, '#DC2626'); q(28, 31, 4, 2, '#B91C1C');
+  q(33, 30, 3, 11, '#065F46'); q(33, 30, 3, 2, '#064E3B');
+  q(37, 31, 4, 10, '#1D4ED8'); q(37, 31, 4, 2, '#1E40AF');
+  // Small plant pot
+  q(42, 35, 6, 6, '#92400E');
+  q(43, 30, 4, 6, '#16a34a', 0.8);
+  q(43, 29, 2, 3, '#15803d', 0.7);
+  q(45, 28, 2, 4, '#16a34a', 0.6);
+  // More books
+  q(49, 30, 3, 11, '#7C3AED'); q(49, 30, 3, 2, '#6D28D9');
+  q(53, 31, 5, 10, '#B45309'); q(53, 31, 5, 2, '#92400E');
+
+  // Bottom shadow
+  q(2, 46, 60, 2, '#1a0a03');
+  // Top header (frame top)
+  q(2, 0, 60, 2, '#4a2510');
+  // Side shadows
+  q(2,  0, 2, 48, '#2d1508');
+  q(60, 0, 2, 48, '#2d1508');
+}
+
 /* Filing cabinet: 96x120 canvas (Q=2, 48x60 grid) */
 export function drawCabinet(ctx: CanvasRenderingContext2D): void {
   ctx.clearRect(0, 0, 96, 120);

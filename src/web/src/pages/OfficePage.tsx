@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '../api/client';
-import type { Role, RoleDetail, Project, Standup, Wave, Decision, Session, Message, StreamEvent, CreateRoleInput, ImportJob } from '../types';
+import type { Role, RoleDetail, Project, Standup, Wave, Decision, Session, Message, StreamEvent, CreateRoleInput, ImportJob, KnowledgeDoc } from '../types';
 import SidePanel from '../components/office/SidePanel';
 import OperationsPanel from '../components/office/OperationsPanel';
 import ProjectPanel from '../components/office/ProjectPanel';
@@ -14,6 +14,7 @@ import useSessionStream from '../hooks/useSessionStream';
 import SpriteCanvas from '../components/office/SpriteCanvas';
 import FacilityCanvas from '../components/office/FacilityCanvas';
 import IsometricOfficeView from '../components/office/IsometricOfficeView';
+import KnowledgePanel from '../components/office/KnowledgePanel';
 
 /* ─── Role metadata ─────────────────────── */
 
@@ -62,7 +63,8 @@ type PanelState =
   | { type: 'role'; roleId: string }
   | { type: 'project'; projectId: string }
   | { type: 'bulletin' }
-  | { type: 'decisions' };
+  | { type: 'decisions' }
+  | { type: 'knowledge' };
 
 /* ─── Page ───────────────────────────────── */
 
@@ -72,6 +74,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   const [standups, setStandups] = useState<Standup[]>([]);
   const [waves, setWaves] = useState<Wave[]>([]);
   const [decisions, setDecisions] = useState<Decision[]>([]);
+  const [knowledgeDocs, setKnowledgeDocs] = useState<KnowledgeDoc[]>([]);
   const [companyName, setCompanyName] = useState('THE COMPANY INC');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -226,6 +229,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
       api.getStandups().then(setStandups),
       api.getWaves().then(setWaves),
       api.getDecisions().then(setDecisions),
+      api.getKnowledge().then(setKnowledgeDocs).catch(() => {}),
     ])
       .catch((err) => setError(`Failed to load: ${err.message}`))
       .finally(() => setLoading(false));
@@ -776,7 +780,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
 
             {/* ── Section: OFFICE ── */}
             <div className="pixel-section-label mt-1">OFFICE</div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-4 gap-2">
               {/* Meeting Room */}
               {mainProject ? (
                 <div
@@ -853,6 +857,31 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
                   ))}
                   {decisions.length === 0 && (
                     <div className="facility-board-item" style={{ fontStyle: 'italic' }}>No decisions yet</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Knowledge Base */}
+              <div
+                className="facility-card"
+                onClick={() => setPanel({ type: 'knowledge' })}
+              >
+                <div className="pixel-card-hdr" style={{ background: '#16a34a' }}>
+                  <span>{'\u{1F4DA}'} KNOWLEDGE BASE</span>
+                  <span className="lvl">&mdash;</span>
+                </div>
+                <div style={{ background: 'var(--terminal-surface)', borderTop: '2px solid var(--pixel-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px 0' }}>
+                  <FacilityCanvas type="knowledge" />
+                </div>
+                <div className="facility-board-body">
+                  <div className="facility-board-title">Docs: {knowledgeDocs.length}</div>
+                  {knowledgeDocs.slice(0, 4).map((d) => (
+                    <div key={d.id} className="facility-board-item">
+                      {d.akb_type === 'hub' ? '\u{1F5C2}' : '\u{1F4C4}'} {d.title}
+                    </div>
+                  ))}
+                  {knowledgeDocs.length === 0 && (
+                    <div className="facility-board-item" style={{ fontStyle: 'italic' }}>No docs yet</div>
                   )}
                 </div>
               </div>
@@ -949,6 +978,13 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           waves={waves}
           decisions={decisions}
           mode={panel.type === 'bulletin' ? 'bulletin' : 'decisions'}
+          onClose={closePanel}
+          terminalWidth={terminalOpen ? terminalWidth : 0}
+        />
+      )}
+      {panel.type === 'knowledge' && (
+        <KnowledgePanel
+          docs={knowledgeDocs}
           onClose={closePanel}
           terminalWidth={terminalOpen ? terminalWidth : 0}
         />

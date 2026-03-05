@@ -21,6 +21,7 @@ import { engineRouter } from './routes/engine.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { setupRouter } from './routes/setup.js';
 import { getAllActivities, completeActivity } from './services/activity-tracker.js';
+import { knowledgeRouter } from './routes/knowledge.js';
 import { importKnowledge } from './services/knowledge-importer.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -118,6 +119,7 @@ export function createHttpServer(): http.Server {
   app.use('/api/company', companyRouter);
   app.use('/api/engine', engineRouter);
   app.use('/api/sessions', sessionsRouter);
+  app.use('/api/knowledge', knowledgeRouter);
 
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', companyRoot: COMPANY_ROOT });

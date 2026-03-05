@@ -1,12 +1,13 @@
 /**
- * knowledge-importer.ts — AI-powered document import service
+ * knowledge-importer.ts — AKB-aware document import service
  *
- * Scans directories for documents, uses claude -p to summarize/categorize them,
- * and creates AKB-formatted knowledge files.
+ * Scans directories for documents and creates AKB-formatted knowledge files.
+ * Processing priority: frontmatter → claude -p CLI → simple fallback
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFile, execFileSync } from 'node:child_process';
+import matter from 'gray-matter';
 
 /* ─── Types ──────────────────────────────────── */
 
@@ -24,6 +25,8 @@ interface DocumentResult {
   title: string;
   summary: string;
   content: string;
+  akbType: 'hub' | 'node';
+  tags: string[];
 }
 
 /* ─── Constants ──────────────────────────────── */
@@ -37,7 +40,9 @@ const CLASSIFY_PROMPT = `You are a knowledge organizer. Given a document, respon
   "category": "market|tech|process|domain|competitor|financial|general",
   "title": "Short Title (max 60 chars)",
   "summary": "One-line TL;DR (max 120 chars)",
-  "content": "# Title\\n\\n> TL;DR summary\\n\\n---\\n\\n(reformatted content in markdown)"
+  "content": "# Title\\n\\n> TL;DR summary\\n\\n---\\n\\n(reformatted content in markdown)",
+  "akb_type": "hub|node",
+  "tags": ["tag1", "tag2"]
 }`;
 
 /* ─── File Collection ────────────────────────── */
@@ -75,6 +80,67 @@ function collectFiles(dirPath: string): string[] {
   return files;
 }
 
+/* ─── Frontmatter-based processing (highest priority) ─── */
+
+function extractTldr(content: string): string {
+  const blockquote = content.match(/^>\s+(.+)/m);
+  if (blockquote) return blockquote[1].trim().slice(0, 120);
+
+  const tldrSection = content.match(/##\s+TL;DR\s*\n+([^\n#]+)/i);
+  if (tldrSection) return tldrSection[1].trim().slice(0, 120);
+
+  const firstLine = content.split('\n').find(
+    (l) => l.trim().length > 0 && !l.startsWith('#') && !l.startsWith('---') && !l.startsWith('|')
+  );
+  return firstLine?.trim().slice(0, 120) ?? '';
+}
+
+function extractFrontmatterCategory(filePath: string): DocumentResult | null {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(filePath, 'utf-8');
+  } catch {
+    return null;
+  }
+
+  if (raw.trim().length < 20) return null;
+
+  // Only parse if has frontmatter
+  if (!raw.startsWith('---')) return null;
+
+  const { data, content } = matter(raw);
+
+  // Need at least one AKB field
+  if (!data.title && !data.akb_type && !data.tags && !data.domain) return null;
+
+  const tags: string[] = Array.isArray(data.tags) ? data.tags : [];
+
+  // Determine category from tags or domain field
+  const domainTag = tags.find((t: string) => t.startsWith('domain/'));
+  const category: string = domainTag
+    ? domainTag.replace('domain/', '')
+    : (data.domain as string) || 'general';
+
+  // Title from frontmatter > first heading
+  let title: string = (data.title as string) ?? '';
+  if (!title) {
+    const match = content.match(/^#\s+(.+)/m);
+    title = match ? match[1].trim() : path.basename(filePath, path.extname(filePath));
+  }
+
+  const akbType: 'hub' | 'node' = data.akb_type === 'hub' ? 'hub' : 'node';
+  const summary = (data.summary as string) || (data.tldr as string) || extractTldr(content);
+
+  return {
+    category,
+    title,
+    summary,
+    content: raw, // preserve original content with frontmatter
+    akbType,
+    tags,
+  };
+}
+
 /* ─── LLM Processing via claude -p ───────────── */
 
 async function processDocumentWithCli(filePath: string): Promise<DocumentResult | null> {
@@ -95,7 +161,6 @@ async function processDocumentWithCli(filePath: string): Promise<DocumentResult 
   const userMessage = `File: ${fileName}\n\n${truncated}`;
 
   try {
-    // Remove CLAUDECODE to avoid nested session issues
     const env = { ...process.env };
     delete env.CLAUDECODE;
 
@@ -122,14 +187,18 @@ async function processDocumentWithCli(filePath: string): Promise<DocumentResult 
     if (!jsonMatch) return null;
 
     const parsed = JSON.parse(jsonMatch[0]);
+    const akbType: 'hub' | 'node' = parsed.akb_type === 'hub' ? 'hub' : 'node';
+    const tags: string[] = Array.isArray(parsed.tags) ? parsed.tags : [];
+
     return {
       category: parsed.category || 'general',
       title: parsed.title || fileName.replace(/\.[^.]+$/, ''),
       summary: parsed.summary || '',
       content: parsed.content || content,
+      akbType,
+      tags,
     };
   } catch {
-    // CLI failed — fallback to simple import
     return null;
   }
 }
@@ -147,17 +216,45 @@ function processDocumentSimple(filePath: string): DocumentResult | null {
 
   const fileName = path.basename(filePath, path.extname(filePath));
   const title = fileName.replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-
-  // Extract first non-empty line as summary
-  const firstLine = content.split('\n').find(l => l.trim().length > 0 && !l.startsWith('#'))?.trim() ?? '';
-  const summary = firstLine.slice(0, 120);
+  const summary = extractTldr(content);
 
   return {
     category: 'general',
     title,
     summary,
-    content: content,
+    content,
+    akbType: 'node',
+    tags: [],
   };
+}
+
+/* ─── Build AKB frontmatter content ─────────── */
+
+function buildAkbContent(result: DocumentResult, sourceFile: string): string {
+  const date = new Date().toISOString().slice(0, 10);
+
+  // If content already has frontmatter, keep it as-is (just add source footer)
+  if (result.content.startsWith('---')) {
+    return result.content + `\n\n---\n\n*Source: ${path.basename(sourceFile)}*\n*Imported: ${date}*\n`;
+  }
+
+  // Build AKB frontmatter
+  const fm = [
+    '---',
+    `title: "${result.title.replace(/"/g, "'")}"`,
+    `akb_type: ${result.akbType}`,
+    `status: active`,
+    `tags: [${result.tags.map(t => `"${t}"`).join(', ')}]`,
+    `domain: ${result.category}`,
+    '---',
+    '',
+  ].join('\n');
+
+  const body = result.content.startsWith('#')
+    ? result.content
+    : `# ${result.title}\n\n${result.summary ? `> ${result.summary}\n\n` : ''}${result.content}`;
+
+  return fm + body + `\n\n---\n\n*Source: ${path.basename(sourceFile)}*\n*Imported: ${date}*\n`;
 }
 
 /* ─── Check if claude CLI is available ───────── */
@@ -211,6 +308,10 @@ export async function importKnowledge(
   const knowledgeDir = path.join(companyRoot, 'knowledge');
   fs.mkdirSync(knowledgeDir, { recursive: true });
 
+  // Load existing hub to skip duplicates
+  const hubPath = path.join(knowledgeDir, 'knowledge.md');
+  const existingHubContent = fs.existsSync(hubPath) ? fs.readFileSync(hubPath, 'utf-8') : '';
+
   let created = 0;
   let skipped = 0;
   const hubEntries: { category: string; title: string; summary: string; filePath: string }[] = [];
@@ -219,9 +320,9 @@ export async function importKnowledge(
     const file = allFiles[i];
     callbacks.onProcessing(path.basename(file), i + 1, allFiles.length);
 
-    // Try CLI first, fallback to simple import
-    let result: DocumentResult | null = null;
-    if (useCli) {
+    // Processing priority: frontmatter → CLI → simple fallback
+    let result: DocumentResult | null = extractFrontmatterCategory(file);
+    if (!result && useCli) {
       result = await processDocumentWithCli(file);
     }
     if (!result) {
@@ -244,9 +345,14 @@ export async function importKnowledge(
     const outPath = path.join(categoryDir, `${safeName}.md`);
     const relativePath = `knowledge/${result.category}/${safeName}.md`;
 
-    // Add source info to content
-    const finalContent = result.content + `\n\n---\n\n*Source: ${path.basename(file)}*\n*Imported: ${new Date().toISOString().slice(0, 10)}*\n`;
+    // Skip if already linked in hub (duplicate prevention)
+    if (existingHubContent.includes(relativePath)) {
+      skipped++;
+      callbacks.onSkipped(path.basename(file), 'Already imported');
+      continue;
+    }
 
+    const finalContent = buildAkbContent(result, file);
     fs.writeFileSync(outPath, finalContent);
     created++;
 
@@ -261,7 +367,7 @@ export async function importKnowledge(
   }
 
   // Phase 3: Update knowledge.md hub
-  updateKnowledgeHub(companyRoot, hubEntries);
+  updateKnowledgeHub(companyRoot, hubEntries, existingHubContent);
 
   callbacks.onDone({ imported: allFiles.length, created, skipped });
 }
@@ -271,14 +377,17 @@ export async function importKnowledge(
 function updateKnowledgeHub(
   companyRoot: string,
   entries: { category: string; title: string; summary: string; filePath: string }[],
+  existingContent: string,
 ) {
-  const hubPath = path.join(companyRoot, 'knowledge', 'knowledge.md');
-  let content = '';
+  if (entries.length === 0) return;
 
-  if (fs.existsSync(hubPath)) {
-    content = fs.readFileSync(hubPath, 'utf-8');
-  } else {
-    content = '# Knowledge Base\n\nDomain knowledge.\n';
+  const hubPath = path.join(companyRoot, 'knowledge', 'knowledge.md');
+  let content = existingContent || '# Knowledge Base\n\nDomain knowledge.\n';
+
+  // Remove previous "## Imported Knowledge" section to avoid duplication
+  const importedIdx = content.indexOf('\n## Imported Knowledge');
+  if (importedIdx !== -1) {
+    content = content.slice(0, importedIdx);
   }
 
   // Group by category
@@ -294,7 +403,7 @@ function updateKnowledgeHub(
   for (const [category, items] of byCategory) {
     content += `### ${category.charAt(0).toUpperCase() + category.slice(1)}\n\n`;
     for (const item of items) {
-      content += `- [${item.title}](${item.filePath}) — ${item.summary}\n`;
+      content += `- [${item.title}](${item.filePath})${item.summary ? ` — ${item.summary}` : ''}\n`;
     }
     content += '\n';
   }
