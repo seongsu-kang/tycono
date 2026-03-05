@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Standup, Wave, Decision } from '../../types';
 import OfficeMarkdown from './OfficeMarkdown';
+import { usePanelResize } from './KnowledgePanel';
 
 interface Props {
   standups: Standup[];
@@ -16,17 +17,20 @@ export default function OperationsPanel({ standups, waves, decisions, mode, onCl
     mode === 'decisions' ? 'decisions' : 'standups'
   );
 
-  const hasTerminal = terminalWidth > 0;
-  const panelRight = hasTerminal ? terminalWidth : 0;
-  const panelWidth = hasTerminal ? Math.max(360, 500 - (terminalWidth - 480) / 2) : 500;
+  const { panelRight, panelWidth, isResizing, handleResizeStart } = usePanelResize(terminalWidth);
 
   return (
     <>
       <div className="dimmer fixed top-0 left-0 bottom-0 bg-black/30 z-40 open" style={{ right: panelRight }} onClick={onClose} />
 
-      <div className="side-panel open fixed top-0 h-full z-50 flex flex-col bg-[var(--wall)] border-l-[3px] border-[var(--desk-wood)] shadow-[-4px_0_20px_rgba(0,0,0,0.2)]"
+      <div className={`side-panel open fixed top-0 h-full z-50 flex flex-col bg-[var(--wall)] border-l-[3px] border-[var(--desk-wood)] shadow-[-4px_0_20px_rgba(0,0,0,0.2)] ${isResizing ? 'resizing' : ''}`}
         style={{ right: panelRight, width: panelWidth }}
       >
+        {/* Resize handle */}
+        <div
+          className={`absolute top-0 -left-[5px] w-[10px] h-full cursor-col-resize z-[60] transition-colors ${isResizing ? 'bg-black/10' : 'hover:bg-black/5'}`}
+          onMouseDown={handleResizeStart}
+        />
         {/* Header */}
         <div className="p-5 bg-[var(--desk-wood)] text-white relative">
           <button

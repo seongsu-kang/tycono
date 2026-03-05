@@ -1,4 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide } from 'd3-force';
+import type { SimulationNodeDatum, SimulationLinkDatum } from 'd3-force';
 import type { KnowledgeDoc, KnowledgeDocDetail } from '../../types';
 import { api } from '../../api/client';
 import OfficeMarkdown from './OfficeMarkdown';
@@ -20,232 +22,207 @@ function getDomainColor(cat: string) {
   return DOMAIN_COLORS[cat] ?? DOMAIN_COLORS.general;
 }
 
-/* ─── Graph View ────────────────────────────────────── */
+/* ─── Graph Types ──────────────────────────────────── */
 
-interface GraphNode {
+interface GNode extends SimulationNodeDatum {
   id: string;
   title: string;
   category: string;
   akb_type: 'hub' | 'node';
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
 }
 
-interface GraphEdge {
-  source: string;
-  target: string;
+interface GLink extends SimulationLinkDatum<GNode> {
+  source: string | GNode;
+  target: string | GNode;
 }
 
-function buildGraph(docs: KnowledgeDoc[]): { nodes: GraphNode[]; edges: GraphEdge[] } {
-  const idSet = new Set(docs.map((d) => d.id));
-  const nodes: GraphNode[] = docs.map((d, i) => ({
-    id: d.id,
-    title: d.title,
-    category: d.category,
-    akb_type: d.akb_type,
-    x: 80 + (i % 8) * 90 + Math.random() * 20,
-    y: 60 + Math.floor(i / 8) * 80 + Math.random() * 20,
-    vx: 0,
-    vy: 0,
-  }));
-
-  const edges: GraphEdge[] = [];
-  for (const doc of docs) {
-    for (const link of doc.links) {
-      const targetId = link.href.replace(/^.*knowledge\//, '').replace(/^\.\.\//, '');
-      if (idSet.has(targetId) && targetId !== doc.id) {
-        edges.push({ source: doc.id, target: targetId });
-      }
-    }
-  }
-  return { nodes, edges };
-}
+/* ─── Graph View (d3-force + SVG) ──────────────────── */
 
 function KnowledgeGraph({ docs, onNodeClick }: { docs: KnowledgeDoc[]; onNodeClick: (doc: KnowledgeDoc) => void }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const nodesRef = useRef<GraphNode[]>([]);
-  const edgesRef = useRef<GraphEdge[]>([]);
-  const animFrameRef = useRef<number>(0);
-  const [tooltip, setTooltip] = useState<{ x: number; y: number; doc: KnowledgeDoc } | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [dimensions, setDimensions] = useState({ width: 600, height: 400 });
+  const [graphData, setGraphData] = useState<{ nodes: GNode[]; links: GLink[] }>({ nodes: [], links: [] });
+  const [hoveredNode, setHoveredNode] = useState<GNode | null>(null);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
+  // Observe container size
   useEffect(() => {
-    const { nodes, edges } = buildGraph(docs);
-    nodesRef.current = nodes;
-    edgesRef.current = edges;
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const { width, height } = entries[0].contentRect;
+      if (width > 0 && height > 0) setDimensions({ width, height });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+  // Build and simulate graph
+  useEffect(() => {
+    if (docs.length === 0) return;
 
-    const W = canvas.width;
-    const H = canvas.height;
+    const idSet = new Set(docs.map((d) => d.id));
+    const nodes: GNode[] = docs.map((d) => ({
+      id: d.id,
+      title: d.title,
+      category: d.category,
+      akb_type: d.akb_type,
+    }));
 
-    // Force-directed layout simulation
-    function simulate() {
-      const ns = nodesRef.current;
-      const es = edgesRef.current;
-      const k = Math.sqrt((W * H) / Math.max(ns.length, 1));
-
-      for (let iter = 0; iter < 150; iter++) {
-        // Repulsion
-        for (let i = 0; i < ns.length; i++) {
-          ns[i].vx = 0;
-          ns[i].vy = 0;
-          for (let j = 0; j < ns.length; j++) {
-            if (i === j) continue;
-            const dx = ns[i].x - ns[j].x;
-            const dy = ns[i].y - ns[j].y;
-            const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
-            const force = (k * k) / dist;
-            ns[i].vx += (dx / dist) * force * 0.1;
-            ns[i].vy += (dy / dist) * force * 0.1;
+    const links: GLink[] = [];
+    for (const doc of docs) {
+      for (const link of doc.links) {
+        const targetId = link.href.replace(/^.*knowledge\//, '').replace(/^\.\.\//, '');
+        if (idSet.has(targetId) && targetId !== doc.id) {
+          // Avoid duplicate edges
+          if (!links.some((l) => (l.source === doc.id && l.target === targetId) || (l.source === targetId && l.target === doc.id))) {
+            links.push({ source: doc.id, target: targetId });
           }
         }
-        // Attraction (edges)
-        for (const e of es) {
-          const si = ns.findIndex((n) => n.id === e.source);
-          const ti = ns.findIndex((n) => n.id === e.target);
-          if (si < 0 || ti < 0) continue;
-          const dx = ns[ti].x - ns[si].x;
-          const dy = ns[ti].y - ns[si].y;
-          const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
-          const force = (dist * dist) / k * 0.05;
-          ns[si].vx += (dx / dist) * force;
-          ns[si].vy += (dy / dist) * force;
-          ns[ti].vx -= (dx / dist) * force;
-          ns[ti].vy -= (dy / dist) * force;
-        }
-        // Update positions
-        for (const n of ns) {
-          const speed = Math.sqrt(n.vx * n.vx + n.vy * n.vy);
-          const maxSpeed = 5;
-          if (speed > maxSpeed) { n.vx = (n.vx / speed) * maxSpeed; n.vy = (n.vy / speed) * maxSpeed; }
-          n.x = Math.max(20, Math.min(W - 20, n.x + n.vx));
-          n.y = Math.max(20, Math.min(H - 20, n.y + n.vy));
-        }
       }
     }
 
-    simulate();
+    const { width, height } = dimensions;
 
-    function draw() {
-      const ns = nodesRef.current;
-      const es = edgesRef.current;
-      ctx!.clearRect(0, 0, W, H);
+    const sim = forceSimulation<GNode>(nodes)
+      .force('link', forceLink<GNode, GLink>(links).id((d) => d.id).distance(100))
+      .force('charge', forceManyBody().strength(-300))
+      .force('center', forceCenter(width / 2, height / 2))
+      .force('collide', forceCollide(30));
 
-      // Background
-      ctx!.fillStyle = '#1e1e2e';
-      ctx!.fillRect(0, 0, W, H);
-
-      // Grid dots
-      ctx!.fillStyle = 'rgba(255,255,255,0.04)';
-      for (let gx = 0; gx < W; gx += 20) {
-        for (let gy = 0; gy < H; gy += 20) {
-          ctx!.fillRect(gx, gy, 1, 1);
-        }
+    sim.on('tick', () => {
+      // Clamp to bounds
+      for (const n of nodes) {
+        n.x = Math.max(40, Math.min(width - 40, n.x ?? width / 2));
+        n.y = Math.max(40, Math.min(height - 40, n.y ?? height / 2));
       }
+      setGraphData({ nodes: [...nodes], links: [...links] });
+    });
 
-      // Edges
-      for (const e of es) {
-        const src = ns.find((n) => n.id === e.source);
-        const tgt = ns.find((n) => n.id === e.target);
-        if (!src || !tgt) continue;
-        ctx!.strokeStyle = 'rgba(148,163,184,0.25)';
-        ctx!.lineWidth = 1;
-        ctx!.setLineDash([2, 3]);
-        ctx!.beginPath();
-        ctx!.moveTo(src.x, src.y);
-        ctx!.lineTo(tgt.x, tgt.y);
-        ctx!.stroke();
-        ctx!.setLineDash([]);
-      }
+    // Run 120 ticks quickly then stop
+    sim.alpha(1).restart();
+    for (let i = 0; i < 120; i++) sim.tick();
+    sim.stop();
+    setGraphData({ nodes: [...nodes], links: [...links] });
 
-      // Nodes
-      for (const n of ns) {
-        const color = DOMAIN_COLORS[n.category] ?? DOMAIN_COLORS.general;
-        const size = n.akb_type === 'hub' ? 12 : 7;
-        ctx!.fillStyle = color.border;
-        ctx!.fillRect(Math.round(n.x - size / 2), Math.round(n.y - size / 2), size, size);
-        // Inner fill
-        ctx!.fillStyle = color.bg;
-        ctx!.fillRect(Math.round(n.x - size / 2) + 1, Math.round(n.y - size / 2) + 1, size - 2, size - 2);
-      }
+    return () => { sim.stop(); };
+  }, [docs, dimensions]);
+
+  const getNodePos = (n: string | GNode): { x: number; y: number } => {
+    if (typeof n === 'string') {
+      const found = graphData.nodes.find((nd) => nd.id === n);
+      return { x: found?.x ?? 0, y: found?.y ?? 0 };
     }
-
-    draw();
-
-    return () => {
-      cancelAnimationFrame(animFrameRef.current);
-    };
-  }, [docs]);
-
-  const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-
-    for (const n of nodesRef.current) {
-      const size = n.akb_type === 'hub' ? 14 : 10;
-      if (Math.abs(mx - n.x) < size && Math.abs(my - n.y) < size) {
-        const doc = docs.find((d) => d.id === n.id);
-        if (doc) onNodeClick(doc);
-        return;
-      }
-    }
-    setTooltip(null);
-  };
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-
-    for (const n of nodesRef.current) {
-      const size = n.akb_type === 'hub' ? 14 : 10;
-      if (Math.abs(mx - n.x) < size && Math.abs(my - n.y) < size) {
-        const doc = docs.find((d) => d.id === n.id);
-        if (doc) {
-          setTooltip({ x: e.clientX - rect.left, y: e.clientY - rect.top, doc });
-          return;
-        }
-      }
-    }
-    setTooltip(null);
+    return { x: n.x ?? 0, y: n.y ?? 0 };
   };
 
   return (
-    <div className="relative flex-1 overflow-hidden">
-      <canvas
-        ref={canvasRef}
-        width={680}
-        height={420}
-        style={{ imageRendering: 'pixelated', width: '100%', height: '100%', cursor: 'crosshair' }}
-        onClick={handleClick}
-        onMouseMove={handleMouseMove}
-      />
-      {tooltip && (
+    <div ref={containerRef} className="relative flex-1 overflow-hidden" style={{ background: '#1e1e2e' }}>
+      <svg ref={svgRef} width={dimensions.width} height={dimensions.height} style={{ display: 'block' }}>
+        {/* Grid dots */}
+        <defs>
+          <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+            <circle cx="0" cy="0" r="0.5" fill="rgba(255,255,255,0.06)" />
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        {/* Edges */}
+        {graphData.links.map((link, i) => {
+          const s = getNodePos(link.source);
+          const t = getNodePos(link.target);
+          return (
+            <line
+              key={i}
+              x1={s.x} y1={s.y} x2={t.x} y2={t.y}
+              stroke="rgba(148,163,184,0.3)"
+              strokeWidth={1.5}
+              strokeDasharray="4 3"
+            />
+          );
+        })}
+
+        {/* Nodes */}
+        {graphData.nodes.map((node) => {
+          const color = DOMAIN_COLORS[node.category] ?? DOMAIN_COLORS.general;
+          const isHub = node.akb_type === 'hub';
+          const size = isHub ? 16 : 10;
+          const isHovered = hoveredNode?.id === node.id;
+
+          return (
+            <g
+              key={node.id}
+              transform={`translate(${node.x ?? 0}, ${node.y ?? 0})`}
+              style={{ cursor: 'pointer' }}
+              onClick={() => {
+                const doc = docs.find((d) => d.id === node.id);
+                if (doc) onNodeClick(doc);
+              }}
+              onMouseEnter={(e) => {
+                setHoveredNode(node);
+                const rect = containerRef.current?.getBoundingClientRect();
+                if (rect) setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+              }}
+              onMouseLeave={() => setHoveredNode(null)}
+            >
+              {/* Outer */}
+              <rect
+                x={-size / 2 - (isHovered ? 2 : 0)}
+                y={-size / 2 - (isHovered ? 2 : 0)}
+                width={size + (isHovered ? 4 : 0)}
+                height={size + (isHovered ? 4 : 0)}
+                fill={color.border}
+                rx={isHub ? 3 : 1}
+                opacity={isHovered ? 1 : 0.9}
+              />
+              {/* Inner */}
+              <rect
+                x={-size / 2 + 2}
+                y={-size / 2 + 2}
+                width={Math.max(0, size - 4)}
+                height={Math.max(0, size - 4)}
+                fill={color.bg}
+                rx={isHub ? 2 : 0}
+              />
+              {/* Label */}
+              <text
+                y={size / 2 + 12}
+                textAnchor="middle"
+                fill="#94a3b8"
+                fontSize={9}
+                fontFamily="monospace"
+                style={{ pointerEvents: 'none' }}
+              >
+                {node.title.length > 18 ? node.title.slice(0, 16) + '..' : node.title}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* Tooltip */}
+      {hoveredNode && (
         <div
-          className="absolute z-10 pointer-events-none p-2 rounded text-xs max-w-[200px]"
+          className="absolute z-10 pointer-events-none p-2.5 rounded text-xs max-w-[220px]"
           style={{
-            left: tooltip.x + 12,
-            top: tooltip.y - 20,
+            left: Math.min(mousePos.x + 16, dimensions.width - 230),
+            top: Math.max(mousePos.y - 30, 8),
             background: '#16213e',
             border: '1px solid #334155',
             color: '#e2e8f0',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
           }}
         >
-          <div className="font-bold mb-1">{tooltip.doc.title}</div>
-          {tooltip.doc.tldr && <div className="text-[10px] opacity-80 mb-1">{tooltip.doc.tldr}</div>}
-          <div className="text-[10px] opacity-60">Click to open</div>
+          <div className="font-bold mb-1">{hoveredNode.title}</div>
+          <div className="text-[10px] opacity-60 mb-1">{hoveredNode.akb_type.toUpperCase()} / {hoveredNode.category}</div>
+          {docs.find((d) => d.id === hoveredNode.id)?.tldr && (
+            <div className="text-[10px] opacity-80 mb-1">{docs.find((d) => d.id === hoveredNode.id)!.tldr}</div>
+          )}
+          <div className="text-[10px] text-green-400">Click to open</div>
         </div>
       )}
+
       {docs.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center text-xs" style={{ color: '#475569' }}>
           No knowledge documents found
@@ -285,7 +262,6 @@ function KnowledgeCard({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1 flex-wrap">
               <span className="font-semibold text-xs text-gray-800 truncate">{doc.title}</span>
-              {/* Status dot */}
               <span
                 className="w-2 h-2 rounded-full shrink-0"
                 style={{
@@ -294,7 +270,6 @@ function KnowledgeCard({
                 title={doc.status}
               />
             </div>
-            {/* Tags */}
             <div className="flex flex-wrap gap-1 mt-1">
               {doc.tags.slice(0, 4).map((tag) => (
                 <span
@@ -399,6 +374,48 @@ function DocDetail({ docId, onBack }: { docId: string; onBack: () => void }) {
   );
 }
 
+/* ─── Panel resize hook ──────────────────────────── */
+
+const DEFAULT_WIDTH = 500;
+const MIN_WIDTH = 360;
+const MAX_WIDTH = 700;
+
+function usePanelResize(terminalWidth: number) {
+  const [panelW, setPanelW] = useState(DEFAULT_WIDTH);
+  const [isResizing, setIsResizing] = useState(false);
+  const startXRef = useRef(0);
+  const startWidthRef = useRef(0);
+
+  const hasTerminal = terminalWidth > 0;
+  const panelRight = hasTerminal ? terminalWidth : 0;
+  const maxAvailable = hasTerminal ? Math.max(MIN_WIDTH, window.innerWidth - terminalWidth - 100) : MAX_WIDTH;
+  const panelWidth = Math.min(panelW, maxAvailable);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    startXRef.current = e.clientX;
+    startWidthRef.current = panelWidth;
+    setIsResizing(true);
+
+    const onMove = (ev: MouseEvent) => {
+      const delta = startXRef.current - ev.clientX;
+      const newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startWidthRef.current + delta));
+      setPanelW(newWidth);
+    };
+
+    const onUp = () => {
+      setIsResizing(false);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [panelWidth]);
+
+  return { panelRight, panelWidth, isResizing, handleResizeStart };
+}
+
 /* ─── Main Panel ─────────────────────────────────── */
 
 interface Props {
@@ -412,9 +429,7 @@ export default function KnowledgePanel({ docs, onClose, terminalWidth = 0 }: Pro
   const [category, setCategory] = useState<string>('all');
   const [openDocId, setOpenDocId] = useState<string | null>(null);
 
-  const hasTerminal = terminalWidth > 0;
-  const panelRight = hasTerminal ? terminalWidth : 0;
-  const panelWidth = hasTerminal ? Math.max(360, 500 - (terminalWidth - 480) / 2) : 500;
+  const { panelRight, panelWidth, isResizing, handleResizeStart } = usePanelResize(terminalWidth);
 
   // Gather unique categories
   const categories = ['all', ...Array.from(new Set(docs.map((d) => d.category))).sort()];
@@ -429,9 +444,15 @@ export default function KnowledgePanel({ docs, onClose, terminalWidth = 0 }: Pro
         onClick={onClose}
       />
       <div
-        className="side-panel open fixed top-0 h-full z-50 flex flex-col bg-[var(--wall)] border-l-[3px] border-[#16a34a] shadow-[-4px_0_20px_rgba(0,0,0,0.2)]"
+        className={`side-panel open fixed top-0 h-full z-50 flex flex-col bg-[var(--wall)] border-l-[3px] border-[#16a34a] shadow-[-4px_0_20px_rgba(0,0,0,0.2)] ${isResizing ? 'resizing' : ''}`}
         style={{ right: panelRight, width: panelWidth }}
       >
+        {/* Resize handle */}
+        <div
+          className={`absolute top-0 -left-[5px] w-[10px] h-full cursor-col-resize z-[60] transition-colors ${isResizing ? 'bg-black/10' : 'hover:bg-black/5'}`}
+          onMouseDown={handleResizeStart}
+        />
+
         {/* Header */}
         <div className="p-5 text-white relative" style={{ background: '#16a34a' }}>
           <button
@@ -524,3 +545,5 @@ function TabBtn({ label, active, onClick }: { label: string; active: boolean; on
     </button>
   );
 }
+
+export { usePanelResize };
