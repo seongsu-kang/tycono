@@ -222,7 +222,7 @@ export async function importKnowledge(
     // Try CLI first, fallback to simple import
     let result: DocumentResult | null = null;
     if (useCli) {
-      result = processDocumentWithCli(file);
+      result = await processDocumentWithCli(file);
     }
     if (!result) {
       result = processDocumentSimple(file);

@@ -21,6 +21,7 @@ import { engineRouter } from './routes/engine.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { setupRouter } from './routes/setup.js';
 import { getAllActivities, completeActivity } from './services/activity-tracker.js';
+import { importKnowledge } from './services/knowledge-importer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -40,6 +41,49 @@ function cleanupStaleActivities(): void {
       console.log(`[STARTUP] Cleaned stale activity: ${activity.roleId} (was working on "${activity.currentTask}")`);
     }
   }
+}
+
+/* ─── Raw HTTP handler for import-knowledge SSE ─── */
+
+function handleImportKnowledge(req: http.IncomingMessage, res: http.ServerResponse): void {
+  let data = '';
+  req.on('data', (chunk) => { data += chunk; });
+  req.on('end', () => {
+    let body: Record<string, unknown>;
+    try { body = JSON.parse(data); } catch { body = {}; }
+
+    const importPaths = body.paths as string[] | undefined;
+    if (!importPaths || !Array.isArray(importPaths) || importPaths.length === 0) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'paths array is required' }));
+      return;
+    }
+
+    const root = (body.companyRoot as string) || COMPANY_ROOT;
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+
+    const sendSSE = (event: string, eventData: unknown) => {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(eventData)}\n\n`);
+    };
+
+    importKnowledge(importPaths, root, {
+      onScanning: (scanPath, fileCount) => sendSSE('scanning', { path: scanPath, fileCount }),
+      onProcessing: (file, index, total) => sendSSE('processing', { file, index, total }),
+      onCreated: (filePath, title, summary) => sendSSE('created', { path: filePath, title, summary }),
+      onSkipped: (file, reason) => sendSSE('skipped', { file, reason }),
+      onDone: (stats) => { sendSSE('done', stats); res.end(); },
+      onError: (message) => { sendSSE('error', { message }); res.end(); },
+    }).catch((err) => {
+      sendSSE('error', { message: err instanceof Error ? err.message : 'Import failed' });
+      res.end();
+    });
+  });
 }
 
 export function createHttpServer(): http.Server {
@@ -107,10 +151,14 @@ export function createHttpServer(): http.Server {
     const url = req.url ?? '';
     const method = req.method ?? '';
 
-    // SSE/Job 엔드포인트: Express 우회하여 raw HTTP로 처리
-    if ((url.startsWith('/api/exec/') || url.startsWith('/api/jobs')) && method === 'POST') {
+    // SSE 엔드포인트: Express 우회하여 raw HTTP로 처리
+    if ((url.startsWith('/api/exec/') || url.startsWith('/api/jobs') || url === '/api/setup/import-knowledge') && method === 'POST') {
       setExecCors(req, res);
-      handleExecRequest(req, res);
+      if (url === '/api/setup/import-knowledge') {
+        handleImportKnowledge(req, res);
+      } else {
+        handleExecRequest(req, res);
+      }
       return;
     }
 
