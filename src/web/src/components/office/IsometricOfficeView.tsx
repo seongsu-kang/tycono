@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { Role, Project, Wave, Standup, Decision } from '../../types/index';
 import SpriteCanvas from './SpriteCanvas';
 import FacilityCanvas from './FacilityCanvas';
@@ -7,7 +8,6 @@ import FacilityCanvas from './FacilityCanvas';
 const TILE_W = 200;
 const TILE_H = 100;
 
-/** Convert isometric grid (col, row) to screen (x, y) */
 function isoToScreen(col: number, row: number): { x: number; y: number } {
   const x = (col - row) * (TILE_W / 2);
   const y = (col + row) * (TILE_H / 2);
@@ -17,47 +17,85 @@ function isoToScreen(col: number, row: number): { x: number; y: number } {
 /* ─── Role metadata ─────────────────────── */
 
 const ROLE_COLORS: Record<string, string> = {
-  cto: '#1565C0',
-  cbo: '#E65100',
-  pm: '#2E7D32',
-  engineer: '#4A148C',
-  designer: '#AD1457',
-  qa: '#00695C',
+  cto: '#1565C0', cbo: '#E65100', pm: '#2E7D32',
+  engineer: '#4A148C', designer: '#AD1457', qa: '#00695C',
 };
-
 const ROLE_ICONS: Record<string, string> = {
-  cto: '\u{1F3D7}\u{FE0F}',
-  cbo: '\u{1F4CA}',
-  pm: '\u{1F4CB}',
-  engineer: '\u2699\u{FE0F}',
-  designer: '\u{1F3A8}',
-  qa: '\u{1F50D}',
+  cto: '\u{1F3D7}\u{FE0F}', cbo: '\u{1F4CA}', pm: '\u{1F4CB}',
+  engineer: '\u2699\u{FE0F}', designer: '\u{1F3A8}', qa: '\u{1F50D}',
 };
 
-const DESK_ACTIVITY: Record<string, string> = {
-  cto: '\uC544\uD0A4\uD14D\uCC98',
-  cbo: '\uC2DC\uC7A5 \uBD84\uC11D',
-  pm: 'PRD \uC791\uC131',
-  engineer: '\uCF54\uB529',
-  designer: '\uC2DC\uC548 \uC81C\uC791',
-  qa: '\uD488\uC9C8 \uAC80\uC99D',
-};
+/* ─── Room zone definitions ─────────────── */
 
-/* ─── Grid layout positions ─────────────── */
-
-interface DeskConfig {
-  roleId: string;
-  col: number;
-  row: number;
+interface RoomZone {
+  id: string;
+  label: string;
+  /** Tiles that belong to this room (col, row) */
+  tiles: [number, number][];
+  floorColor: string;
+  floorColorAlt: string;
+  borderColor: string;
 }
 
+const ROOMS: RoomZone[] = [
+  {
+    id: 'executive',
+    label: 'EXECUTIVE WING',
+    tiles: [[0,0],[1,0],[2,0],[0,1],[1,1],[2,1]],
+    floorColor: 'rgba(37, 99, 235, 0.18)',
+    floorColorAlt: 'rgba(37, 99, 235, 0.10)',
+    borderColor: 'rgba(37, 99, 235, 0.35)',
+  },
+  {
+    id: 'workspace',
+    label: 'WORKSPACE',
+    tiles: [[3,0],[4,0],[5,0],[3,1],[4,1],[5,1],[3,2],[4,2],[5,2],[3,3],[4,3],[5,3]],
+    floorColor: 'rgba(99, 102, 241, 0.12)',
+    floorColorAlt: 'rgba(99, 102, 241, 0.06)',
+    borderColor: 'rgba(99, 102, 241, 0.25)',
+  },
+  {
+    id: 'meeting',
+    label: 'MEETING ROOM',
+    tiles: [[0,2],[1,2],[2,2],[0,3],[1,3],[2,3]],
+    floorColor: 'rgba(16, 185, 129, 0.15)',
+    floorColorAlt: 'rgba(16, 185, 129, 0.08)',
+    borderColor: 'rgba(16, 185, 129, 0.30)',
+  },
+  {
+    id: 'commons',
+    label: 'COMMON AREA',
+    tiles: [[0,4],[1,4],[2,4],[3,4],[4,4],[5,4]],
+    floorColor: 'rgba(245, 158, 11, 0.12)',
+    floorColorAlt: 'rgba(245, 158, 11, 0.06)',
+    borderColor: 'rgba(245, 158, 11, 0.25)',
+  },
+];
+
+/** Build a lookup: "col,row" => RoomZone */
+function buildRoomLookup(): Map<string, RoomZone> {
+  const map = new Map<string, RoomZone>();
+  for (const room of ROOMS) {
+    for (const [c, r] of room.tiles) {
+      map.set(`${c},${r}`, room);
+    }
+  }
+  return map;
+}
+
+/* ─── Layout: desks, facilities, decorations ── */
+
+interface DeskConfig { roleId: string; col: number; row: number; }
+
 const DESK_LAYOUT: DeskConfig[] = [
-  { roleId: 'cto',      col: 2, row: 0 },   // top center — leadership
-  { roleId: 'cbo',      col: 4, row: 0 },   // top right — C-level peer
-  { roleId: 'pm',       col: 0, row: 2 },   // left middle
-  { roleId: 'engineer', col: 4, row: 2 },   // right middle
-  { roleId: 'designer', col: 1, row: 3 },   // bottom left
-  { roleId: 'qa',       col: 3, row: 3 },   // bottom right
+  // Executive wing
+  { roleId: 'cto', col: 1, row: 0 },
+  { roleId: 'cbo', col: 0, row: 1 },
+  // Workspace
+  { roleId: 'pm',       col: 3, row: 0 },
+  { roleId: 'engineer', col: 4, row: 1 },
+  { roleId: 'designer', col: 3, row: 2 },
+  { roleId: 'qa',       col: 5, row: 1 },
 ];
 
 interface FacilityConfig {
@@ -71,35 +109,94 @@ interface FacilityConfig {
 }
 
 const FACILITY_LAYOUT: FacilityConfig[] = [
-  { id: 'meeting',   col: 2, row: 2, type: 'meeting',   label: 'MEETING ROOM',   icon: '\u{1F3E2}', color: '#3B82F6' },
-  { id: 'bulletin',  col: 0, row: 0, type: 'bulletin',  label: 'BULLETIN BOARD', icon: '\u{1F4CB}', color: '#64748b' },
-  { id: 'decisions', col: 4, row: 4, type: 'decision',  label: 'DECISION LOG',   icon: '\u{1F4DC}', color: '#64748b' },
-  { id: 'knowledge', col: 4, row: 0, type: 'knowledge', label: 'KNOWLEDGE BASE', icon: '\u{1F4DA}', color: '#0D9488' },
+  { id: 'meeting',   col: 1, row: 2, type: 'meeting',   label: 'MEETING',    icon: '\u{1F3E2}', color: '#10B981' },
+  { id: 'bulletin',  col: 1, row: 4, type: 'bulletin',  label: 'BULLETIN',   icon: '\u{1F4CB}', color: '#F59E0B' },
+  { id: 'decisions', col: 3, row: 4, type: 'decision',  label: 'DECISIONS',  icon: '\u{1F4DC}', color: '#EF4444' },
+  { id: 'knowledge', col: 5, row: 3, type: 'knowledge', label: 'KNOWLEDGE',  icon: '\u{1F4DA}', color: '#0D9488' },
 ];
 
-/* ─── Floor grid tiles ──────────────────── */
 
-/** Render checkerboard floor tiles covering the scene */
-function FloorTiles() {
+/* ─── Floor tiles ──────────────────────── */
+
+function FloorTiles({ roomLookup }: { roomLookup: Map<string, RoomZone> }) {
   const tiles: React.ReactNode[] = [];
-  for (let col = -1; col <= 5; col++) {
-    for (let row = -1; row <= 5; row++) {
+  for (let col = 0; col <= 5; col++) {
+    for (let row = 0; row <= 4; row++) {
       const { x, y } = isoToScreen(col, row);
-      const isLight = (col + row) % 2 === 0;
+      const key = `${col},${row}`;
+      const room = roomLookup.get(key);
+      const isAlt = (col + row) % 2 === 0;
+      const bg = room
+        ? (isAlt ? room.floorColor : room.floorColorAlt)
+        : (isAlt ? 'rgba(100,116,139,0.06)' : 'rgba(100,116,139,0.03)');
+
       tiles.push(
         <div
           key={`floor-${col}-${row}`}
           className="iso-tile"
-          style={{
-            left: x,
-            top: y,
-            background: isLight ? 'var(--floor-light)' : 'var(--floor-dark)',
-          }}
+          style={{ left: x, top: y, background: bg, opacity: 1 }}
         />,
       );
     }
   }
   return <>{tiles}</>;
+}
+
+/* ─── Room zone borders & labels ─────────── */
+
+function RoomOverlays({ roomLookup }: { roomLookup: Map<string, RoomZone> }) {
+  // For each room, draw a subtle label
+  const rendered = new Set<string>();
+  const labels: React.ReactNode[] = [];
+
+  for (const room of ROOMS) {
+    if (rendered.has(room.id)) continue;
+    rendered.add(room.id);
+    // Place label at center of room
+    const midC = room.tiles.reduce((s, [c]) => s + c, 0) / room.tiles.length;
+    const midR = room.tiles.reduce((s, [, r]) => s + r, 0) / room.tiles.length;
+    const { x, y } = isoToScreen(midC, midR);
+    labels.push(
+      <div
+        key={`room-label-${room.id}`}
+        className="iso-room-label"
+        style={{
+          left: x + TILE_W / 2,
+          top: y + TILE_H / 2,
+          color: room.borderColor,
+        }}
+      >
+        {room.label}
+      </div>,
+    );
+  }
+
+  // Draw border tiles (outer edges of each room)
+  for (const room of ROOMS) {
+    for (const [c, r] of room.tiles) {
+      const neighbors = [[c-1,r],[c+1,r],[c,r-1],[c,r+1]];
+      const isBorder = neighbors.some(([nc, nr]) => {
+        const nk = `${nc},${nr}`;
+        const nRoom = roomLookup.get(nk);
+        return !nRoom || nRoom.id !== room.id;
+      });
+      if (isBorder) {
+        const { x, y } = isoToScreen(c, r);
+        labels.push(
+          <div
+            key={`room-border-${room.id}-${c}-${r}`}
+            className="iso-tile iso-tile-border"
+            style={{
+              left: x, top: y,
+              borderColor: room.borderColor,
+            }}
+          />,
+        );
+      }
+    }
+  }
+
+  return <>{labels}</>;
 }
 
 /* ─── Desk component ────────────────────── */
@@ -119,59 +216,64 @@ function IsoDeskTile({ role, col, row, speech, liveStatus, activeTask, onClick }
   const color = ROLE_COLORS[role.id] ?? '#666';
   const icon = ROLE_ICONS[role.id] ?? '';
   const isWorking = liveStatus === 'working';
-  const activity = DESK_ACTIVITY[role.id] ?? '';
+  const isCLevel = role.level === 'c-level';
 
   const speechText = isWorking && activeTask
-    ? activeTask.slice(0, 40)
+    ? activeTask.slice(0, 36)
     : speech
-      ? speech.slice(0, 40)
-      : activity;
+      ? speech.slice(0, 36)
+      : '';
 
   return (
     <div
-      className={`iso-desk${isWorking ? ' iso-desk--working' : ''}`}
+      className={`iso-desk${isWorking ? ' iso-desk--working' : ''}${isCLevel ? ' iso-desk--clevel' : ''}`}
       style={{ left: x, top: y }}
       onClick={onClick}
-      title={`${role.name} — click to open`}
+      title={`${role.name} -- click to open`}
     >
-      {/* Diamond floor tile for desk */}
-      <div className="iso-desk-floor" style={{ borderColor: color }} />
+      {/* Desk highlight floor */}
+      <div className="iso-desk-floor" style={{ borderColor: `${color}44` }} />
 
-      {/* Desk surface block */}
-      <div className="iso-desk-surface" style={{ background: 'var(--desk-wood)', borderColor: 'var(--desk-dark)' }}>
-        {/* Monitor on desk */}
-        <div className="iso-desk-monitor" />
+      {/* Desk surface */}
+      <div className="iso-desk-surface" style={{ borderColor: color + '66' }}>
+        <div className="iso-desk-monitor" style={{ boxShadow: isWorking ? `0 0 6px ${color}88` : 'none' }}>
+          <div className="iso-monitor-screen" style={{ background: isWorking ? color : '#1a1a2e' }} />
+        </div>
       </div>
 
-      {/* Sprite container — positioned above the desk */}
+      {/* Sprite */}
       <div className="iso-desk-sprite">
         <SpriteCanvas roleId={role.id} />
       </div>
 
-      {/* Role name label */}
-      <div className="iso-role-label" style={{ color }}>
-        {icon} {role.id.toUpperCase()}
-      </div>
+      {/* Status indicator */}
+      <div className={`iso-status-ring ${isWorking ? 'iso-status-ring--working' : ''}`} style={{ borderColor: isWorking ? '#FBBF24' : color }} />
 
-      {/* Status dot */}
-      <div
-        className="iso-status-dot"
-        style={{
-          background: isWorking ? 'var(--idle-amber)' : 'var(--active-green)',
-        }}
-      />
+      {/* Role label */}
+      <div className="iso-role-label" style={{ color }}>
+        {icon} <strong>{role.id.toUpperCase()}</strong>
+      </div>
 
       {/* Speech bubble */}
       {speechText && (
-        <div className="iso-speech-bubble">
+        <div className="iso-speech-bubble" style={{ borderColor: `${color}33` }}>
           {speechText}
+        </div>
+      )}
+
+      {/* Working indicator particles */}
+      {isWorking && (
+        <div className="iso-working-particles">
+          <span style={{ animationDelay: '0s' }}>.</span>
+          <span style={{ animationDelay: '0.3s' }}>.</span>
+          <span style={{ animationDelay: '0.6s' }}>.</span>
         </div>
       )}
     </div>
   );
 }
 
-/* ─── Facility tile component ───────────── */
+/* ─── Facility tile ────────────────────── */
 
 interface FacilityTileProps {
   facility: FacilityConfig;
@@ -203,22 +305,15 @@ function IsoFacilityTile({ facility, project, waves, standups, decisions, knowle
       className="iso-facility"
       style={{ left: x, top: y }}
       onClick={onClick}
-      title={`${facility.label} — click to open`}
+      title={`${facility.label} -- click to open`}
     >
-      {/* Diamond floor tile */}
-      <div className="iso-facility-floor" style={{ borderColor: facility.color }} />
-
-      {/* Facility body */}
-      <div className="iso-facility-body" style={{ borderColor: facility.color }}>
+      <div className="iso-facility-floor" style={{ borderColor: facility.color + '44' }} />
+      <div className="iso-facility-body" style={{ borderColor: facility.color + '88', background: `${facility.color}11` }}>
         <FacilityCanvas type={facility.type} />
       </div>
-
-      {/* Label */}
       <div className="iso-facility-label" style={{ color: facility.color }}>
         {facility.icon} {facility.label}
       </div>
-
-      {/* Sub-label */}
       {subtitle && (
         <div className="iso-facility-sublabel">{subtitle}</div>
       )}
@@ -226,7 +321,8 @@ function IsoFacilityTile({ facility, project, waves, standups, decisions, knowle
   );
 }
 
-/* ─── Props interface ───────────────────── */
+
+/* ─── Props ─────────────────────────────── */
 
 interface IsometricOfficeViewProps {
   roles: Role[];
@@ -248,69 +344,36 @@ interface IsometricOfficeViewProps {
 /* ─── Main component ────────────────────── */
 
 export default function IsometricOfficeView({
-  roles,
-  projects,
-  waves,
-  standups,
-  decisions,
-  roleStatuses,
-  activeExecs,
-  onRoleClick,
-  onProjectClick,
-  onBulletinClick,
-  onDecisionsClick,
-  onKnowledgeClick,
-  knowledgeDocsCount,
-  getRoleSpeech,
+  roles, projects, waves, standups, decisions,
+  roleStatuses, activeExecs,
+  onRoleClick, onProjectClick, onBulletinClick, onDecisionsClick, onKnowledgeClick,
+  knowledgeDocsCount, getRoleSpeech,
 }: IsometricOfficeViewProps) {
   const mainProject = projects[0];
+  const roleMap = useMemo(() => new Map(roles.map((r) => [r.id, r])), [roles]);
+  const roomLookup = useMemo(() => buildRoomLookup(), []);
 
-  /* Build a map for quick role lookup */
-  const roleMap = new Map(roles.map((r) => [r.id, r]));
-
-  /* Determine scene offset so it's centered */
-  // Grid spans cols -1..4 and rows -1..4. The bounding box:
-  // x range: isoToScreen(-1,4).x .. isoToScreen(4,-1).x
-  // y range: isoToScreen(-1,-1).y .. isoToScreen(4,4).y
-  // We'll use a fixed scene canvas size and center it.
-  const SCENE_W = 1400;
-  const SCENE_H = 900;
-  // Center of grid (col=2, row=2)
-  const centerIso = isoToScreen(2, 2);
-  const offsetX = SCENE_W / 2 - centerIso.x;
-  const offsetY = SCENE_H / 2 - centerIso.y - 40; // nudge up a bit
+  // Center the isometric grid in the scene
+  const centerIso = isoToScreen(2.5, 2);
 
   return (
     <div className="iso-scene">
-      {/* Scrollable scene canvas */}
-      <div className="iso-canvas" style={{ width: SCENE_W, height: SCENE_H }}>
-        {/* Inner scene — everything positioned relative to this with iso offsets */}
+      <div className="iso-canvas">
         <div
           className="iso-inner"
-          style={{ transform: `translate(${offsetX}px, ${offsetY}px)` }}
+          style={{
+            left: '50%',
+            top: '50%',
+            transform: `translate(${-centerIso.x - TILE_W / 4}px, ${-centerIso.y - 10}px)`,
+          }}
         >
-          {/* Floor tiles */}
-          <FloorTiles />
+          {/* Floor tiles with room zones */}
+          <FloorTiles roomLookup={roomLookup} />
 
-          {/* Role desks */}
-          {DESK_LAYOUT.map((desk) => {
-            const role = roleMap.get(desk.roleId);
-            if (!role) return null;
-            return (
-              <IsoDeskTile
-                key={desk.roleId}
-                role={role}
-                col={desk.col}
-                row={desk.row}
-                speech={getRoleSpeech(desk.roleId)}
-                liveStatus={roleStatuses[desk.roleId]}
-                activeTask={activeExecs.find((e) => e.roleId === desk.roleId)?.task}
-                onClick={() => onRoleClick(desk.roleId)}
-              />
-            );
-          })}
+          {/* Room borders & labels */}
+          <RoomOverlays roomLookup={roomLookup} />
 
-          {/* Facility tiles */}
+          {/* Facilities */}
           {FACILITY_LAYOUT.map((facility) => (
             <IsoFacilityTile
               key={facility.id}
@@ -331,6 +394,24 @@ export default function IsometricOfficeView({
               }
             />
           ))}
+
+          {/* Role desks (highest z) */}
+          {DESK_LAYOUT.map((desk) => {
+            const role = roleMap.get(desk.roleId);
+            if (!role) return null;
+            return (
+              <IsoDeskTile
+                key={desk.roleId}
+                role={role}
+                col={desk.col}
+                row={desk.row}
+                speech={getRoleSpeech(desk.roleId)}
+                liveStatus={roleStatuses[desk.roleId]}
+                activeTask={activeExecs.find((e) => e.roleId === desk.roleId)?.task}
+                onClick={() => onRoleClick(desk.roleId)}
+              />
+            );
+          })}
         </div>
       </div>
     </div>

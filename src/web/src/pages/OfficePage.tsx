@@ -26,18 +26,6 @@ const ROLE_COLORS: Record<string, string> = {
   cto: '#1565C0', cbo: '#E65100', pm: '#2E7D32',
   engineer: '#4A148C', designer: '#AD1457', qa: '#00695C',
 };
-const ROLE_FLOAT: Record<string, string> = {
-  cto: '\u{1F4A1}', cbo: '\u{1F4CA}', pm: '\u{1F4CB}',
-  engineer: '\u{2699}\u{FE0F}', designer: '\u{1F3A8}', qa: '\u2615',
-};
-const ROLE_STATS: Record<string, { stats: { label: string; pct: number }[] }> = {
-  cto: { stats: [{ label: 'COD', pct: 92 }, { label: 'ARC', pct: 88 }] },
-  cbo: { stats: [{ label: 'BIZ', pct: 88 }, { label: 'MKT', pct: 82 }] },
-  pm: { stats: [{ label: 'PLN', pct: 90 }, { label: 'COM', pct: 82 }] },
-  engineer: { stats: [{ label: 'COD', pct: 80 }, { label: 'DBG', pct: 70 }] },
-  designer: { stats: [{ label: 'DES', pct: 85 }, { label: 'UX', pct: 78 }] },
-  qa: { stats: [{ label: 'TST', pct: 72 }, { label: 'AUT', pct: 60 }] },
-};
 const ROLE_LEVELS: Record<string, number> = {
   cto: 8, cbo: 7, pm: 6, engineer: 5, designer: 5, qa: 4,
 };
@@ -846,142 +834,114 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
             />
           ) : (
           <div className={`${terminalOpen ? 'max-w-full' : 'max-w-[1100px]'} mx-auto h-full p-4 flex flex-col gap-3 relative z-[1]`}>
-            {/* ── Section: TEAM ── */}
-            <div className="pixel-section-label">TEAM</div>
-            <div className={`grid gap-2 ${terminalOpen ? 'grid-cols-3' : 'grid-cols-3'}`}>
-              {roles.map((role) => (
-                <PixelCard
-                  key={role.id}
-                  role={role}
-                  speech={getRoleSpeech(role.id)}
-                  onClick={() => setPanel({ type: 'role', roleId: role.id })}
-                  liveStatus={roleStatuses[role.id]}
-                  activeTask={activeExecs.find((e) => e.roleId === role.id)?.task}
-                />
-              ))}
-              {/* + HIRE card */}
-              <div
-                className="pixel-card cursor-pointer hover:opacity-80 transition-opacity"
-                onClick={() => setShowHireModal(true)}
-                style={{ borderStyle: 'dashed', borderColor: '#9E9E9E' }}
-              >
-                <div className="pixel-card-hdr" style={{ background: '#9E9E9E' }}>
-                  <span>+ HIRE NEW ROLE</span>
-                  <span className="lvl">---</span>
+            {/* ── Section: LEADERSHIP ── */}
+            {(() => {
+              const cLevel = roles.filter(r => r.level === 'c-level');
+              const members = roles.filter(r => r.level !== 'c-level');
+              return (<>
+                {cLevel.length > 0 && (<>
+                  <div className="pixel-section-label">LEADERSHIP</div>
+                  <div className={`grid gap-2 ${cLevel.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                    {cLevel.map((role) => (
+                      <PixelCard
+                        key={role.id}
+                        role={role}
+                        speech={getRoleSpeech(role.id)}
+                        onClick={() => setPanel({ type: 'role', roleId: role.id })}
+                        liveStatus={roleStatuses[role.id]}
+                        activeTask={activeExecs.find((e) => e.roleId === role.id)?.task}
+                        featured
+                      />
+                    ))}
+                  </div>
+                </>)}
+
+                {/* ── Section: TEAM ── */}
+                <div className="pixel-section-label">TEAM</div>
+                <div className={`grid gap-2 ${terminalOpen ? 'grid-cols-3' : 'grid-cols-4'}`}>
+                  {members.map((role) => (
+                    <PixelCard
+                      key={role.id}
+                      role={role}
+                      speech={getRoleSpeech(role.id)}
+                      onClick={() => setPanel({ type: 'role', roleId: role.id })}
+                      liveStatus={roleStatuses[role.id]}
+                      activeTask={activeExecs.find((e) => e.roleId === role.id)?.task}
+                    />
+                  ))}
+                  {/* + HIRE card */}
+                  <div
+                    className="pixel-card pixel-card--hire"
+                    onClick={() => setShowHireModal(true)}
+                  >
+                    <div className="pixel-card--hire-inner">
+                      <span className="pixel-card--hire-icon">+</span>
+                      <span className="pixel-card--hire-label">HIRE NEW ROLE</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="pixel-card-body flex items-center justify-center">
-                  <div className="text-3xl text-gray-400">+</div>
-                </div>
-                <div className="pixel-card-stats" />
-                <div className="pixel-card-task text-gray-400">Click to hire a new role</div>
-              </div>
-            </div>
+              </>);
+            })()}
 
             {/* ── Section: OFFICE ── */}
             <div className="pixel-section-label mt-1">OFFICE</div>
             <div className="grid grid-cols-4 gap-2">
               {/* Meeting Room */}
-              {mainProject ? (
-                <div
-                  className="facility-card"
-                  onClick={() => setPanel({ type: 'project', projectId: mainProject.id })}
-                >
-                  <div className="pixel-card-hdr" style={{ background: '#3B82F6' }}>
-                    <span>MEETING ROOM</span>
-                    <span className="lvl">&mdash;</span>
-                  </div>
-                  <div className="facility-card-body">
-                    <div className="text-[10px] font-black uppercase tracking-wider" style={{ color: 'rgba(59,130,246,0.7)' }}>Meeting Room</div>
-                    <div className="text-[9px]" style={{ color: '#60A5FA' }}>"{mainProject.name}"</div>
-                    <FacilityCanvas type="meeting" />
-                    <div className="text-[8px]" style={{ color: 'var(--terminal-text-secondary)' }}>
-                      Status: <strong style={{ color: 'var(--active-green)' }}>{mainProject.status}</strong>
-                    </div>
-                  </div>
+              <div
+                className="facility-card-compact"
+                onClick={mainProject ? () => setPanel({ type: 'project', projectId: mainProject.id }) : undefined}
+                style={mainProject ? undefined : { borderStyle: 'dashed', opacity: 0.5 }}
+              >
+                <div className="fcc-hdr" style={{ background: '#3B82F6' }}>{'\u{1F3E2}'} PROJECT</div>
+                <div className="fcc-canvas"><FacilityCanvas type="meeting" /></div>
+                <div className="fcc-body">
+                  {mainProject ? (<>
+                    <div className="fcc-title">"{mainProject.name}"</div>
+                    <div className="fcc-meta">Status: <strong style={{ color: 'var(--active-green)' }}>{mainProject.status}</strong></div>
+                  </>) : (
+                    <div className="fcc-meta" style={{ fontStyle: 'italic' }}>No active projects</div>
+                  )}
                 </div>
-              ) : (
-                <div className="facility-card" style={{ borderStyle: 'dashed', opacity: 0.5 }}>
-                  <div className="pixel-card-hdr" style={{ background: '#3B82F6' }}>
-                    <span>MEETING ROOM</span>
-                    <span className="lvl">&mdash;</span>
-                  </div>
-                  <div className="facility-card-body">
-                    <div className="text-[8px]" style={{ color: 'var(--terminal-text-secondary)' }}>No active projects</div>
-                  </div>
-                </div>
-              )}
+              </div>
 
               {/* Bulletin Board */}
-              <div
-                className="facility-card"
-                onClick={() => setPanel({ type: 'bulletin' })}
-              >
-                <div className="pixel-card-hdr" style={{ background: '#64748b' }}>
-                  <span>{'\u{1F4CB}'} BULLETIN BOARD</span>
-                  <span className="lvl">&mdash;</span>
-                </div>
-                <div style={{ background: 'var(--terminal-surface)', borderTop: '2px solid var(--pixel-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px 0' }}>
-                  <FacilityCanvas type="bulletin" />
-                </div>
-                <div className="facility-board-body">
-                  <div className="facility-board-title">Latest</div>
+              <div className="facility-card-compact" onClick={() => setPanel({ type: 'bulletin' })}>
+                <div className="fcc-hdr" style={{ background: '#64748b' }}>{'\u{1F4CB}'} BULLETIN</div>
+                <div className="fcc-canvas"><FacilityCanvas type="bulletin" /></div>
+                <div className="fcc-body">
                   {waves.slice(0, 1).map((w) => (
-                    <div key={w.id} className="facility-board-item">{'\u{1F4CC}'} Wave {w.id}</div>
+                    <div key={w.id} className="fcc-item">Wave {w.id}</div>
                   ))}
-                  {standups.slice(0, 2).map((s) => (
-                    <div key={s.date} className="facility-board-item">{'\u{1F4CC}'} Standup {s.date}</div>
+                  {standups.slice(0, 1).map((s) => (
+                    <div key={s.date} className="fcc-item">Standup {s.date}</div>
                   ))}
                   {waves.length === 0 && standups.length === 0 && (
-                    <div className="facility-board-item" style={{ fontStyle: 'italic' }}>No entries yet</div>
+                    <div className="fcc-meta" style={{ fontStyle: 'italic' }}>No entries</div>
                   )}
                 </div>
               </div>
 
               {/* Decision Log */}
-              <div
-                className="facility-card"
-                onClick={() => setPanel({ type: 'decisions' })}
-              >
-                <div className="pixel-card-hdr" style={{ background: '#64748b' }}>
-                  <span>{'\u{1F4DC}'} DECISION LOG</span>
-                  <span className="lvl">&mdash;</span>
-                </div>
-                <div style={{ background: 'var(--terminal-surface)', borderTop: '2px solid var(--pixel-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px 0' }}>
-                  <FacilityCanvas type="decision" />
-                </div>
-                <div className="facility-board-body">
-                  <div className="facility-board-title">CEO Decisions</div>
-                  {decisions.slice(0, 4).map((d) => (
-                    <div key={d.id} className="facility-board-item">{'\u{1F4CC}'} #{d.id} {d.title}</div>
+              <div className="facility-card-compact" onClick={() => setPanel({ type: 'decisions' })}>
+                <div className="fcc-hdr" style={{ background: '#EF4444' }}>{'\u{1F4DC}'} DECISIONS</div>
+                <div className="fcc-canvas"><FacilityCanvas type="decision" /></div>
+                <div className="fcc-body">
+                  <div className="fcc-title">{decisions.length} decisions</div>
+                  {decisions.slice(0, 2).map((d) => (
+                    <div key={d.id} className="fcc-item">#{d.id} {d.title}</div>
                   ))}
-                  {decisions.length === 0 && (
-                    <div className="facility-board-item" style={{ fontStyle: 'italic' }}>No decisions yet</div>
-                  )}
                 </div>
               </div>
 
               {/* Knowledge Base */}
-              <div
-                className="facility-card"
-                onClick={() => setPanel({ type: 'knowledge' })}
-              >
-                <div className="pixel-card-hdr" style={{ background: '#16a34a' }}>
-                  <span>{'\u{1F4DA}'} KNOWLEDGE BASE</span>
-                  <span className="lvl">&mdash;</span>
-                </div>
-                <div style={{ background: 'var(--terminal-surface)', borderTop: '2px solid var(--pixel-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px 0' }}>
-                  <FacilityCanvas type="knowledge" />
-                </div>
-                <div className="facility-board-body">
-                  <div className="facility-board-title">Docs: {knowledgeDocs.length}</div>
-                  {knowledgeDocs.slice(0, 4).map((d) => (
-                    <div key={d.id} className="facility-board-item">
-                      {d.akb_type === 'hub' ? '\u{1F5C2}' : '\u{1F4C4}'} {d.title}
-                    </div>
+              <div className="facility-card-compact" onClick={() => setPanel({ type: 'knowledge' })}>
+                <div className="fcc-hdr" style={{ background: '#0D9488' }}>{'\u{1F4DA}'} KNOWLEDGE</div>
+                <div className="fcc-canvas"><FacilityCanvas type="knowledge" /></div>
+                <div className="fcc-body">
+                  <div className="fcc-title">{knowledgeDocs.length} docs</div>
+                  {knowledgeDocs.slice(0, 2).map((d) => (
+                    <div key={d.id} className="fcc-item">{d.title}</div>
                   ))}
-                  {knowledgeDocs.length === 0 && (
-                    <div className="facility-board-item" style={{ fontStyle: 'italic' }}>No docs yet</div>
-                  )}
                 </div>
               </div>
             </div>
@@ -1209,26 +1169,22 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
 
 /* ─── Pixel Card Component (Team) ─────────── */
 
-function PixelCard({ role, speech, onClick, liveStatus, activeTask }: {
+function PixelCard({ role, speech, onClick, liveStatus, activeTask, featured }: {
   role: Role; speech: string; onClick: () => void;
-  liveStatus?: string; activeTask?: string;
+  liveStatus?: string; activeTask?: string; featured?: boolean;
 }) {
   const color = ROLE_COLORS[role.id] ?? hashColor(role.id);
-  const floatIcon = ROLE_FLOAT[role.id] ?? '';
-  const stats = ROLE_STATS[role.id]?.stats ?? [{ label: 'SKL', pct: 50 }];
   const level = ROLE_LEVELS[role.id] ?? 1;
   const activity = DESK_ACTIVITY[role.id] ?? role.name;
   const isWorking = liveStatus === 'working';
 
   const taskText = isWorking && activeTask
-    ? activeTask.slice(0, 60)
-    : speech
-      ? speech.slice(0, 60)
-      : activity;
+    ? activeTask
+    : speech || activity;
 
   return (
     <div
-      className={`pixel-card ${isWorking ? 'working' : ''}`}
+      className={`pixel-card ${isWorking ? 'working' : ''} ${featured ? 'pixel-card--featured' : ''}`}
       onClick={onClick}
     >
       {/* Header */}
@@ -1241,38 +1197,19 @@ function PixelCard({ role, speech, onClick, liveStatus, activeTask }: {
       <div className="pixel-card-body">
         <div className="pixel-desk" />
         <SpriteCanvas roleId={role.id} />
-        {floatIcon && <div className="pixel-float-icon">{floatIcon}</div>}
         {/* Status dot */}
         <div
-          className="absolute bottom-2 left-2 w-[7px] h-[7px]"
+          className="pixel-status-dot"
           style={{
             background: isWorking ? 'var(--idle-amber)' : 'var(--active-green)',
-            border: '2px solid white',
           }}
         />
       </div>
 
-      {/* Stat bars */}
-      <div className="pixel-card-stats">
-        {stats.map((s) => (
-          <div key={s.label} className="stat-row">
-            <span className="stat-label">{s.label}</span>
-            <div className="stat-bar-wrap">
-              <div
-                className="stat-bar-fill"
-                style={{
-                  width: `${s.pct}%`,
-                  background: s.pct >= 80 ? 'var(--active-green)' : 'var(--monitor-glow)',
-                }}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-
       {/* Task line */}
       <div className="pixel-card-task">
-        {isWorking ? '\u{1F6E0}\u{FE0F}' : ROLE_ICONS[role.id] ?? ''} {taskText || activity}
+        <span className="pixel-card-task-icon">{isWorking ? '\u{1F6E0}\u{FE0F}' : ROLE_ICONS[role.id] ?? ''}</span>
+        <span className="pixel-card-task-text">{taskText || activity}</span>
       </div>
     </div>
   );
