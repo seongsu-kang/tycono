@@ -1144,6 +1144,284 @@ body {
   color: var(--active-green);
 }
 
+/* ── Customize Modal ── */
+.customize-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: customizeFadeIn 0.15s ease-out;
+}
+@keyframes customizeFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.customize-modal {
+  background: var(--hud-bg, #1a1a2a);
+  border: 3px solid var(--pixel-border, #4A5568);
+  width: 580px;
+  max-width: 95vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--pixel-font);
+  animation: customizeSlideIn 0.2s ease-out;
+}
+@keyframes customizeSlideIn {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.customize-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0;
+  border-bottom: 2px solid var(--pixel-border);
+  background: var(--hud-bg-alt, #232335);
+}
+.customize-tabs {
+  display: flex;
+  gap: 0;
+}
+.customize-tab {
+  font-family: var(--pixel-font);
+  font-size: 11px;
+  font-weight: 900;
+  padding: 8px 16px;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--terminal-text-secondary);
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+.customize-tab:hover {
+  color: var(--terminal-text);
+}
+.customize-tab.active {
+  color: var(--accent, #6366F1);
+  border-bottom-color: var(--accent, #6366F1);
+}
+.customize-close {
+  font-family: var(--pixel-font);
+  font-size: 12px;
+  font-weight: 900;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--terminal-text-secondary);
+  margin-right: 4px;
+}
+.customize-close:hover {
+  color: #EF4444;
+}
+.customize-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  gap: 20px;
+}
+.customize-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-width: 140px;
+}
+.customize-preview-bg {
+  background: var(--terminal-bg, #1e1e2e);
+  border: 2px solid var(--pixel-border);
+  padding: 12px 16px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.customize-preview-name {
+  font-size: 10px;
+  font-weight: 900;
+  color: var(--terminal-text);
+  text-align: center;
+}
+.customize-preview-actions {
+  display: flex;
+  gap: 6px;
+}
+.customize-colors {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.customize-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.customize-row-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.customize-row-label {
+  font-size: 10px;
+  font-weight: 900;
+  color: var(--terminal-text-secondary);
+  min-width: 44px;
+}
+.customize-row-current {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--pixel-border);
+}
+.customize-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.customize-swatch {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--pixel-border);
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.1s, outline-color 0.1s;
+}
+.customize-swatch:hover {
+  transform: scale(1.15);
+  z-index: 1;
+}
+.customize-btn {
+  font-family: var(--pixel-font);
+  font-size: 10px;
+  font-weight: 900;
+  padding: 4px 10px;
+  cursor: pointer;
+  border: 2px solid var(--pixel-border);
+  transition: all 0.15s;
+}
+.customize-btn--random {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.customize-btn--random:hover { opacity: 0.85; }
+.customize-btn--reset {
+  background: transparent;
+  color: var(--terminal-text-secondary);
+}
+.customize-btn--reset:hover { color: var(--terminal-text); }
+.customize-btn--cancel {
+  background: transparent;
+  color: var(--terminal-text-secondary);
+}
+.customize-btn--save {
+  background: var(--active-green, #34D399);
+  color: #000;
+  border-color: var(--active-green);
+}
+.customize-btn--save:hover { opacity: 0.85; }
+.customize-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 2px solid var(--pixel-border);
+}
+
+/* ── Theme cards ── */
+.customize-themes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  width: 100%;
+}
+.customize-theme-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
+  border: 2px solid var(--pixel-border);
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: var(--pixel-font);
+}
+.customize-theme-card:hover {
+  border-color: var(--terminal-text-secondary);
+}
+.customize-theme-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 8px var(--accent, #6366f1)44;
+}
+.customize-theme-preview {
+  height: 64px;
+  border: 1px solid var(--pixel-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.customize-theme-name {
+  font-size: 10px;
+  font-weight: 900;
+  color: var(--terminal-text);
+  text-align: center;
+  padding: 4px;
+}
+
+/* ── Customize trigger button (on card) ── */
+.pixel-card-customize {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  cursor: pointer;
+  background: rgba(0,0,0,0.5);
+  border: 1px solid var(--pixel-border);
+  color: var(--terminal-text-secondary);
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 2;
+}
+.pixel-card:hover .pixel-card-customize {
+  opacity: 1;
+}
+.pixel-card-customize:hover {
+  color: var(--accent);
+  background: rgba(0,0,0,0.8);
+}
+
+/* ── Theme toggle buttons in bottom bar ── */
+.theme-btn {
+  font-family: var(--pixel-font);
+  font-size: 10px;
+  font-weight: 900;
+  padding: 2px 6px;
+  cursor: pointer;
+  border: 2px solid var(--pixel-border);
+  background: var(--hud-bg-alt);
+  color: var(--terminal-text-secondary);
+  transition: all 0.15s;
+}
+.theme-btn:hover {
+  color: var(--terminal-text);
+  border-color: var(--terminal-text-secondary);
+}
+
 /* ── SidePanel chat (light theme override for MessageBubble) ── */
 .side-panel-chat {
   --terminal-bg: #f8f9fa;

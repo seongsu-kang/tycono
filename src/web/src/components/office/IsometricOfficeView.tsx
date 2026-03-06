@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { Role, Project, Wave, Standup, Decision } from '../../types/index';
+import type { CharacterAppearance } from '../../types/appearance';
 import SpriteCanvas from './SpriteCanvas';
 import FacilityCanvas from './FacilityCanvas';
 
@@ -208,10 +209,11 @@ interface DeskProps {
   speech: string;
   liveStatus?: string;
   activeTask?: string;
+  appearance?: CharacterAppearance;
   onClick: () => void;
 }
 
-function IsoDeskTile({ role, col, row, speech, liveStatus, activeTask, onClick }: DeskProps) {
+function IsoDeskTile({ role, col, row, speech, liveStatus, activeTask, appearance, onClick }: DeskProps) {
   const { x, y } = isoToScreen(col, row);
   const color = ROLE_COLORS[role.id] ?? '#666';
   const icon = ROLE_ICONS[role.id] ?? '';
@@ -243,7 +245,7 @@ function IsoDeskTile({ role, col, row, speech, liveStatus, activeTask, onClick }
 
       {/* Sprite */}
       <div className="iso-desk-sprite">
-        <SpriteCanvas roleId={role.id} />
+        <SpriteCanvas roleId={role.id} appearance={appearance} />
       </div>
 
       {/* Status indicator */}
@@ -339,6 +341,7 @@ interface IsometricOfficeViewProps {
   onKnowledgeClick: () => void;
   knowledgeDocsCount: number;
   getRoleSpeech: (roleId: string) => string;
+  getAppearance?: (roleId: string) => CharacterAppearance;
 }
 
 /* ─── Main component ────────────────────── */
@@ -347,7 +350,7 @@ export default function IsometricOfficeView({
   roles, projects, waves, standups, decisions,
   roleStatuses, activeExecs,
   onRoleClick, onProjectClick, onBulletinClick, onDecisionsClick, onKnowledgeClick,
-  knowledgeDocsCount, getRoleSpeech,
+  knowledgeDocsCount, getRoleSpeech, getAppearance,
 }: IsometricOfficeViewProps) {
   const mainProject = projects[0];
   const roleMap = useMemo(() => new Map(roles.map((r) => [r.id, r])), [roles]);
@@ -408,6 +411,7 @@ export default function IsometricOfficeView({
                 speech={getRoleSpeech(desk.roleId)}
                 liveStatus={roleStatuses[desk.roleId]}
                 activeTask={activeExecs.find((e) => e.roleId === desk.roleId)?.task}
+                appearance={getAppearance?.(desk.roleId)}
                 onClick={() => onRoleClick(desk.roleId)}
               />
             );

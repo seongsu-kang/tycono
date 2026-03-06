@@ -11,10 +11,13 @@ import HireRoleModal from '../components/office/HireRoleModal';
 import FireRoleModal from '../components/office/FireRoleModal';
 import TerminalPanel from '../components/terminal/TerminalPanel';
 import useSessionStream from '../hooks/useSessionStream';
+import { useCustomization } from '../hooks/useCustomization';
 import SpriteCanvas from '../components/office/SpriteCanvas';
 import FacilityCanvas from '../components/office/FacilityCanvas';
 import IsometricOfficeView from '../components/office/IsometricOfficeView';
 import KnowledgePanel from '../components/office/KnowledgePanel';
+import CustomizeModal from '../components/office/CustomizeModal';
+import { OFFICE_THEMES } from '../types/appearance';
 
 /* ─── Role metadata ─────────────────────── */
 
@@ -81,6 +84,10 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   const [roleStatuses, setRoleStatuses] = useState<Record<string, string>>({});
   const [activeExecs, setActiveExecs] = useState<{ roleId: string; task: string; id?: string; jobId?: string; startedAt?: string }[]>([]);
   const [toasts, setToasts] = useState<{ id: number; message: string; color: string }[]>([]);
+
+  /* Customization */
+  const { getAppearance, setAppearance, resetAppearance, theme, setTheme } = useCustomization();
+  const [customizeTarget, setCustomizeTarget] = useState<Role | null>(null);
 
   /* Knowledge import state */
   interface ImportLogEntry {
@@ -831,6 +838,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
               onKnowledgeClick={() => setPanel({ type: 'knowledge' })}
               knowledgeDocsCount={knowledgeDocs.length}
               getRoleSpeech={getRoleSpeech}
+              getAppearance={getAppearance}
             />
           ) : (
           <div className={`${terminalOpen ? 'max-w-full' : 'max-w-[1100px]'} mx-auto h-full p-4 flex flex-col gap-3 relative z-[1]`}>
@@ -851,6 +859,8 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
                         liveStatus={roleStatuses[role.id]}
                         activeTask={activeExecs.find((e) => e.roleId === role.id)?.task}
                         featured
+                        appearance={getAppearance(role.id)}
+                        onCustomize={() => setCustomizeTarget(role)}
                       />
                     ))}
                   </div>
@@ -867,6 +877,8 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
                       onClick={() => setPanel({ type: 'role', roleId: role.id })}
                       liveStatus={roleStatuses[role.id]}
                       activeTask={activeExecs.find((e) => e.roleId === role.id)?.task}
+                      appearance={getAppearance(role.id)}
+                      onCustomize={() => setCustomizeTarget(role)}
                     />
                   ))}
                   {/* + HIRE card */}
@@ -990,7 +1002,14 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           >
             ISO
           </button>
-          <span className="ml-1">Floor 1/1</span>
+          <span className="mx-1">|</span>
+          <button
+            className="theme-btn"
+            onClick={() => setCustomizeTarget(roles[0] ?? null)}
+            title="Customize"
+          >
+            {OFFICE_THEMES[theme]?.icon ?? ''} {OFFICE_THEMES[theme]?.name ?? 'THEME'}
+          </button>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -1150,6 +1169,19 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
         />
       )}
 
+      {/* Customize Modal */}
+      {customizeTarget && (
+        <CustomizeModal
+          role={customizeTarget}
+          appearance={getAppearance(customizeTarget.id)}
+          onSave={(ap) => setAppearance(customizeTarget.id, ap)}
+          onReset={() => resetAppearance(customizeTarget.id)}
+          onClose={() => setCustomizeTarget(null)}
+          theme={theme}
+          onThemeChange={setTheme}
+        />
+      )}
+
       {/* Phase 3: Toast Notifications */}
       <div className="fixed top-16 right-4 z-[70] flex flex-col gap-2">
         {toasts.map((toast) => (
@@ -1169,9 +1201,11 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
 
 /* ─── Pixel Card Component (Team) ─────────── */
 
-function PixelCard({ role, speech, onClick, liveStatus, activeTask, featured }: {
+function PixelCard({ role, speech, onClick, liveStatus, activeTask, featured, appearance, onCustomize }: {
   role: Role; speech: string; onClick: () => void;
   liveStatus?: string; activeTask?: string; featured?: boolean;
+  appearance?: import('../types/appearance').CharacterAppearance;
+  onCustomize?: () => void;
 }) {
   const color = ROLE_COLORS[role.id] ?? hashColor(role.id);
   const level = ROLE_LEVELS[role.id] ?? 1;
@@ -1187,6 +1221,17 @@ function PixelCard({ role, speech, onClick, liveStatus, activeTask, featured }: 
       className={`pixel-card ${isWorking ? 'working' : ''} ${featured ? 'pixel-card--featured' : ''}`}
       onClick={onClick}
     >
+      {/* Customize button */}
+      {onCustomize && (
+        <button
+          className="pixel-card-customize"
+          onClick={(e) => { e.stopPropagation(); onCustomize(); }}
+          title="Customize"
+        >
+          {'\u{1F3A8}'}
+        </button>
+      )}
+
       {/* Header */}
       <div className="pixel-card-hdr" style={{ background: color }}>
         <span>{role.id.toUpperCase()} {'\u00B7'} {role.name.toUpperCase()}</span>
@@ -1196,7 +1241,7 @@ function PixelCard({ role, speech, onClick, liveStatus, activeTask, featured }: 
       {/* Sprite area */}
       <div className="pixel-card-body">
         <div className="pixel-desk" />
-        <SpriteCanvas roleId={role.id} />
+        <SpriteCanvas roleId={role.id} appearance={appearance} />
         {/* Status dot */}
         <div
           className="pixel-status-dot"
