@@ -205,15 +205,23 @@ function FloorTiles({ roomLookup }: { roomLookup: Map<string, RoomZone> }) {
       const key = `${col},${row}`;
       const room = roomLookup.get(key);
       const isAlt = (col + row) % 2 === 0;
-      const bg = room
+      // Base tile uses theme CSS variable; room tint overlays on top
+      const baseBg = isAlt ? 'var(--floor-light)' : 'var(--floor-dark)';
+      const roomTint = room
         ? (isAlt ? room.floorColor : room.floorColorAlt)
-        : (isAlt ? 'rgba(100,116,139,0.06)' : 'rgba(100,116,139,0.03)');
+        : undefined;
 
       tiles.push(
         <div
           key={`floor-${col}-${row}`}
           className="iso-tile"
-          style={{ left: x, top: y, background: bg, opacity: 1 }}
+          style={{
+            left: x, top: y,
+            background: roomTint
+              ? `linear-gradient(${roomTint}, ${roomTint}), ${baseBg}`
+              : baseBg,
+            opacity: 1,
+          }}
         />,
       );
     }
@@ -289,9 +297,10 @@ interface DeskProps {
   activeTask?: string;
   appearance?: CharacterAppearance;
   onClick: () => void;
+  onCustomize?: () => void;
 }
 
-function IsoDeskTile({ role, col, row, speech, liveStatus, activeTask, appearance, onClick }: DeskProps) {
+function IsoDeskTile({ role, col, row, speech, liveStatus, activeTask, appearance, onClick, onCustomize }: DeskProps) {
   const { x, y } = isoToScreen(col, row);
   const color = ROLE_COLORS[role.id] ?? hashRoleColor(role.id);
   const icon = ROLE_ICONS[role.id] ?? '\u{1F464}';
@@ -332,6 +341,15 @@ function IsoDeskTile({ role, col, row, speech, liveStatus, activeTask, appearanc
       {/* Role label */}
       <div className="iso-role-label" style={{ color }}>
         {icon} <strong>{role.id.toUpperCase()}</strong>
+        {onCustomize && (
+          <button
+            className="iso-customize-btn"
+            onClick={(e) => { e.stopPropagation(); onCustomize(); }}
+            title="Customize"
+          >
+            {'\u{1F3A8}'}
+          </button>
+        )}
       </div>
 
       {/* Speech bubble */}
@@ -420,6 +438,7 @@ interface IsometricOfficeViewProps {
   knowledgeDocsCount: number;
   getRoleSpeech: (roleId: string) => string;
   getAppearance?: (roleId: string) => CharacterAppearance;
+  onCustomize?: (roleId: string) => void;
 }
 
 /* ─── Main component ────────────────────── */
@@ -428,7 +447,7 @@ export default function IsometricOfficeView({
   roles, projects, waves, standups, decisions,
   roleStatuses, activeExecs,
   onRoleClick, onProjectClick, onBulletinClick, onDecisionsClick, onKnowledgeClick,
-  knowledgeDocsCount, getRoleSpeech, getAppearance,
+  knowledgeDocsCount, getRoleSpeech, getAppearance, onCustomize,
 }: IsometricOfficeViewProps) {
   const mainProject = projects[0];
   const roleMap = useMemo(() => new Map(roles.map((r) => [r.id, r])), [roles]);
@@ -521,6 +540,7 @@ export default function IsometricOfficeView({
                 activeTask={activeExecs.find((e) => e.roleId === desk.roleId)?.task}
                 appearance={getAppearance?.(desk.roleId)}
                 onClick={() => onRoleClick(desk.roleId)}
+                onCustomize={onCustomize ? () => onCustomize(desk.roleId) : undefined}
               />
             );
           })}

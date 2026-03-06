@@ -91,6 +91,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   /* Customization */
   const { getAppearance, setAppearance, resetAppearance, theme, setTheme } = useCustomization();
   const [customizeTarget, setCustomizeTarget] = useState<Role | null>(null);
+  const [customizeInitialTab, setCustomizeInitialTab] = useState<'character' | 'office'>('character');
 
   /* Knowledge import state */
   interface ImportLogEntry {
@@ -842,6 +843,10 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
               knowledgeDocsCount={knowledgeDocs.length}
               getRoleSpeech={getRoleSpeech}
               getAppearance={getAppearance}
+              onCustomize={(roleId) => {
+                const role = roles.find(r => r.id === roleId);
+                if (role) { setCustomizeInitialTab('character'); setCustomizeTarget(role); }
+              }}
             />
           ) : (
           <div className={`${terminalOpen ? 'max-w-full' : 'max-w-[1100px]'} mx-auto h-full p-4 flex flex-col gap-3 relative z-[1]`}>
@@ -863,7 +868,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
                         activeTask={activeExecs.find((e) => e.roleId === role.id)?.task}
                         featured
                         appearance={getAppearance(role.id)}
-                        onCustomize={() => setCustomizeTarget(role)}
+                        onCustomize={() => { setCustomizeInitialTab('character'); setCustomizeTarget(role); }}
                       />
                     ))}
                   </div>
@@ -881,7 +886,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
                       liveStatus={roleStatuses[role.id]}
                       activeTask={activeExecs.find((e) => e.roleId === role.id)?.task}
                       appearance={getAppearance(role.id)}
-                      onCustomize={() => setCustomizeTarget(role)}
+                      onCustomize={() => { setCustomizeInitialTab('character'); setCustomizeTarget(role); }}
                     />
                   ))}
                   {/* + HIRE card */}
@@ -1008,7 +1013,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           <span className="mx-1">|</span>
           <button
             className="theme-btn"
-            onClick={() => setCustomizeTarget(roles[0] ?? null)}
+            onClick={() => { setCustomizeInitialTab('office'); setCustomizeTarget(roles[0] ?? null); }}
             title="Customize"
           >
             {OFFICE_THEMES[theme]?.icon ?? ''} {OFFICE_THEMES[theme]?.name ?? 'THEME'}
@@ -1179,9 +1184,10 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           appearance={getAppearance(customizeTarget.id)}
           onSave={(ap) => setAppearance(customizeTarget.id, ap)}
           onReset={() => resetAppearance(customizeTarget.id)}
-          onClose={() => setCustomizeTarget(null)}
+          onClose={() => { setCustomizeTarget(null); setCustomizeInitialTab('character'); }}
           theme={theme}
           onThemeChange={setTheme}
+          initialTab={customizeInitialTab}
         />
       )}
 

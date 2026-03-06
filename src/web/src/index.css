@@ -854,7 +854,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(170deg, #D8DEE9 0%, #E8ECF4 40%, #DEE4EE 100%);
+  background: linear-gradient(170deg, var(--floor-light) 0%, var(--floor-dark) 40%, var(--floor-light) 100%);
 }
 
 .iso-canvas {
@@ -895,7 +895,7 @@ body {
   opacity: 1;
   z-index: 0;
   pointer-events: none;
-  text-shadow: 0 1px 4px rgba(255,255,255,0.6);
+  text-shadow: 0 1px 4px var(--floor-dark);
 }
 
 
@@ -928,7 +928,7 @@ body {
   position: absolute;
   inset: 0;
   clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
-  background: rgba(255,255,255,0.35);
+  background: color-mix(in srgb, var(--floor-light) 70%, var(--accent) 30%);
   border: 2px solid;
 }
 
@@ -989,7 +989,22 @@ body {
   font-family: var(--pixel-font);
   font-size: 10px;
   white-space: nowrap;
-  text-shadow: 0 1px 3px rgba(255,255,255,0.8);
+  text-shadow: 0 1px 3px var(--floor-dark);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.iso-customize-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 10px;
+  padding: 0 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.iso-desk:hover .iso-customize-btn {
+  opacity: 1;
 }
 
 .iso-status-ring {
@@ -1000,7 +1015,7 @@ body {
   height: 10px;
   border: 2.5px solid;
   border-radius: 50%;
-  background: rgba(255,255,255,0.9);
+  background: var(--floor-light);
   transition: box-shadow 0.3s;
 }
 .iso-status-ring--working {
@@ -1017,13 +1032,13 @@ body {
   top: -16px;
   left: 50%;
   transform: translateX(-50%);
-  background: white;
+  background: var(--terminal-bg, white);
   border: 1.5px solid;
   border-radius: 10px;
   padding: 3px 10px;
   font-size: 8px;
   font-family: var(--pixel-font);
-  color: #444;
+  color: var(--terminal-text-secondary, #444);
   white-space: nowrap;
   max-width: 180px;
   overflow: hidden;
@@ -1041,7 +1056,7 @@ body {
   height: 0;
   border-left: 5px solid transparent;
   border-right: 5px solid transparent;
-  border-top: 5px solid white;
+  border-top: 5px solid var(--terminal-bg, white);
 }
 
 /* Working particles (typing dots) */
