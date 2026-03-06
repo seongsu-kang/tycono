@@ -1,4 +1,4 @@
-import { LLMAdapter, type LLMMessage, type ToolResult, type MessageContent } from './llm-adapter.js';
+import { AnthropicProvider, type LLMProvider, type LLMMessage, type ToolResult, type MessageContent } from './llm-adapter.js';
 import { type OrgTree, getSubordinates } from './org-tree.js';
 import { assembleContext, type TeamStatus } from './context-assembler.js';
 import { validateDispatch } from './authority-validator.js';
@@ -15,7 +15,7 @@ export interface AgentConfig {
   orgTree: OrgTree;
   readOnly?: boolean;
   maxTurns?: number;
-  llm?: LLMAdapter;
+  llm?: LLMProvider;
   depth?: number;             // Current dispatch depth (default 0)
   visitedRoles?: Set<string>; // Circular dispatch detection
   abortSignal?: AbortSignal;  // Abort signal for cancellation
@@ -71,7 +71,7 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
   // Mark current role as visited
   visitedRoles.add(roleId);
 
-  const llm = config.llm ?? new LLMAdapter();
+  const llm = config.llm ?? new AnthropicProvider();
 
   // 1. Assemble context
   const context = assembleContext(companyRoot, roleId, task, sourceRole, orgTree, { teamStatus: config.teamStatus });

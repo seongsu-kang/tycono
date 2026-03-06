@@ -1,5 +1,5 @@
 import { runAgentLoop } from '../agent-loop.js';
-import { LLMAdapter } from '../llm-adapter.js';
+import { AnthropicProvider, type LLMProvider } from '../llm-adapter.js';
 import type { ExecutionRunner, RunnerConfig, RunnerCallbacks, RunnerHandle, RunnerResult } from './types.js';
 
 /* ─── Direct API Runner ──────────────────────── */
@@ -15,10 +15,10 @@ import type { ExecutionRunner, RunnerConfig, RunnerCallbacks, RunnerHandle, Runn
  * 활성화: EXECUTION_ENGINE=direct-api
  */
 export class DirectApiRunner implements ExecutionRunner {
-  private llm: LLMAdapter;
+  private llm: LLMProvider;
 
-  constructor(llm?: LLMAdapter) {
-    this.llm = llm ?? new LLMAdapter();
+  constructor(llm?: LLMProvider) {
+    this.llm = llm ?? new AnthropicProvider();
   }
 
   execute(config: RunnerConfig, callbacks: RunnerCallbacks): RunnerHandle {

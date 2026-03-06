@@ -41,9 +41,34 @@ export interface StreamCallbacks {
   onDone?: (response: LLMResponse) => void;
 }
 
-/* ─── LLM Adapter ────────────────────────────── */
+/* ─── LLM Provider Interface ────────────────── */
 
-export class LLMAdapter {
+/**
+ * LLM 프로바이더 추상화 인터페이스.
+ *
+ * 구현체:
+ *   - AnthropicProvider: @anthropic-ai/sdk 기반 (기본)
+ *   - (향후) OpenAIProvider, OllamaProvider, MockProvider
+ */
+export interface LLMProvider {
+  chat(
+    systemPrompt: string,
+    messages: LLMMessage[],
+    tools?: ToolDefinition[],
+    signal?: AbortSignal,
+  ): Promise<LLMResponse>;
+
+  chatStream?(
+    systemPrompt: string,
+    messages: LLMMessage[],
+    tools: ToolDefinition[] | undefined,
+    callbacks: StreamCallbacks,
+  ): Promise<LLMResponse>;
+}
+
+/* ─── Anthropic Provider ─────────────────────── */
+
+export class AnthropicProvider implements LLMProvider {
   private client: Anthropic;
   private model: string;
 
@@ -185,3 +210,8 @@ export class LLMAdapter {
     return result;
   }
 }
+
+/* ─── Backwards Compatibility ────────────────── */
+
+/** @deprecated Use AnthropicProvider instead */
+export const LLMAdapter = AnthropicProvider;

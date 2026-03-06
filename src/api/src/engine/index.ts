@@ -13,8 +13,8 @@ export type { RoleDefinition, RoleValidationResult } from './role-lifecycle.js';
 
 export { generateSkillMd } from './skill-template.js';
 
-export { LLMAdapter } from './llm-adapter.js';
-export type { ToolDefinition, ToolCall, ToolResult, LLMResponse, LLMMessage } from './llm-adapter.js';
+export { AnthropicProvider, LLMAdapter } from './llm-adapter.js';
+export type { LLMProvider, ToolDefinition, ToolCall, ToolResult, LLMResponse, LLMMessage } from './llm-adapter.js';
 
 export { runAgentLoop } from './agent-loop.js';
 export type { AgentConfig, AgentResult } from './agent-loop.js';
