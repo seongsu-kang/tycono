@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import type { Role, Project, Wave, Standup, Decision } from '../../types/index';
 import type { CharacterAppearance } from '../../types/appearance';
 import SpriteCanvas from './SpriteCanvas';
@@ -441,6 +441,70 @@ interface IsometricOfficeViewProps {
   onCustomize?: (roleId: string) => void;
 }
 
+/* ─── Auto-fit: compute scale & offset to fit grid in viewport ── */
+
+function useAutoFit(maxCol: number, maxRow: number) {
+  const sceneRef = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState({ scale: 1, offsetX: 0, offsetY: 0 });
+
+  const compute = useCallback(() => {
+    const el = sceneRef.current;
+    if (!el) return;
+
+    const vw = el.clientWidth;
+    const vh = el.clientHeight;
+    if (vw === 0 || vh === 0) return;
+
+    // Compute bounding box of all tiles in screen coords
+    const points: { x: number; y: number }[] = [];
+    for (let c = 0; c <= maxCol; c++) {
+      for (let r = 0; r <= maxRow; r++) {
+        const { x, y } = isoToScreen(c, r);
+        // Diamond corners of each tile
+        points.push({ x: x + TILE_W / 2, y });               // top
+        points.push({ x: x + TILE_W, y: y + TILE_H / 2 });   // right
+        points.push({ x: x + TILE_W / 2, y: y + TILE_H });   // bottom
+        points.push({ x, y: y + TILE_H / 2 });                // left
+      }
+    }
+
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const p of points) {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+
+    // Add padding for speech bubbles, labels, etc.
+    const padX = 120;
+    const padTop = 140;  // speech bubbles above
+    const padBottom = 80;
+
+    const contentW = (maxX - minX) + padX * 2;
+    const contentH = (maxY - minY) + padTop + padBottom;
+
+    const scale = Math.min(vw / contentW, vh / contentH, 1.3);
+    const cx = (minX + maxX) / 2;
+    const cy = minY + (maxY - minY + padTop - padBottom) / 2;
+
+    setFit({
+      scale,
+      offsetX: vw / 2 - cx * scale,
+      offsetY: vh / 2 - cy * scale,
+    });
+  }, [maxCol, maxRow]);
+
+  useEffect(() => {
+    compute();
+    const obs = new ResizeObserver(() => compute());
+    if (sceneRef.current) obs.observe(sceneRef.current);
+    return () => obs.disconnect();
+  }, [compute]);
+
+  return { sceneRef, ...fit };
+}
+
 /* ─── Main component ────────────────────── */
 
 export default function IsometricOfficeView({
@@ -467,18 +531,29 @@ export default function IsometricOfficeView({
     [occupiedTiles],
   );
 
-  // Center the isometric grid in the scene
-  const centerIso = isoToScreen(2.5, 2);
+  // Compute grid bounds (max col/row from all occupied tiles)
+  const gridBounds = useMemo(() => {
+    let maxCol = 5, maxRow = 4; // base grid
+    for (const d of deskLayout) {
+      if (d.col > maxCol) maxCol = d.col;
+      if (d.row > maxRow) maxRow = d.row;
+    }
+    return { maxCol, maxRow };
+  }, [deskLayout]);
+
+  // Auto-fit camera to grid
+  const { sceneRef, scale, offsetX, offsetY } = useAutoFit(gridBounds.maxCol, gridBounds.maxRow);
 
   return (
-    <div className="iso-scene">
+    <div className="iso-scene" ref={sceneRef}>
       <div className="iso-canvas">
         <div
           className="iso-inner"
           style={{
-            left: '50%',
-            top: '50%',
-            transform: `translate(${-centerIso.x - TILE_W / 4}px, ${-centerIso.y - 10}px)`,
+            left: 0,
+            top: 0,
+            transform: `translate(${offsetX}px, ${offsetY}px) scale(${scale})`,
+            transformOrigin: '0 0',
           }}
         >
           {/* Floor tiles with room zones */}
