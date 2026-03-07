@@ -67,9 +67,10 @@ interface Props {
   channel: ChatChannel;
   allRoles?: Array<{ id: string; name: string }>;
   onUpdateMembers?: (channelId: string, members: string[]) => void;
+  onUpdateTopic?: (channelId: string, topic: string) => void;
 }
 
-export default function OfficeChatView({ channel, allRoles, onUpdateMembers }: Props) {
+export default function OfficeChatView({ channel, allRoles, onUpdateMembers, onUpdateTopic }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -84,6 +85,8 @@ export default function OfficeChatView({ channel, allRoles, onUpdateMembers }: P
   }, [channel.messages.length]);
 
   const [showInvite, setShowInvite] = useState(false);
+  const [editingTopic, setEditingTopic] = useState(false);
+  const [topicDraft, setTopicDraft] = useState('');
 
   return (
     <div ref={containerRef} className="flex-1 overflow-y-auto terminal-scrollbar py-2">
@@ -109,6 +112,38 @@ export default function OfficeChatView({ channel, allRoles, onUpdateMembers }: P
           </button>
         )}
       </div>
+      {/* Channel topic */}
+      {!channel.isDefault && onUpdateTopic && (
+        <div className="px-3 pb-2 mb-1">
+          {editingTopic ? (
+            <input
+              autoFocus
+              value={topicDraft}
+              onChange={(e) => setTopicDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  onUpdateTopic(channel.id, topicDraft.trim());
+                  setEditingTopic(false);
+                }
+                if (e.key === 'Escape') setEditingTopic(false);
+              }}
+              onBlur={() => {
+                onUpdateTopic(channel.id, topicDraft.trim());
+                setEditingTopic(false);
+              }}
+              placeholder="Set a topic for this channel..."
+              className="w-full bg-transparent text-[10px] text-[var(--terminal-text-muted)] outline-none border-b border-[var(--terminal-border)] pb-0.5"
+            />
+          ) : (
+            <button
+              onClick={() => { setTopicDraft(channel.topic ?? ''); setEditingTopic(true); }}
+              className="text-[10px] text-[var(--terminal-text-muted)] hover:text-[var(--terminal-text-secondary)] cursor-pointer italic"
+            >
+              {channel.topic || 'Click to set channel topic...'}
+            </button>
+          )}
+        </div>
+      )}
       {/* Member management dropdown */}
       {showInvite && !channel.isDefault && allRoles && onUpdateMembers && (
         <div className="px-3 pb-2 mb-2 border-b border-[var(--terminal-border)]">

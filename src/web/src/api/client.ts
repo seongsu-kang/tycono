@@ -117,6 +117,7 @@ export const api = {
   // Chat (LLM-powered channel conversation)
   chatInChannel: (data: {
     channelId: string;
+    channelTopic?: string;
     roleId: string;
     history: Array<{ roleId: string; text: string; ts: number }>;
     members: Array<{ id: string; name: string; level: string }>;

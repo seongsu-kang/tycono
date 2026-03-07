@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import Anthropic from '@anthropic-ai/sdk';
 
 /* ─── Types ──────────────────────────────────── */
@@ -208,6 +209,78 @@ export class AnthropicProvider implements LLMProvider {
       // Skip thinking, redacted_thinking, and other block types
     }
     return result;
+  }
+}
+
+/* ─── Claude CLI Provider ───────────────────── */
+
+/**
+ * Claude CLI (`claude -p`)를 LLMProvider로 사용.
+ * Claude Max 구독 기반 — API 키 불필요.
+ * Chat pipeline (speech) 등 간단한 텍스트 생성에 사용.
+ */
+export class ClaudeCliProvider implements LLMProvider {
+  private model: string;
+
+  constructor(options?: { model?: string }) {
+    this.model = options?.model || 'claude-haiku-4-5-20251001';
+  }
+
+  async chat(
+    systemPrompt: string,
+    messages: LLMMessage[],
+    _tools?: ToolDefinition[],
+    signal?: AbortSignal,
+  ): Promise<LLMResponse> {
+    // Build user message from messages array
+    const userText = messages
+      .filter(m => m.role === 'user')
+      .map(m => typeof m.content === 'string' ? m.content : m.content.filter(c => c.type === 'text').map(c => (c as { type: 'text'; text: string }).text).join(''))
+      .join('\n');
+
+    return new Promise((resolve, reject) => {
+      const args = [
+        '-p',
+        '--system-prompt', systemPrompt,
+        '--model', this.model,
+        '--max-turns', '1',
+        '--output-format', 'text',
+        userText,
+      ];
+
+      const cleanEnv = { ...process.env };
+      delete cleanEnv.CLAUDECODE;
+
+      const proc = spawn('claude', args, {
+        env: cleanEnv,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      proc.stdout.on('data', (data: Buffer) => { stdout += data.toString(); });
+      proc.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
+
+      if (signal) {
+        signal.addEventListener('abort', () => proc.kill('SIGTERM'), { once: true });
+      }
+
+      proc.on('close', (code) => {
+        const text = stdout.trim();
+        if (code !== 0 && !text) {
+          reject(new Error(`claude-cli exited with code ${code}: ${stderr}`));
+          return;
+        }
+        resolve({
+          content: [{ type: 'text', text }],
+          stopReason: 'end_turn',
+          usage: { inputTokens: 0, outputTokens: 0 },
+        });
+      });
+
+      proc.on('error', reject);
+    });
   }
 }
 

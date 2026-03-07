@@ -477,20 +477,27 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
 function handleStatus(res: ServerResponse): void {
   const statuses: Record<string, string> = {};
 
-  for (const [roleId, status] of roleStatus) {
-    statuses[roleId] = status;
-  }
-
-  // Merge with file-backed activity tracker
+  // 1. File-backed activity tracker (baseline)
   const fileActivities = getAllActivities();
   for (const activity of fileActivities) {
-    if (!statuses[activity.roleId] || statuses[activity.roleId] === 'idle') {
-      statuses[activity.roleId] = activity.status;
+    statuses[activity.roleId] = activity.status;
+  }
+
+  // 2. JobManager running jobs are the source of truth for "working"
+  const runningJobs = jobManager.listJobs({ status: 'running' });
+  const runningRoles = new Set(runningJobs.map(j => j.roleId));
+
+  // 3. Any role marked "working" in file/memory but NOT in JobManager → done
+  for (const roleId of Object.keys(statuses)) {
+    if (statuses[roleId] === 'working' && !runningRoles.has(roleId)) {
+      statuses[roleId] = 'done';
+      // Also fix stale roleStatus map
+      roleStatus.set(roleId, 'idle');
+      completeActivity(roleId);
     }
   }
 
-  // Merge JobManager running jobs
-  const runningJobs = jobManager.listJobs({ status: 'running' });
+  // 4. Running jobs override everything
   for (const job of runningJobs) {
     statuses[job.roleId] = 'working';
   }

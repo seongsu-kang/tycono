@@ -25,9 +25,10 @@ interface Props {
   chatChannels?: ChatChannel[];
   activeChatChannelId?: string | null;
   onSwitchChatChannel?: (id: string | null) => void;
-  onCreateChatChannel?: (name: string, members: string[]) => void;
+  onCreateChatChannel?: (name: string, members: string[], topic?: string) => void;
   onDeleteChatChannel?: (id: string) => void;
   onUpdateChatMembers?: (channelId: string, members: string[]) => void;
+  onUpdateChatTopic?: (channelId: string, topic: string) => void;
   unreadChannels?: Set<string>;
 }
 
@@ -43,7 +44,7 @@ export default function TerminalPanel({
   sessions, activeSessionId, roles, streamingSessionId, width, onWidthChange,
   onSwitchSession, onCloseSession, onCreateSession, onClearEmpty, onCloseAll,
   onSendMessage, onModeChange, onCloseTerminal,
-  chatChannels, activeChatChannelId, onSwitchChatChannel, onCreateChatChannel, onDeleteChatChannel, onUpdateChatMembers, unreadChannels,
+  chatChannels, activeChatChannelId, onSwitchChatChannel, onCreateChatChannel, onDeleteChatChannel, onUpdateChatMembers, onUpdateChatTopic, unreadChannels,
 }: Props) {
   const [showNewMenu, setShowNewMenu] = useState(false);
   const [showManageMenu, setShowManageMenu] = useState(false);
@@ -308,6 +309,7 @@ export default function TerminalPanel({
           channel={activeChannel}
           allRoles={roles}
           onUpdateMembers={onUpdateChatMembers}
+          onUpdateTopic={onUpdateChatTopic}
         />
       ) : activeSession ? (
         <>

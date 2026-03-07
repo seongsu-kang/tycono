@@ -58,11 +58,13 @@ export interface UseOfficeChatReturn {
   /** Push a chat message to relevant channels */
   pushMessage: (msg: Omit<ChatMessage, 'id'>) => void;
   /** Create a new channel */
-  createChannel: (name: string, members: string[]) => void;
+  createChannel: (name: string, members: string[], topic?: string) => void;
   /** Delete a channel (not #office) */
   deleteChannel: (id: string) => void;
   /** Add/remove members from a channel */
   updateMembers: (channelId: string, members: string[]) => void;
+  /** Update channel topic */
+  updateTopic: (channelId: string, topic: string) => void;
   /** Channels with unread messages (set of channel ids) */
   unreadChannels: Set<string>;
 }
@@ -101,7 +103,14 @@ export function useOfficeChat(): UseOfficeChatReturn {
           }
           return ch;
         }
-        // Custom channels: only if sender is a member
+        // Chat messages: route to specific channel only
+        if (msg.channelId) {
+          if (ch.id === msg.channelId) {
+            return { ...ch, messages: [...ch.messages, fullMsg].slice(-MAX_MESSAGES) };
+          }
+          return ch;
+        }
+        // Fallback (no channelId): only if sender is a member
         if (ch.members.length > 0 && ch.members.includes(msg.roleId)) {
           return { ...ch, messages: [...ch.messages, fullMsg].slice(-MAX_MESSAGES) };
         }
@@ -125,7 +134,7 @@ export function useOfficeChat(): UseOfficeChatReturn {
     });
   }, []);
 
-  const createChannel = useCallback((name: string, members: string[]) => {
+  const createChannel = useCallback((name: string, members: string[], topic?: string) => {
     const id = `ch-${Date.now()}`;
     const channel: ChatChannel = {
       id,
@@ -133,6 +142,7 @@ export function useOfficeChat(): UseOfficeChatReturn {
       members,
       isDefault: false,
       messages: [],
+      topic,
     };
     setChannels(prev => [...prev, channel]);
     setActiveChannelId(id);
@@ -149,6 +159,12 @@ export function useOfficeChat(): UseOfficeChatReturn {
     ));
   }, []);
 
+  const updateTopic = useCallback((channelId: string, topic: string) => {
+    setChannels(prev => prev.map(ch =>
+      ch.id === channelId && !ch.isDefault ? { ...ch, topic: topic || undefined } : ch,
+    ));
+  }, []);
+
   return {
     channels,
     activeChannelId,
@@ -157,6 +173,7 @@ export function useOfficeChat(): UseOfficeChatReturn {
     createChannel,
     deleteChannel,
     updateMembers,
+    updateTopic,
     unreadChannels,
   };
 }

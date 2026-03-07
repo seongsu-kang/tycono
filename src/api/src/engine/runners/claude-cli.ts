@@ -169,6 +169,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
     });
 
     // 6. CLI args 구성
+    const maxTurns = config.maxTurns ?? 25;
     const args = [
       '-p',
       '--system-prompt', fs.readFileSync(promptFile, 'utf-8'),
@@ -176,6 +177,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
       '--verbose',
       '--dangerously-skip-permissions',
       '--model', config.model ?? 'claude-sonnet-4-5',
+      '--max-turns', String(maxTurns),
       '--mcp-config', mcpConfig,
       '--strict-mcp-config',
       taskPrompt,
@@ -197,7 +199,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
     cleanEnv.DISPATCH_CMD = dispatchScript;
 
     const modelName = config.model ?? 'claude-sonnet-4-5';
-    console.log(`[Runner] Spawning claude -p: role=${roleId}, model=${modelName}, jobId=${config.jobId ?? 'none'}, subordinates=[${subordinates.join(',')}]`);
+    console.log(`[Runner] Spawning claude -p: role=${roleId}, model=${modelName}, maxTurns=${maxTurns}, jobId=${config.jobId ?? 'none'}, subordinates=[${subordinates.join(',')}]`);
 
     const proc = spawn('claude', args, {
       cwd: companyRoot,

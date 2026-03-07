@@ -48,8 +48,8 @@ export function useChatScheduler({
        : engineType === 'local' ? 'llm'
        : 'template')
     : (speechSettings?.mode ?? 'template');
-  // Chat requires LLM mode AND an API key on the server
-  const chatEnabled = effectiveMode === 'llm' && hasApiKey !== false;
+  // Chat requires LLM mode AND either an API key or claude-cli engine
+  const chatEnabled = effectiveMode === 'llm' && (hasApiKey !== false || engineType === 'claude-cli');
   const intervalMs = (speechSettings?.intervalSec ?? DEFAULT_INTERVAL_MS / 1000) * 1000;
 
   // Stable refs
@@ -102,6 +102,7 @@ export function useChatScheduler({
 
       const result = await api.chatInChannel({
         channelId: channel.name.replace('#', ''),
+        channelTopic: channel.topic,
         roleId,
         history,
         members: memberRoles.map(r => ({ id: r.id, name: r.name, level: r.level })),
@@ -115,6 +116,7 @@ export function useChatScheduler({
           roleId,
           text: result.message,
           type: 'chat',
+          channelId: channel.id,
         });
         return true;
       }

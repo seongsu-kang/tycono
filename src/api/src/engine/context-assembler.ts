@@ -105,6 +105,30 @@ export function assembleContext(
     sections.push(buildDispatchSection(orgTree, roleId, subordinates, options?.teamStatus));
   }
 
+  // Execution behavior rules (prevents infinite exploration loops in -p mode)
+  sections.push(`# Execution Rules (CRITICAL)
+
+## Interpreting Tasks
+- A [CEO Wave] is a directive from the CEO. Interpret it based on your role's expertise.
+- If the directive is vague, focus on what YOUR ROLE can contribute. Don't try to cover everything.
+- Break ambiguous directives into concrete actions within your authority scope.
+- If you truly cannot determine what to do, state your interpretation and proceed with it.
+
+## Efficiency
+- Read ONLY files directly relevant to your task. Do NOT explore the codebase broadly.
+- If a file doesn't exist at the expected path, try at most 2 alternatives, then move on.
+- Do NOT use \`find\` or \`ls\` to scan entire directory trees. Use the Project Structure above.
+- Never \`sleep\` or poll in loops. If something isn't ready, report it and move on.
+
+## When Stuck
+- If you cannot find what you need after 3 search attempts, STOP searching immediately.
+- Do NOT retry the same failing command or approach.
+- Summarize what you found, what you couldn't find, and deliver your best answer with what you have.
+
+## Output
+- Always produce a concrete deliverable: code change, report, analysis, or clear status update.
+- End with a brief summary of what you did and any unresolved items.`);
+
   const systemPrompt = sections.join('\n\n---\n\n');
 
   return {
@@ -127,25 +151,11 @@ function loadCompanyRules(companyRoot: string): string | null {
   const claudeMdPath = path.join(companyRoot, 'CLAUDE.md');
   if (!fs.existsSync(claudeMdPath)) return null;
 
-  const content = fs.readFileSync(claudeMdPath, 'utf-8');
-
-  // Extract key sections: AI 작업 규칙, AKB 관리
-  // We keep it focused on operational rules, not the full CLAUDE.md
-  const sections: string[] = [];
-
-  // Extract AKB rules section
-  const akbMatch = content.match(/### AKB 관리 의무[\s\S]*?(?=\n---|\n## [^#])/);
-  if (akbMatch) {
-    sections.push(akbMatch[0].trim());
-  }
-
-  // Extract Git rules
-  const gitMatch = content.match(/### Git 규칙[\s\S]*?(?=\n###|\n---|\n## [^#])/);
-  if (gitMatch) {
-    sections.push(gitMatch[0].trim());
-  }
-
-  return sections.length > 0 ? sections.join('\n\n') : content.slice(0, 2000);
+  // Give the full CLAUDE.md — it contains the routing table, folder structure,
+  // Hub-first principle, and other navigation info that roles need to work effectively.
+  // Previously we extracted only AKB + Git rules, but that stripped out the most
+  // practically useful parts (routing table, folder structure, skill principle).
+  return fs.readFileSync(claudeMdPath, 'utf-8');
 }
 
 function buildOrgContextSection(orgTree: OrgTree, node: OrgNode): string {

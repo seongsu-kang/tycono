@@ -12,6 +12,8 @@ export interface ChatMessage {
   text: string;
   /** Message type */
   type: 'chat' | 'dispatch';
+  /** Target channel for routing (chat messages) */
+  channelId?: string;
   /** For social: the conversation partner */
   partnerId?: string;
   /** For dispatch: the target role */
@@ -24,4 +26,6 @@ export interface ChatChannel {
   members: string[];   // roleId[] — empty = all roles
   isDefault: boolean;  // #office = true, cannot delete
   messages: ChatMessage[];
+  /** Channel topic/description — used as AI instruction for chat generation */
+  topic?: string;
 }

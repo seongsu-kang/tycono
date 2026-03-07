@@ -8,8 +8,9 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { COMPANY_ROOT } from '../services/file-reader.js';
 import { buildOrgTree } from '../engine/index.js';
-import { AnthropicProvider } from '../engine/llm-adapter.js';
+import { AnthropicProvider, ClaudeCliProvider, type LLMProvider } from '../engine/llm-adapter.js';
 import { TokenLedger } from '../services/token-ledger.js';
+import { readConfig } from '../services/company-config.js';
 
 export const speechRouter = Router();
 
@@ -20,13 +21,17 @@ function getLedger(): TokenLedger {
   return ledger;
 }
 
-// Lazy-init LLM provider (Haiku for cost efficiency)
-let llm: AnthropicProvider | null = null;
-function getLLM(): AnthropicProvider {
+// Lazy-init LLM provider based on engine config
+let llm: LLMProvider | null = null;
+function getLLM(): LLMProvider {
   if (!llm) {
-    llm = new AnthropicProvider({
-      model: process.env.SPEECH_MODEL || 'claude-haiku-4-5-20251001',
-    });
+    const config = readConfig(COMPANY_ROOT);
+    const model = process.env.SPEECH_MODEL || 'claude-haiku-4-5-20251001';
+    if (config.engine === 'claude-cli' && !process.env.ANTHROPIC_API_KEY) {
+      llm = new ClaudeCliProvider({ model });
+    } else {
+      llm = new AnthropicProvider({ model });
+    }
   }
   return llm;
 }
@@ -46,8 +51,9 @@ function getLLM(): AnthropicProvider {
  */
 speechRouter.post('/chat', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { channelId, roleId, history, members, relationships, workContext } = req.body as {
+    const { channelId, channelTopic, roleId, history, members, relationships, workContext } = req.body as {
       channelId: string;
+      channelTopic?: string;
       roleId: string;
       history: Array<{ roleId: string; text: string; ts: number }>;
       members: Array<{ id: string; name: string; level: string }>;
@@ -60,8 +66,9 @@ speechRouter.post('/chat', async (req: Request, res: Response, next: NextFunctio
       return;
     }
 
-    if (!process.env.ANTHROPIC_API_KEY) {
-      res.status(503).json({ error: 'Chat requires ANTHROPIC_API_KEY', message: '' });
+    const config = readConfig(COMPANY_ROOT);
+    if (config.engine !== 'claude-cli' && !process.env.ANTHROPIC_API_KEY) {
+      res.status(503).json({ error: 'Chat requires ANTHROPIC_API_KEY or claude-cli engine', message: '' });
       return;
     }
 
@@ -105,22 +112,30 @@ speechRouter.post('/chat', async (req: Request, res: Response, next: NextFunctio
         }).join('\n')
       : '(No messages yet — you can start the conversation)';
 
+    // Build channel topic context
+    const topicCtx = channelTopic
+      ? `\nChannel topic: "${channelTopic}"\nYour messages should relate to this topic.`
+      : '';
+
     const systemPrompt = `You are ${node.name}, a ${node.level} employee.
 Persona: ${persona}
 ${workCtx}
 
-You are in the #${channelId} chat channel.
+You are in the #${channelId} chat channel.${topicCtx}
 Members: ${memberList}
 ${relContext}
 
-Read the conversation and respond naturally.
+Read the conversation and respond naturally as a real person in a team chat.
 Rules:
-- Stay in character (your persona)
-- Be brief (1-2 sentences, max 50 characters in Korean)
-- Respond to the topic being discussed
+- Stay in character (your persona and role)
+- Be brief (1-2 sentences max)
+- Talk about the channel topic, your work, team dynamics, or casual chat — be human
+- Vary your tone: sometimes enthusiastic, sometimes tired, sometimes joking
 - Use appropriate tone based on hierarchy and familiarity
-- If you have nothing interesting to add, respond with exactly: [SILENT]
-- Do NOT use quotes. Just output the raw sentence.`;
+- Do NOT repeat what others already said
+- If the conversation is stale or you have nothing new to add, respond with exactly: [SILENT]
+- Do NOT use quotes around your response. Just output the raw sentence.
+- Write in English.`;
 
     const provider = getLLM();
     const response = await provider.chat(
@@ -135,8 +150,8 @@ Rules:
       .trim()
       .replace(/^["']|["']$/g, '');
 
-    // [SILENT] means the role has nothing to say
-    const message = raw === '[SILENT]' ? '' : raw;
+    // Filter out CLI noise and [SILENT]
+    const message = (raw === '[SILENT]' || raw.startsWith('Error: Reached max turns')) ? '' : raw;
 
     // Record usage in token ledger (category: chat)
     if (response.usage) {

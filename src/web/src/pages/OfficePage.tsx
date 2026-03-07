@@ -477,10 +477,35 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   };
 
   // Focus terminal on a specific role's session (open terminal + switch to session)
-  const handleFocusTerminal = (roleId: string) => {
+  // If the role is currently working, open its ActivityPanel instead.
+  // Creates a new session if none exists for this role.
+  const handleFocusTerminal = async (roleId: string) => {
+    // If role is working, open the ActivityPanel for its active job
+    const exec = activeExecs.find(e => e.roleId === roleId);
+    const jobId = exec?.jobId ?? exec?.id;
+    if (jobId && roleStatuses[roleId] === 'working') {
+      const role = roles.find(r => r.id === roleId);
+      const color = ROLE_COLORS[roleId] ?? '#666';
+      const title = `${roleId.toUpperCase()} · ${role?.name ?? roleId}`;
+      setJobStack([{ jobId, title, color }]);
+      setJobMinimized(false);
+      return;
+    }
+
     const session = sessions.find(s => s.roleId === roleId);
     if (session) {
       setActiveSessionId(session.id);
+      // Switch to session view (not chat channel)
+      officeChat.setActiveChannelId(null);
+    } else {
+      try {
+        const newSession = await api.createSession(roleId, 'talk');
+        setSessions((prev) => [newSession, ...prev]);
+        setActiveSessionId(newSession.id);
+        officeChat.setActiveChannelId(null);
+      } catch (err) {
+        console.error('Failed to create session', err);
+      }
     }
     setTerminalOpen(true);
   };
@@ -1139,6 +1164,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
               onCreateChatChannel={officeChat.createChannel}
               onDeleteChatChannel={officeChat.deleteChannel}
               onUpdateChatMembers={officeChat.updateMembers}
+              onUpdateChatTopic={officeChat.updateTopic}
               unreadChannels={officeChat.unreadChannels}
             />
           </div>
