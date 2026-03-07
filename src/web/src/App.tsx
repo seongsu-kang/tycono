@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import ErrorBoundary from './components/ErrorBoundary';
 import OfficePage from './pages/OfficePage';
 import OnboardingWizard from './pages/OnboardingWizard';
@@ -6,6 +6,8 @@ import { useCompanyStatus } from './hooks/useCompanyStatus';
 import { OFFICE_THEMES } from './types/appearance';
 import type { OfficeTheme } from './types/appearance';
 import type { ImportJob } from './types';
+
+const SpritePreview = lazy(() => import('./components/office/sprites/preview-app'));
 
 function BootScreen() {
   return (
@@ -60,9 +62,17 @@ function AppShell() {
 }
 
 export default function App() {
+  const isSpritePreview = new URLSearchParams(window.location.search).has('sprite-preview');
+
   return (
     <ErrorBoundary>
-      <AppShell />
+      {isSpritePreview ? (
+        <Suspense fallback={<BootScreen />}>
+          <SpritePreview />
+        </Suspense>
+      ) : (
+        <AppShell />
+      )}
     </ErrorBoundary>
   );
 }

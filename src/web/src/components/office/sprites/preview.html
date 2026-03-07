@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sprite Blueprint Preview</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    background: #0d1117;
+    color: #e6edf3;
+    padding: 24px;
+  }
+  h1 { font-size: 18px; color: #58a6ff; margin-bottom: 4px; }
+  h2 { font-size: 14px; color: #8b949e; margin: 24px 0 12px; border-bottom: 1px solid #21262d; padding-bottom: 6px; }
+  .grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+  }
+  .card {
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+    min-width: 160px;
+  }
+  .card canvas {
+    image-rendering: pixelated;
+    display: block;
+    margin: 0 auto 8px;
+    border: 1px solid #30363d;
+    background: #0d1117;
+  }
+  .card .label {
+    font-size: 11px;
+    color: #8b949e;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 16px 0;
+    padding: 12px;
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 8px;
+  }
+  .control-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .control-group label {
+    font-size: 11px;
+    color: #8b949e;
+    width: 40px;
+    text-transform: uppercase;
+  }
+  .control-group input[type="color"] {
+    width: 28px;
+    height: 28px;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+  }
+  .layer-toggles {
+    display: flex;
+    gap: 8px;
+    margin: 8px 0;
+    flex-wrap: wrap;
+  }
+  .layer-toggles label {
+    font-size: 11px;
+    color: #8b949e;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+  }
+  .layer-toggles input { cursor: pointer; }
+  .subtitle { font-size: 12px; color: #484f58; margin-bottom: 16px; }
+  button.action {
+    background: #21262d;
+    color: #e6edf3;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    padding: 4px 12px;
+    font-size: 11px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  button.action:hover { border-color: #58a6ff; }
+  #custom-input {
+    width: 100%;
+    min-height: 120px;
+    background: #0d1117;
+    color: #e6edf3;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    padding: 8px;
+    font-family: inherit;
+    font-size: 12px;
+    resize: vertical;
+    margin: 8px 0;
+  }
+  #custom-preview {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Sprite Blueprint Preview</h1>
+<p class="subtitle">Declarative pixel art system — all sprites rendered from Blueprint data</p>
+
+<!-- Color Controls -->
+<div class="controls" id="color-controls">
+  <div class="control-group">
+    <label>Skin</label>
+    <input type="color" id="c-skin" value="#F5CBA7">
+  </div>
+  <div class="control-group">
+    <label>Hair</label>
+    <input type="color" id="c-hair" value="#2C1810">
+  </div>
+  <div class="control-group">
+    <label>Shirt</label>
+    <input type="color" id="c-shirt" value="#1565C0">
+  </div>
+  <div class="control-group">
+    <label>Pants</label>
+    <input type="color" id="c-pants" value="#37474F">
+  </div>
+  <div class="control-group">
+    <label>Shoes</label>
+    <input type="color" id="c-shoes" value="#212121">
+  </div>
+  <button class="action" onclick="randomizeColors()">Random</button>
+  <button class="action" onclick="resetColors()">Reset</button>
+</div>
+
+<!-- Layer toggles -->
+<div class="layer-toggles" id="layer-toggles"></div>
+
+<h2>Characters</h2>
+<div class="grid" id="characters-grid"></div>
+
+<h2>Facilities</h2>
+<div class="grid" id="facilities-grid"></div>
+
+<h2>Custom Blueprint (paste JSON)</h2>
+<textarea id="custom-input" placeholder='Paste a Pixel[] JSON array here, e.g.:
+[{"x":10,"y":0,"w":12,"h":10,"c":"$skin"},{"x":10,"y":0,"w":12,"h":3,"c":"$hair"}]'></textarea>
+<div style="display: flex; gap: 8px; align-items: center;">
+  <button class="action" onclick="renderCustom()">Render</button>
+  <label style="font-size: 11px; color: #8b949e;">
+    Scale: <select id="custom-scale" style="background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-radius:3px;">
+      <option value="2">2x (Character)</option>
+      <option value="3">3x</option>
+      <option value="4">4x</option>
+    </select>
+  </label>
+</div>
+<div id="custom-preview"></div>
+
+<script>
+/* ============================================================
+   INLINE BLUEPRINT ENGINE (mirrors engine/blueprint.ts + renderer.ts)
+   ============================================================ */
+
+function darken(hex, amt) {
+  const n = parseInt(hex.replace('#', ''), 16);
+  const r = Math.max(0, ((n >> 16) & 0xFF) - amt);
+  const g = Math.max(0, ((n >> 8) & 0xFF) - amt);
+  const b = Math.max(0, (n & 0xFF) - amt);
+  return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
+}
+
+function lighten(hex, amt) {
+  const n = parseInt(hex.replace('#', ''), 16);
+  const r = Math.min(255, ((n >> 16) & 0xFF) + amt);
+  const g = Math.min(255, ((n >> 8) & 0xFF) + amt);
+  const b = Math.min(255, (n & 0xFF) + amt);
+  return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
+}
+
+const TOKEN_MAP = {
+  '$skin': 'skinColor',
+  '$hair': 'hairColor',
+  '$shirt': 'shirtColor',
+  '$pants': 'pantsColor',
+  '$shoes': 'shoeColor',
+};
+
+const MODIFIER_RE = /^(darken|lighten)\((\$\w+),\s*(\d+)\)$/;
+
+function resolveColor(token, ap) {
+  const key = TOKEN_MAP[token];
+  if (key && ap) return ap[key];
+  const match = MODIFIER_RE.exec(token);
+  if (match) {
+    const [, fn, tokenRef, amtStr] = match;
+    const baseKey = TOKEN_MAP[tokenRef];
+    const base = baseKey && ap ? ap[baseKey] : tokenRef;
+    const amt = parseInt(amtStr, 10);
+    return fn === 'darken' ? darken(base, amt) : lighten(base, amt);
+  }
+  return token;
+}
+
+function renderPixels(ctx, pixels, scale, offsetY, ap, enabledLayers) {
+  for (const p of pixels) {
+    if (enabledLayers && p._layer && !enabledLayers.has(p._layer)) continue;
+    const color = resolveColor(p.c, ap);
+    if (p.a !== undefined && p.a !== 1) ctx.globalAlpha = p.a;
+    ctx.fillStyle = color;
+    ctx.fillRect(p.x * scale, (p.y + offsetY) * scale, p.w * scale, p.h * scale);
+    if (p.a !== undefined && p.a !== 1) ctx.globalAlpha = 1;
+  }
+}
+
+function renderCharacter(ctx, bp, bobY, ap, enabledLayers) {
+  const P = 2;
+  ctx.clearRect(0, 0, bp.width * P, bp.height * P);
+  const allPixels = [];
+  for (const layer of bp.layers) {
+    for (const p of layer.pixels) {
+      allPixels.push({ ...p, _layer: layer.name });
+    }
+  }
+  renderPixels(ctx, allPixels, P, bobY, ap, enabledLayers);
+}
+
+function renderFacility(ctx, bp) {
+  ctx.clearRect(0, 0, bp.canvasWidth, bp.canvasHeight);
+  renderPixels(ctx, bp.pixels, bp.scale, 0);
+}
+
+/* ============================================================
+   BLUEPRINT DATA — will be populated from data files
+   ============================================================ */
+
+const characters = {};
+const facilities = {};
+
+// Placeholder: These will be replaced with actual data imports
+// For now, we'll include the data inline after conversion
+
+/* ============================================================
+   UI LOGIC
+   ============================================================ */
+
+let currentAp = getAppearance();
+const allLayers = new Set();
+const enabledLayers = new Set();
+let animFrame = 0;
+const canvasMap = new Map();
+
+function getAppearance() {
+  return {
+    skinColor: document.getElementById('c-skin')?.value || '#F5CBA7',
+    hairColor: document.getElementById('c-hair')?.value || '#2C1810',
+    shirtColor: document.getElementById('c-shirt')?.value || '#1565C0',
+    pantsColor: document.getElementById('c-pants')?.value || '#37474F',
+    shoeColor: document.getElementById('c-shoes')?.value || '#212121',
+  };
+}
+
+function updateAll() {
+  currentAp = getAppearance();
+}
+
+function randomizeColors() {
+  const rand = () => '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6,'0');
+  document.getElementById('c-skin').value = rand();
+  document.getElementById('c-hair').value = rand();
+  document.getElementById('c-shirt').value = rand();
+  document.getElementById('c-pants').value = rand();
+  document.getElementById('c-shoes').value = rand();
+  updateAll();
+}
+
+function resetColors() {
+  document.getElementById('c-skin').value = '#F5CBA7';
+  document.getElementById('c-hair').value = '#2C1810';
+  document.getElementById('c-shirt').value = '#1565C0';
+  document.getElementById('c-pants').value = '#37474F';
+  document.getElementById('c-shoes').value = '#212121';
+  updateAll();
+}
+
+function buildLayerToggles() {
+  const container = document.getElementById('layer-toggles');
+  container.innerHTML = '';
+  for (const name of allLayers) {
+    enabledLayers.add(name);
+    const label = document.createElement('label');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = true;
+    cb.addEventListener('change', () => {
+      if (cb.checked) enabledLayers.add(name);
+      else enabledLayers.delete(name);
+    });
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(name));
+    container.appendChild(label);
+  }
+}
+
+function setupCharacters() {
+  const grid = document.getElementById('characters-grid');
+  grid.innerHTML = '';
+  for (const [id, bp] of Object.entries(characters)) {
+    // Collect layer names
+    for (const layer of bp.layers) allLayers.add(layer.name);
+
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const canvas = document.createElement('canvas');
+    canvas.width = bp.width * 2;
+    canvas.height = bp.height * 2;
+    canvas.style.width = (bp.width * 2 * 3) + 'px';
+    canvas.style.height = (bp.height * 2 * 3) + 'px';
+
+    const label = document.createElement('div');
+    label.className = 'label';
+    label.textContent = id;
+
+    card.appendChild(canvas);
+    card.appendChild(label);
+    grid.appendChild(card);
+    canvasMap.set('char-' + id, { canvas, bp, type: 'character' });
+  }
+  buildLayerToggles();
+}
+
+function setupFacilities() {
+  const grid = document.getElementById('facilities-grid');
+  grid.innerHTML = '';
+  for (const [id, bp] of Object.entries(facilities)) {
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const canvas = document.createElement('canvas');
+    canvas.width = bp.canvasWidth;
+    canvas.height = bp.canvasHeight;
+    canvas.style.width = (bp.canvasWidth * 2) + 'px';
+    canvas.style.height = (bp.canvasHeight * 2) + 'px';
+
+    const label = document.createElement('div');
+    label.className = 'label';
+    label.textContent = id;
+
+    card.appendChild(canvas);
+    card.appendChild(label);
+    grid.appendChild(card);
+    canvasMap.set('fac-' + id, { canvas, bp, type: 'facility' });
+  }
+}
+
+function renderCustom() {
+  const input = document.getElementById('custom-input').value.trim();
+  const preview = document.getElementById('custom-preview');
+  preview.innerHTML = '';
+  try {
+    const pixels = JSON.parse(input);
+    if (!Array.isArray(pixels)) throw new Error('Must be an array');
+
+    // Find bounds
+    let maxX = 0, maxY = 0;
+    for (const p of pixels) {
+      maxX = Math.max(maxX, p.x + p.w);
+      maxY = Math.max(maxY, p.y + p.h);
+    }
+    const scale = parseInt(document.getElementById('custom-scale').value) || 2;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = maxX * scale;
+    canvas.height = maxY * scale;
+    canvas.style.width = (maxX * scale * 3) + 'px';
+    canvas.style.height = (maxY * scale * 3) + 'px';
+    canvas.style.imageRendering = 'pixelated';
+    canvas.style.border = '1px solid #30363d';
+    canvas.style.background = '#0d1117';
+
+    const ctx = canvas.getContext('2d');
+    renderPixels(ctx, pixels, scale, 0, currentAp);
+    preview.appendChild(canvas);
+  } catch (e) {
+    preview.innerHTML = '<span style="color:#f85149;">Error: ' + e.message + '</span>';
+  }
+}
+
+// Animation loop
+function tick() {
+  animFrame++;
+  const bobY = (animFrame % 60) < 30 ? 1 : 0;
+  currentAp = getAppearance();
+
+  for (const [key, { canvas, bp, type }] of canvasMap) {
+    const ctx = canvas.getContext('2d');
+    if (type === 'character') {
+      renderCharacter(ctx, bp, bobY, currentAp, enabledLayers);
+    } else {
+      renderFacility(ctx, bp);
+    }
+  }
+  requestAnimationFrame(tick);
+}
+
+// Color input listeners
+document.querySelectorAll('#color-controls input[type="color"]').forEach(input => {
+  input.addEventListener('input', updateAll);
+});
+
+// Init
+function init() {
+  setupCharacters();
+  setupFacilities();
+  tick();
+}
+
+/* ============================================================
+   DATA INJECTION POINT
+   After characters.ts and facilities.ts are generated,
+   their data will be copy-pasted here or loaded dynamically.
+
+   For now, run this preview with the data inline below.
+   ============================================================ */
+
+// DATA_PLACEHOLDER: characters and facilities will be injected here
+// Example:
+// characters['cto'] = { width: 32, height: 40, layers: [...] };
+// facilities['meeting'] = { canvasWidth: 160, canvasHeight: 80, scale: 2, pixels: [...] };
+
+// Initialize after data is loaded
+init();
+</script>
+
+</body>
+</html>
