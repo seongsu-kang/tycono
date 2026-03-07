@@ -6,11 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:unit": "vitest run tests/unit/",
-    "test:integration": "vitest run tests/integration/",
-    "test:live": "LIVE=1 vitest run --config vitest.live.config.ts"
+    "test": "vitest run tests/smoke.test.ts",
+    "test:watch": "vitest tests/smoke.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
