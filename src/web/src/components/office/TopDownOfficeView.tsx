@@ -594,15 +594,11 @@ function drawWalkChar(cx: number, cy: number, ap: CharacterAppearance, dir: stri
         const top = srcPx.filter(p => p.y < 1);
         if (top.length > 0) renderPixelsAt(_ctx, top, cx, cy + bob, ap);
       } else {
-        // Side — compress horizontally + shift toward facing direction
-        const mid = 6; // horizontal center of 12-wide head
-        const shift = d === 'right' ? 2 : -2;
-        const side = srcPx.map(p => ({
-          ...p,
-          x: Math.round(mid + (p.x - mid) * 0.5 + shift),
-          w: Math.max(1, Math.round(p.w * 0.6)),
-        }));
-        renderPixelsAt(_ctx, side, cx, cy + bob, ap);
+        // Side — only show above-head items (ears, horns, crown, halo)
+        // Full-face masks are too small (12px) for a meaningful side profile
+        const shift = d === 'right' ? 1 : -1;
+        const top = srcPx.filter(p => p.y < 2).map(p => ({ ...p, x: p.x + shift }));
+        if (top.length > 0) renderPixelsAt(_ctx, top, cx, cy + bob, ap);
       }
     }
   }
