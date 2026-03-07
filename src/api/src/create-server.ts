@@ -22,7 +22,11 @@ import { sessionsRouter } from './routes/sessions.js';
 import { setupRouter } from './routes/setup.js';
 import { getAllActivities, completeActivity } from './services/activity-tracker.js';
 import { knowledgeRouter } from './routes/knowledge.js';
+import { preferencesRouter } from './routes/preferences.js';
+import { saveRouter } from './routes/save.js';
 import { importKnowledge } from './services/knowledge-importer.js';
+import { AnthropicProvider, type LLMProvider } from './engine/llm-adapter.js';
+import { readConfig } from './services/company-config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -73,6 +77,11 @@ function handleImportKnowledge(req: http.IncomingMessage, res: http.ServerRespon
       res.write(`event: ${event}\ndata: ${JSON.stringify(eventData)}\n\n`);
     };
 
+    // Build LLMProvider from env if available
+    const llm: LLMProvider | undefined = process.env.ANTHROPIC_API_KEY
+      ? new AnthropicProvider({ model: 'claude-haiku-4-5-20251001' })
+      : undefined;
+
     importKnowledge(importPaths, root, {
       onScanning: (scanPath, fileCount) => sendSSE('scanning', { path: scanPath, fileCount }),
       onProcessing: (file, index, total) => sendSSE('processing', { file, index, total }),
@@ -80,7 +89,7 @@ function handleImportKnowledge(req: http.IncomingMessage, res: http.ServerRespon
       onSkipped: (file, reason) => sendSSE('skipped', { file, reason }),
       onDone: (stats) => { sendSSE('done', stats); res.end(); },
       onError: (message) => { sendSSE('error', { message }); res.end(); },
-    }).catch((err) => {
+    }, llm).catch((err) => {
       sendSSE('error', { message: err instanceof Error ? err.message : 'Import failed' });
       res.end();
     });
@@ -110,7 +119,8 @@ export function createHttpServer(): http.Server {
         if (match) companyName = match[1].trim();
       } catch { /* ignore */ }
     }
-    res.json({ initialized, companyName, engine: process.env.EXECUTION_ENGINE || 'none', companyRoot: COMPANY_ROOT });
+    const config = readConfig(COMPANY_ROOT);
+    res.json({ initialized, companyName, engine: config.engine || process.env.EXECUTION_ENGINE || 'none', companyRoot: COMPANY_ROOT });
   });
 
   app.use('/api/roles', rolesRouter);
@@ -120,6 +130,8 @@ export function createHttpServer(): http.Server {
   app.use('/api/engine', engineRouter);
   app.use('/api/sessions', sessionsRouter);
   app.use('/api/knowledge', knowledgeRouter);
+  app.use('/api/preferences', preferencesRouter);
+  app.use('/api/save', saveRouter);
 
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', companyRoot: COMPANY_ROOT });

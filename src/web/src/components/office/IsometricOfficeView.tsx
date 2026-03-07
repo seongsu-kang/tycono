@@ -179,6 +179,13 @@ const FACILITY_LAYOUT: FacilityConfig[] = [
   { id: 'knowledge', col: 5, row: 3, type: 'knowledge', label: 'KNOWLEDGE',  icon: '\u{1F4DA}', color: '#0D9488' },
 ];
 
+const FACILITY_DESCRIPTIONS: Record<string, string> = {
+  meeting: 'Projects, PRDs, and task boards',
+  bulletin: 'Waves and daily standups',
+  decisions: 'CEO strategic decision log',
+  knowledge: 'Research, analysis, and references',
+};
+
 /* ─── Decorations ──────────────────────── */
 
 interface DecoConfig { col: number; row: number; icon: string; label: string; }
@@ -403,7 +410,7 @@ function IsoFacilityTile({ facility, project, waves, standups, decisions, knowle
       className="iso-facility"
       style={{ left: x, top: y }}
       onClick={onClick}
-      title={`${facility.label} -- click to open`}
+      title={`${facility.label} — ${FACILITY_DESCRIPTIONS[facility.id] ?? ''}`}
     >
       <div className="iso-facility-floor" style={{ borderColor: facility.color + '44' }} />
       <div className="iso-facility-body" style={{ borderColor: facility.color + '88', background: `${facility.color}11` }}>
@@ -411,6 +418,9 @@ function IsoFacilityTile({ facility, project, waves, standups, decisions, knowle
       </div>
       <div className="iso-facility-label" style={{ color: facility.color }}>
         {facility.icon} {facility.label}
+      </div>
+      <div className="iso-facility-desc" style={{ color: facility.color }}>
+        {FACILITY_DESCRIPTIONS[facility.id]}
       </div>
       {subtitle && (
         <div className="iso-facility-sublabel">{subtitle}</div>

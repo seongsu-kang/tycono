@@ -2,12 +2,13 @@
  * knowledge-importer.ts — AKB-aware document import service
  *
  * Scans directories for documents and creates AKB-formatted knowledge files.
- * Processing priority: frontmatter → claude -p CLI → simple fallback
+ * Processing priority: frontmatter → LLMProvider → claude -p CLI → simple fallback
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFile, execFileSync } from 'node:child_process';
 import matter from 'gray-matter';
+import type { LLMProvider } from '../engine/llm-adapter.js';
 
 /* ─── Types ──────────────────────────────────── */
 
@@ -203,6 +204,55 @@ async function processDocumentWithCli(filePath: string): Promise<DocumentResult 
   }
 }
 
+/* ─── LLM Processing via LLMProvider interface ── */
+
+async function processDocumentWithLLM(filePath: string, llm: LLMProvider): Promise<DocumentResult | null> {
+  let content: string;
+  try {
+    content = fs.readFileSync(filePath, 'utf-8');
+  } catch {
+    return null;
+  }
+
+  if (content.trim().length < 20) return null;
+
+  const truncated = content.length > MAX_CONTENT_FOR_LLM
+    ? content.slice(0, MAX_CONTENT_FOR_LLM) + '\n\n[... truncated]'
+    : content;
+
+  const fileName = path.basename(filePath);
+  const userMessage = `File: ${fileName}\n\n${truncated}`;
+
+  try {
+    const response = await llm.chat(
+      CLASSIFY_PROMPT,
+      [{ role: 'user', content: userMessage }],
+      undefined,
+    );
+
+    const textBlock = response.content.find((b) => b.type === 'text');
+    if (!textBlock || textBlock.type !== 'text') return null;
+
+    const jsonMatch = (textBlock as { type: 'text'; text: string }).text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    const akbType: 'hub' | 'node' = parsed.akb_type === 'hub' ? 'hub' : 'node';
+    const tags: string[] = Array.isArray(parsed.tags) ? parsed.tags : [];
+
+    return {
+      category: parsed.category || 'general',
+      title: parsed.title || fileName.replace(/\.[^.]+$/, ''),
+      summary: parsed.summary || '',
+      content: parsed.content || content,
+      akbType,
+      tags,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** Fallback: import without LLM classification */
 function processDocumentSimple(filePath: string): DocumentResult | null {
   let content: string;
@@ -276,8 +326,9 @@ export async function importKnowledge(
   paths: string[],
   companyRoot: string,
   callbacks: ImportCallbacks,
+  llm?: LLMProvider,
 ): Promise<void> {
-  const useCli = isClaudeCliAvailable();
+  const useCli = !llm && isClaudeCliAvailable();
   const allFiles: string[] = [];
 
   // Phase 1: Scan
@@ -320,8 +371,11 @@ export async function importKnowledge(
     const file = allFiles[i];
     callbacks.onProcessing(path.basename(file), i + 1, allFiles.length);
 
-    // Processing priority: frontmatter → CLI → simple fallback
+    // Processing priority: frontmatter → LLMProvider → CLI → simple fallback
     let result: DocumentResult | null = extractFrontmatterCategory(file);
+    if (!result && llm) {
+      result = await processDocumentWithLLM(file, llm);
+    }
     if (!result && useCli) {
       result = await processDocumentWithCli(file);
     }

@@ -2,6 +2,7 @@ import { COMPANY_ROOT } from './file-reader.js';
 import { ActivityStream, type ActivityEvent } from './activity-stream.js';
 import { buildOrgTree } from '../engine/org-tree.js';
 import { createRunner } from '../engine/runners/index.js';
+import type { ExecutionRunner } from '../engine/runners/types.js';
 import { setActivity, updateActivity, completeActivity } from './activity-tracker.js';
 import type { RunnerResult } from '../engine/runners/types.js';
 
@@ -67,6 +68,16 @@ class JobManager {
   private runner = createRunner();
   private nextId = 1;
   private jobCreatedListeners = new Set<(job: Job) => void>();
+
+  /** Replace the execution runner (e.g. after BYOK setup switches engine). */
+  setRunner(newRunner: ExecutionRunner): void {
+    this.runner = newRunner;
+  }
+
+  /** Recreate runner from current env (call after EXECUTION_ENGINE changes). */
+  refreshRunner(): void {
+    this.runner = createRunner();
+  }
 
   /** Register a listener for new job creation. Returns unsubscribe function. */
   onJobCreated(listener: (job: Job) => void): () => void {

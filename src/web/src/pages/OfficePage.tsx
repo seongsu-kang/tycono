@@ -1,22 +1,25 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '../api/client';
-import type { Role, RoleDetail, Project, Standup, Wave, Decision, Session, Message, StreamEvent, CreateRoleInput, ImportJob, KnowledgeDoc } from '../types';
+import type { Role, RoleDetail, Project, Standup, Wave, Decision, Session, Message, StreamEvent, CreateRoleInput, ImportJob, KnowledgeDoc, OrgNode } from '../types';
 import SidePanel from '../components/office/SidePanel';
 import OperationsPanel from '../components/office/OperationsPanel';
 import ProjectPanel from '../components/office/ProjectPanel';
 import AssignTaskModal from '../components/office/AssignTaskModal';
 import ActivityPanel from '../components/office/ActivityPanel';
 import WaveModal from '../components/office/WaveModal';
+import WaveCommandCenter from '../components/office/WaveCommandCenter';
 import HireRoleModal from '../components/office/HireRoleModal';
 import FireRoleModal from '../components/office/FireRoleModal';
 import TerminalPanel from '../components/terminal/TerminalPanel';
 import useSessionStream from '../hooks/useSessionStream';
 import { useCustomization } from '../hooks/useCustomization';
+import { useSave } from '../hooks/useSave';
 import SpriteCanvas from '../components/office/SpriteCanvas';
 import FacilityCanvas from '../components/office/FacilityCanvas';
 import IsometricOfficeView from '../components/office/IsometricOfficeView';
 import KnowledgePanel from '../components/office/KnowledgePanel';
 import CustomizeModal from '../components/office/CustomizeModal';
+import SaveModal from '../components/office/SaveModal';
 import { OFFICE_THEMES } from '../types/appearance';
 import type { CharacterAppearance } from '../types/appearance';
 
@@ -81,6 +84,18 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   const [assignModal, setAssignModal] = useState<{ roleId: string; roleName: string; mode: 'assign' | 'ask' } | null>(null);
   const [jobStack, setJobStack] = useState<Array<{ jobId: string; title: string; color: string }>>([]);
   const [showWaveModal, setShowWaveModal] = useState(false);
+  const [waveJobs, setWaveJobs] = useState<Array<{ jobId: string; roleId: string; roleName: string }>>([]);
+  const [waveActiveIdx, setWaveActiveIdx] = useState(0);
+  const [jobMinimized, setJobMinimized] = useState(false);
+
+  /* Wave Command Center state */
+  const [orgNodes, setOrgNodes] = useState<Record<string, OrgNode>>({});
+  const [orgRootId, setOrgRootId] = useState('ceo');
+  const [waveState, setWaveState] = useState<{
+    directive: string;
+    rootJobs: Array<{ jobId: string; roleId: string; roleName: string }>;
+  } | null>(null);
+  const [waveMinimized, setWaveMinimized] = useState(false);
   const [showHireModal, setShowHireModal] = useState(false);
   const [fireTarget, setFireTarget] = useState<{ roleId: string; roleName: string } | null>(null);
 
@@ -93,6 +108,24 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   const { getAppearance, setAppearance, resetAppearance, theme, setTheme } = useCustomization();
   const [customizeTarget, setCustomizeTarget] = useState<Role | null>(null);
   const [customizeInitialTab, setCustomizeInitialTab] = useState<'character' | 'office'>('character');
+
+  /* Save system */
+  const saveHook = useSave();
+  const [showSaveModal, setShowSaveModal] = useState(false);
+
+  // Cmd+S / Ctrl+S → open save modal (or quick save if no modal open)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        if (saveHook.dirtyCount > 0) {
+          setShowSaveModal(true);
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [saveHook.dirtyCount]);
 
   /* Knowledge import state */
   interface ImportLogEntry {
@@ -230,6 +263,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
       api.getWaves().then(setWaves),
       api.getDecisions().then(setDecisions),
       api.getKnowledge().then(setKnowledgeDocs).catch(() => {}),
+      api.getOrgTree().then((tree) => { setOrgNodes(tree.nodes); setOrgRootId(tree.root); }).catch(() => {}),
     ])
       .catch((err) => setError(`Failed to load: ${err.message}`))
       .finally(() => setLoading(false));
@@ -290,6 +324,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
       const { jobId } = await api.startJob({ type: 'assign', roleId, task, readOnly: isAsk });
       const color = ROLE_COLORS[roleId] ?? '#666';
       const title = `${roleId.toUpperCase()} · ${role?.name ?? roleId}`;
+      setJobMinimized(false);
       setJobStack([{ jobId, title, color }]);
     } catch (err) {
       addToast(`Failed to start job: ${err instanceof Error ? err.message : 'unknown'}`, '#C62828');
@@ -314,8 +349,30 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   const handleWaveDispatch = async (directive: string) => {
     setShowWaveModal(false);
     try {
-      const { jobId } = await api.startJob({ type: 'wave', directive });
-      setJobStack([{ jobId, title: 'CEO WAVE', color: '#B71C1C' }]);
+      const resp = await api.startJob({ type: 'wave', directive });
+      // Wave returns { jobIds: string[] } — one per C-Level role
+      const jobIds: string[] = resp.jobIds ?? (resp.jobId ? [resp.jobId] : []);
+      const cLevels = roles.filter(r => r.level === 'c-level');
+
+      const wj = jobIds.map((jid, i) => ({
+        jobId: jid,
+        roleId: cLevels[i]?.id ?? `role-${i}`,
+        roleName: cLevels[i]?.name ?? `C-Level ${i + 1}`,
+      }));
+
+      // Use WaveCommandCenter if org data is available
+      if (Object.keys(orgNodes).length > 0) {
+        setWaveState({ directive, rootJobs: wj });
+        setWaveMinimized(false);
+      } else {
+        // Fallback to legacy tab-based wave view
+        setWaveJobs(wj);
+        setWaveActiveIdx(0);
+        setJobMinimized(false);
+        if (wj.length > 0) {
+          setJobStack([{ jobId: wj[0].jobId, title: `CEO WAVE · ${wj[0].roleId.toUpperCase()}`, color: '#B71C1C' }]);
+        }
+      }
     } catch (err) {
       addToast(`Failed to start wave: ${err instanceof Error ? err.message : 'unknown'}`, '#C62828');
     }
@@ -751,7 +808,30 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
               Working: <strong>{activeExecs.length}</strong>
             </span>
           )}
-          <span>{today}</span>
+          <button
+            onClick={() => saveHook.state !== 'no-git' && setShowSaveModal(true)}
+            className="flex items-center gap-1 cursor-pointer px-1.5 py-0.5"
+            style={{
+              background: 'var(--hud-bg-alt)', border: '1px solid var(--pixel-border)',
+              opacity: saveHook.state === 'no-git' ? 0.5 : 1,
+              cursor: saveHook.state === 'no-git' ? 'default' : 'pointer',
+            }}
+            title={saveHook.state === 'no-git' ? 'No git repository — run "git init" to enable save'
+              : saveHook.state === 'dirty' ? `${saveHook.dirtyCount} unsaved changes`
+              : 'All saved'}
+          >
+            <span style={{
+              display: 'inline-block',
+              width: 6, height: 6, borderRadius: '50%',
+              background: saveHook.state === 'no-git' ? 'var(--terminal-text-muted)'
+                : saveHook.state === 'saving' ? 'var(--idle-amber)'
+                : saveHook.state === 'dirty' ? 'var(--idle-amber)'
+                : saveHook.state === 'error' ? '#EF5350'
+                : 'var(--active-green)',
+              animation: saveHook.state === 'saving' ? 'pulse 1s infinite' : undefined,
+            }} />
+            <span>{today}</span>
+          </button>
         </div>
       </div>
 
@@ -908,7 +988,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
             {/* ── Section: OFFICE ── */}
             <div className="pixel-section-label mt-1">OFFICE</div>
             <div className="grid grid-cols-4 gap-2">
-              {/* Meeting Room */}
+              {/* Meeting Room — Project Hub */}
               <div
                 className="facility-card-compact"
                 onClick={mainProject ? () => setPanel({ type: 'project', projectId: mainProject.id }) : undefined}
@@ -917,6 +997,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
                 <div className="fcc-hdr" style={{ background: '#3B82F6' }}>{'\u{1F3E2}'} MEETING ROOM</div>
                 <div className="fcc-canvas"><FacilityCanvas type="meeting" /></div>
                 <div className="fcc-body">
+                  <div className="fcc-desc">Projects, PRDs, and task boards</div>
                   {mainProject ? (<>
                     <div className="fcc-title">"{mainProject.name}"</div>
                     <div className="fcc-meta">Status: <strong style={{ color: 'var(--active-green)' }}>{mainProject.status}</strong></div>
@@ -926,11 +1007,12 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
                 </div>
               </div>
 
-              {/* Bulletin Board */}
+              {/* Bulletin Board — Operations Log */}
               <div className="facility-card-compact" onClick={() => setPanel({ type: 'bulletin' })}>
                 <div className="fcc-hdr" style={{ background: '#64748b' }}>{'\u{1F4CB}'} BULLETIN</div>
                 <div className="fcc-canvas"><FacilityCanvas type="bulletin" /></div>
                 <div className="fcc-body">
+                  <div className="fcc-desc">Waves and daily standups</div>
                   {waves.slice(0, 1).map((w) => (
                     <div key={w.id} className="fcc-item">Wave {w.id}</div>
                   ))}
@@ -938,16 +1020,17 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
                     <div key={s.date} className="fcc-item">Standup {s.date}</div>
                   ))}
                   {waves.length === 0 && standups.length === 0 && (
-                    <div className="fcc-meta" style={{ fontStyle: 'italic' }}>No entries</div>
+                    <div className="fcc-meta" style={{ fontStyle: 'italic' }}>No entries yet</div>
                   )}
                 </div>
               </div>
 
-              {/* Decision Log */}
+              {/* Decision Log — Strategic Decisions */}
               <div className="facility-card-compact" onClick={() => setPanel({ type: 'decisions' })}>
                 <div className="fcc-hdr" style={{ background: '#EF4444' }}>{'\u{1F4DC}'} DECISIONS</div>
                 <div className="fcc-canvas"><FacilityCanvas type="decision" /></div>
                 <div className="fcc-body">
+                  <div className="fcc-desc">CEO strategic decision log</div>
                   <div className="fcc-title">{decisions.length} decisions</div>
                   {decisions.slice(0, 2).map((d) => (
                     <div key={d.id} className="fcc-item">#{d.id} {d.title}</div>
@@ -955,11 +1038,12 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
                 </div>
               </div>
 
-              {/* Knowledge Base */}
+              {/* Knowledge Base — Research & Docs */}
               <div className="facility-card-compact" onClick={() => setPanel({ type: 'knowledge' })}>
                 <div className="fcc-hdr" style={{ background: '#0D9488' }}>{'\u{1F4DA}'} KNOWLEDGE</div>
                 <div className="fcc-canvas"><FacilityCanvas type="knowledge" /></div>
                 <div className="fcc-body">
+                  <div className="fcc-desc">Research, analysis, and references</div>
                   <div className="fcc-title">{knowledgeDocs.length} docs</div>
                   {knowledgeDocs.slice(0, 2).map((d) => (
                     <div key={d.id} className="fcc-item">{d.title}</div>
@@ -1020,8 +1104,47 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           >
             {OFFICE_THEMES[theme]?.icon ?? ''} {OFFICE_THEMES[theme]?.name ?? 'THEME'}
           </button>
+          <span className="mx-1">|</span>
+          <span style={{ color: saveHook.state === 'dirty' ? 'var(--idle-amber)' : 'var(--terminal-text-muted)' }}>
+            {saveHook.state === 'no-git' ? 'No git'
+              : saveHook.state === 'saving' ? 'Saving...'
+              : saveHook.state === 'dirty' ? `${saveHook.dirtyCount} unsaved`
+              : saveHook.lastSaved ? `Saved ${(() => { const m = Math.floor((Date.now() - new Date(saveHook.lastSaved).getTime()) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m}m ago` : `${Math.floor(m / 60)}h ago`; })()}`
+              : 'Saved'}
+          </span>
         </div>
         <div className="flex items-center gap-2">
+          {/* Minimized wave command center indicator */}
+          {waveState && waveMinimized && (
+            <button
+              onClick={() => setWaveMinimized(false)}
+              className="px-3 py-1 font-black text-white cursor-pointer animate-pulse"
+              style={{
+                background: '#B71C1C',
+                border: '2px solid #7f121288',
+                fontFamily: 'var(--pixel-font)',
+                borderRadius: 4,
+              }}
+            >
+              WAVE
+            </button>
+          )}
+          {/* Minimized job indicator */}
+          {jobStack.length > 0 && jobMinimized && (
+            <button
+              onClick={() => setJobMinimized(false)}
+              className="px-3 py-1 font-black text-white cursor-pointer animate-pulse"
+              style={{
+                background: jobStack[jobStack.length - 1].color,
+                border: `2px solid ${jobStack[jobStack.length - 1].color}88`,
+                fontFamily: 'var(--pixel-font)',
+                borderRadius: 4,
+              }}
+            >
+              {jobStack[jobStack.length - 1].title.slice(0, 20)}
+              {jobStack[jobStack.length - 1].title.length > 20 ? '..' : ''}
+            </button>
+          )}
           <button
             onClick={() => setShowWaveModal(true)}
             className="wave-btn px-3 py-1 font-black text-white cursor-pointer"
@@ -1109,38 +1232,89 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
         />
       )}
 
+      {/* Wave Command Center */}
+      {waveState && !waveMinimized && (
+        <WaveCommandCenter
+          directive={waveState.directive}
+          rootJobs={waveState.rootJobs}
+          orgNodes={orgNodes}
+          rootRoleId={orgRootId}
+          onClose={() => { setWaveState(null); setWaveMinimized(false); }}
+          onMinimize={() => setWaveMinimized(true)}
+          onDone={() => {
+            handleJobDone();
+            addToast('Wave complete', '#2E7D32');
+          }}
+          onOpenKnowledgeDoc={(docId) => {
+            setWaveState(null);
+            setWaveMinimized(false);
+            setPanel({ type: 'knowledge', docId });
+            api.getKnowledge().then(setKnowledgeDocs).catch(() => {});
+          }}
+        />
+      )}
+
       {/* Phase 2: Activity Panel (replaces ExecutionPanel + WaveExecutionPanel) */}
-      {jobStack.length > 0 && (() => {
+      {jobStack.length > 0 && !jobMinimized && (() => {
         const current = jobStack[jobStack.length - 1];
+        const isWave = waveJobs.length > 1;
         return (
-          <ActivityPanel
-            key={current.jobId}
-            jobId={current.jobId}
-            title={jobStack.length > 1
-              ? `${'< '.repeat(0)}${current.title}`
-              : current.title
-            }
-            color={current.color}
-            variant="modal"
-            onClose={() => setJobStack([])}
-            onDone={() => { handleExecutionDone(); handleJobDone(); }}
-            onNavigateToJob={(childJobId) => {
-              // Navigate deeper into dispatch chain
-              api.getJob(childJobId).then((info) => {
-                const childColor = ROLE_COLORS[info.roleId] ?? '#888';
-                setJobStack((prev) => [...prev, {
-                  jobId: childJobId,
-                  title: `${info.roleId.toUpperCase()} · ${info.task.slice(0, 40)}`,
-                  color: childColor,
-                }]);
-              }).catch(console.error);
-            }}
-            onOpenKnowledgeDoc={(docId) => {
-              setJobStack([]);
-              setPanel({ type: 'knowledge', docId });
-              api.getKnowledge().then(setKnowledgeDocs).catch(() => {});
-            }}
-          />
+          <>
+            {/* Wave role tabs — show when multiple C-Level jobs */}
+            {isWave && jobStack.length === 1 && (
+              <div className="fixed top-[5%] left-1/2 -translate-x-1/2 w-[720px] max-w-[95vw] z-[63] flex gap-1 px-2 pt-2">
+                {waveJobs.map((wj, i) => (
+                  <button
+                    key={wj.jobId}
+                    onClick={() => {
+                      setWaveActiveIdx(i);
+                      setJobStack([{ jobId: wj.jobId, title: `CEO WAVE · ${wj.roleId.toUpperCase()}`, color: '#B71C1C' }]);
+                    }}
+                    className="px-3 py-1.5 text-xs font-bold rounded-t-lg cursor-pointer transition-colors"
+                    style={{
+                      background: waveActiveIdx === i ? '#B71C1C' : 'var(--terminal-bg)',
+                      color: waveActiveIdx === i ? '#fff' : 'var(--terminal-text-secondary)',
+                      border: `1px solid ${waveActiveIdx === i ? '#B71C1C' : 'var(--terminal-border)'}`,
+                      borderBottom: 'none',
+                    }}
+                  >
+                    {wj.roleId.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            )}
+            <ActivityPanel
+              key={current.jobId}
+              jobId={current.jobId}
+              title={jobStack.length > 1
+                ? current.title
+                : isWave
+                  ? `CEO WAVE · ${waveJobs[waveActiveIdx]?.roleName ?? ''}`
+                  : current.title
+              }
+              color={current.color}
+              variant="modal"
+              style={isWave && jobStack.length === 1 ? { marginTop: 28 } : undefined}
+              onClose={() => { setJobStack([]); setWaveJobs([]); setWaveActiveIdx(0); setJobMinimized(false); }}
+              onMinimize={() => setJobMinimized(true)}
+              onDone={() => { handleExecutionDone(); handleJobDone(); }}
+              onNavigateToJob={(childJobId) => {
+                api.getJob(childJobId).then((info) => {
+                  const childColor = ROLE_COLORS[info.roleId] ?? '#888';
+                  setJobStack((prev) => [...prev, {
+                    jobId: childJobId,
+                    title: `${info.roleId.toUpperCase()} · ${info.task.slice(0, 40)}`,
+                    color: childColor,
+                  }]);
+                }).catch(console.error);
+              }}
+              onOpenKnowledgeDoc={(docId) => {
+                setJobStack([]); setWaveJobs([]); setWaveActiveIdx(0); setJobMinimized(false);
+                setPanel({ type: 'knowledge', docId });
+                api.getKnowledge().then(setKnowledgeDocs).catch(() => {});
+              }}
+            />
+          </>
         );
       })()}
 
@@ -1161,6 +1335,9 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
       {/* Phase 2: Wave Modal */}
       {showWaveModal && (
         <WaveModal
+          cLevelRoles={roles.filter(r => r.level === 'c-level')}
+          orgNodes={orgNodes}
+          rootId={orgRootId}
           onClose={() => setShowWaveModal(false)}
           onDispatch={handleWaveDispatch}
         />
@@ -1197,6 +1374,22 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           onThemeChange={setTheme}
           onUpdateName={async (roleId, name) => { await handleUpdateRole(roleId, { name }); }}
           initialTab={customizeInitialTab}
+        />
+      )}
+
+      {/* Save Modal */}
+      {showSaveModal && (
+        <SaveModal
+          status={saveHook.status}
+          history={saveHook.history}
+          onClose={() => setShowSaveModal(false)}
+          onSave={async (msg) => {
+            const result = await saveHook.save(msg);
+            return result;
+          }}
+          onLoadHistory={saveHook.loadHistory}
+          onRestore={saveHook.restore}
+          saving={saveHook.state === 'saving'}
         />
       )}
 

@@ -128,7 +128,7 @@ export default function HireRoleModal({ existingRoles, onClose, onHire }: Props)
             <div
               key={s}
               className="flex-1 h-1 rounded-full transition-colors"
-              style={{ background: s <= step ? '#2E7D32' : '#E0E0E0' }}
+              style={{ background: s <= step ? '#2E7D32' : 'rgba(255,255,255,0.1)' }}
             />
           ))}
         </div>
@@ -144,7 +144,7 @@ export default function HireRoleModal({ existingRoles, onClose, onHire }: Props)
                   value={name}
                   onChange={(e) => handleNameChange(e.target.value)}
                   placeholder="e.g. Data Analyst"
-                  className="w-full p-2.5 rounded-lg border-2 border-[var(--office-border)] bg-white text-sm focus:outline-none focus:border-[var(--desk-dark)] transition-colors"
+                  className="w-full p-2.5 rounded-lg border border-white/10 bg-white/5 text-sm text-white/90 placeholder-white/25 focus:outline-none focus:border-white/25 transition-colors"
                 />
               </div>
               <div>
@@ -152,7 +152,7 @@ export default function HireRoleModal({ existingRoles, onClose, onHire }: Props)
                 <input
                   value={id}
                   onChange={(e) => { setId(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')); setIdEdited(true); }}
-                  className={`w-full p-2.5 rounded-lg border-2 bg-white text-sm font-mono focus:outline-none transition-colors ${idConflict ? 'border-red-400' : 'border-[var(--office-border)] focus:border-[var(--desk-dark)]'}`}
+                  className={`w-full p-2.5 rounded-lg border bg-white/5 text-sm text-white/90 font-mono focus:outline-none transition-colors ${idConflict ? 'border-red-400' : 'border-white/10 focus:border-white/25'}`}
                 />
                 {idConflict && <div className="text-xs text-red-500 mt-1">ID already exists</div>}
               </div>
@@ -163,7 +163,7 @@ export default function HireRoleModal({ existingRoles, onClose, onHire }: Props)
                     <button
                       key={opt.value}
                       onClick={() => setLevel(opt.value)}
-                      className={`flex-1 p-2 text-xs font-semibold rounded-lg border-2 cursor-pointer transition-colors ${level === opt.value ? 'border-green-600 bg-green-50 text-green-800' : 'border-gray-200 hover:border-gray-300'}`}
+                      className={`flex-1 p-2 text-xs font-semibold rounded-lg border cursor-pointer transition-colors ${level === opt.value ? 'border-green-600 bg-green-900/30 text-green-400' : 'border-white/10 text-white/50 hover:border-white/20'}`}
                     >
                       {opt.label}
                     </button>
@@ -175,11 +175,11 @@ export default function HireRoleModal({ existingRoles, onClose, onHire }: Props)
                 <select
                   value={reportsTo}
                   onChange={(e) => setReportsTo(e.target.value)}
-                  className="w-full p-2.5 rounded-lg border-2 border-[var(--office-border)] bg-white text-sm focus:outline-none focus:border-[var(--desk-dark)] transition-colors"
+                  className="w-full p-2.5 rounded-lg border border-white/10 bg-white/5 text-sm text-white/90 focus:outline-none focus:border-white/25 transition-colors"
                 >
-                  <option value="ceo">CEO</option>
+                  <option value="ceo" className="bg-[var(--wall)] text-white">CEO</option>
                   {existingRoles.map((r) => (
-                    <option key={r.id} value={r.id}>{r.name} ({r.id})</option>
+                    <option key={r.id} value={r.id} className="bg-[var(--wall)] text-white">{r.name} ({r.id})</option>
                   ))}
                 </select>
               </div>
@@ -194,7 +194,7 @@ export default function HireRoleModal({ existingRoles, onClose, onHire }: Props)
                 value={persona}
                 onChange={(e) => setPersona(e.target.value)}
                 placeholder="Describe this role's personality, expertise, and working style..."
-                className="w-full h-40 p-3 rounded-lg border-2 border-[var(--office-border)] bg-white text-sm resize-none focus:outline-none focus:border-[var(--desk-dark)] transition-colors"
+                className="w-full h-40 p-3 rounded-lg border border-white/10 bg-white/5 text-sm text-white/90 placeholder-white/25 resize-none focus:outline-none focus:border-white/25 transition-colors"
               />
               <div className="text-[10px] text-gray-400 mt-1">This defines how the AI agent will behave in this role</div>
             </div>
@@ -220,7 +220,7 @@ export default function HireRoleModal({ existingRoles, onClose, onHire }: Props)
           {step === 4 && (
             <div className="space-y-3">
               <div className="text-[11px] font-bold text-[var(--desk-dark)] uppercase tracking-wider mb-2">Review</div>
-              <div className="bg-white rounded-xl p-4 border border-[var(--office-border)]">
+              <div className="bg-white/5 rounded-xl p-4 border border-white/10">
                 <div className="flex gap-4">
                   <div className="flex-shrink-0 rounded-lg overflow-hidden" style={{ background: '#0d1117', padding: 8 }}>
                     <SpriteCanvas roleId="default" appearance={appearance} scale={2} />
@@ -232,13 +232,13 @@ export default function HireRoleModal({ existingRoles, onClose, onHire }: Props)
                     <ReviewRow label="Reports To" value={reportsTo} />
                   </div>
                 </div>
-                <div className="pt-3 mt-3 border-t border-gray-100">
-                  <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Persona</div>
-                  <div className="text-xs text-gray-700 leading-relaxed">{persona}</div>
+                <div className="pt-3 mt-3 border-t border-white/10">
+                  <div className="text-[10px] text-white/30 uppercase tracking-wider mb-1">Persona</div>
+                  <div className="text-xs text-white/60 leading-relaxed">{persona}</div>
                 </div>
               </div>
               {error && (
-                <div className="text-xs text-red-600 bg-red-50 p-2 rounded-lg border border-red-200">{error}</div>
+                <div className="text-xs text-red-400 bg-red-900/20 p-2 rounded-lg border border-red-800/30">{error}</div>
               )}
             </div>
           )}
@@ -250,7 +250,7 @@ export default function HireRoleModal({ existingRoles, onClose, onHire }: Props)
             {step > 1 && (
               <button
                 onClick={() => setStep(step - 1)}
-                className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 cursor-pointer"
+                className="px-4 py-2 text-sm rounded-lg border border-white/15 text-white/60 hover:bg-white/5 cursor-pointer"
               >
                 Back
               </button>
@@ -259,7 +259,7 @@ export default function HireRoleModal({ existingRoles, onClose, onHire }: Props)
           <div className="flex gap-3">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 cursor-pointer"
+              className="px-4 py-2 text-sm rounded-lg border border-white/15 text-white/60 hover:bg-white/5 cursor-pointer"
             >
               Cancel
             </button>
@@ -292,8 +292,8 @@ export default function HireRoleModal({ existingRoles, onClose, onHire }: Props)
 function ReviewRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex justify-between text-sm">
-      <span className="text-gray-400">{label}</span>
-      <span className={`font-semibold text-gray-800 ${mono ? 'font-mono' : ''}`}>{value}</span>
+      <span className="text-white/40">{label}</span>
+      <span className={`font-semibold text-white/80 ${mono ? 'font-mono' : ''}`}>{value}</span>
     </div>
   );
 }

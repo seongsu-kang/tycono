@@ -12,6 +12,9 @@ import os from 'node:os';
 import { scaffold, getAvailableTeams, loadTeam } from '../services/scaffold.js';
 import type { ScaffoldConfig } from '../services/scaffold.js';
 import { importKnowledge } from '../services/knowledge-importer.js';
+import { AnthropicProvider, type LLMProvider } from '../engine/llm-adapter.js';
+import { jobManager } from '../services/job-manager.js';
+import { applyConfig, readConfig } from '../services/company-config.js';
 
 export const setupRouter = Router();
 
@@ -101,10 +104,9 @@ setupRouter.post('/scaffold', (req, res) => {
     const created = scaffold(config);
 
     process.env.COMPANY_ROOT = projectRoot;
-    if (apiKey) {
-      process.env.ANTHROPIC_API_KEY = apiKey;
-      process.env.EXECUTION_ENGINE = 'direct-api';
-    }
+    // Load config.json written by scaffold and apply to process.env
+    applyConfig(projectRoot);
+    jobManager.refreshRunner();
 
     res.json({ ok: true, companyName, projectRoot, created });
   } catch (err) {
@@ -190,7 +192,12 @@ setupRouter.post('/connect-akb', (req, res) => {
 
   process.env.COMPANY_ROOT = resolved;
 
-  res.json({ ok: true, companyName, companyRoot: resolved });
+  // Load existing config.json if present
+  const config = readConfig(resolved);
+  applyConfig(resolved);
+  jobManager.refreshRunner();
+
+  res.json({ ok: true, companyName, companyRoot: resolved, engine: config.engine });
 });
 
 /**
@@ -219,6 +226,11 @@ setupRouter.post('/import-knowledge', (req, res) => {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   };
 
+  // Build LLMProvider from env if available
+  const llm: LLMProvider | undefined = process.env.ANTHROPIC_API_KEY
+    ? new AnthropicProvider({ model: 'claude-haiku-4-5-20251001' })
+    : undefined;
+
   importKnowledge(importPaths, root, {
     onScanning: (scanPath, fileCount) => sendSSE('scanning', { path: scanPath, fileCount }),
     onProcessing: (file, index, total) => sendSSE('processing', { file, index, total }),
@@ -232,7 +244,7 @@ setupRouter.post('/import-knowledge', (req, res) => {
       sendSSE('error', { message });
       res.end();
     },
-  }).catch((err) => {
+  }, llm).catch((err) => {
     sendSSE('error', { message: err instanceof Error ? err.message : 'Import failed' });
     res.end();
   });

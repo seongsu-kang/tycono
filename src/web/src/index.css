@@ -328,6 +328,12 @@ body {
   flex-direction: column;
   gap: 2px;
 }
+.fcc-desc {
+  font-size: 7px;
+  color: var(--terminal-text-secondary);
+  opacity: 0.7;
+  margin-bottom: 2px;
+}
 .fcc-title {
   font-size: 9px;
   font-weight: 900;
@@ -389,6 +395,15 @@ body {
 }
 .wave-btn {
   animation: wave-pulse 3s ease-in-out infinite;
+}
+
+/* Wave edge flow animation (SVG dash offset) */
+@keyframes wave-edge-flow {
+  0% { stroke-dashoffset: 20; }
+  100% { stroke-dashoffset: 0; }
+}
+.wave-edge-flow {
+  animation: wave-edge-flow 1s linear infinite;
 }
 
 /* Notification toast slide */
@@ -1129,6 +1144,23 @@ body {
   text-shadow: 0 1px 3px var(--floor-dark);
 }
 
+.iso-facility-desc {
+  position: absolute;
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 7px;
+  color: var(--terminal-text-muted);
+  white-space: nowrap;
+  opacity: 0;
+  text-shadow: 0 1px 2px var(--floor-dark);
+  transition: opacity 0.2s;
+}
+
+.iso-facility:hover .iso-facility-desc {
+  opacity: 0.8;
+}
+
 .iso-facility-sublabel {
   position: absolute;
   bottom: -10px;
@@ -1139,6 +1171,11 @@ body {
   color: var(--terminal-text-muted);
   white-space: nowrap;
   text-shadow: 0 1px 2px var(--floor-dark);
+  transition: bottom 0.2s;
+}
+
+.iso-facility:hover .iso-facility-sublabel {
+  bottom: -22px;
 }
 
 /* ── Decorations ── */

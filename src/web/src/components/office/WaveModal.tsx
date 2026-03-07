@@ -1,11 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
+import OrgTreePreview from './OrgTreePreview';
+import type { OrgNode } from '../../types';
 
 interface Props {
+  cLevelRoles: { id: string; name: string }[];
+  orgNodes: Record<string, OrgNode>;
+  rootId: string;
   onClose: () => void;
   onDispatch: (directive: string) => void;
 }
 
-export default function WaveModal({ onClose, onDispatch }: Props) {
+export default function WaveModal({ cLevelRoles, orgNodes, rootId, onClose, onDispatch }: Props) {
   const [directive, setDirective] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -14,7 +19,7 @@ export default function WaveModal({ onClose, onDispatch }: Props) {
   }, []);
 
   const handleSubmit = () => {
-    if (!directive.trim()) return;
+    if (!directive.trim() || cLevelRoles.length === 0) return;
     onDispatch(directive.trim());
     onClose();
   };
@@ -28,6 +33,8 @@ export default function WaveModal({ onClose, onDispatch }: Props) {
     }
   };
 
+  const hasOrgData = rootId && Object.keys(orgNodes).length > 0;
+
   return (
     <>
       <div className="fixed inset-0 bg-black/40 z-[60] backdrop-blur-sm" onClick={onClose} />
@@ -35,40 +42,72 @@ export default function WaveModal({ onClose, onDispatch }: Props) {
         {/* Header */}
         <div className="p-5 text-white" style={{ background: 'linear-gradient(135deg, #B71C1C, #D32F2F)' }}>
           <div className="text-lg font-bold">CEO Wave</div>
-          <div className="text-sm opacity-80 mt-0.5">Dispatch a directive to all roles</div>
+          <div className="text-sm opacity-80 mt-0.5">Broadcast a directive to all C-Level reports</div>
         </div>
 
         {/* Body */}
-        <div className="p-5">
-          <label className="block text-[11px] font-bold text-[var(--desk-dark)] uppercase tracking-wider mb-2">
-            Directive
-          </label>
-          <textarea
-            ref={inputRef}
-            value={directive}
-            onChange={(e) => setDirective(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Enter a company-wide directive..."
-            className="w-full h-32 p-3 rounded-lg border-2 border-[var(--office-border)] bg-white text-sm resize-none focus:outline-none focus:border-[var(--desk-dark)] transition-colors"
-          />
-          <div className="text-[10px] text-gray-400 mt-1">Cmd+Enter to dispatch</div>
+        <div className="p-5 space-y-4">
+          {/* Propagation Preview */}
+          {hasOrgData && (
+            <OrgTreePreview orgNodes={orgNodes} rootId={rootId} />
+          )}
+
+          {/* Target Roles (fallback if no org data) */}
+          {!hasOrgData && (
+            <div>
+              <label className="block text-[11px] font-bold text-[var(--desk-dark)] uppercase tracking-wider mb-2">
+                Dispatching to
+              </label>
+              <div className="flex gap-2 flex-wrap">
+                {cLevelRoles.length > 0 ? cLevelRoles.map((r) => (
+                  <span
+                    key={r.id}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg border-2 border-red-200 bg-red-50 text-red-800"
+                  >
+                    {r.id.toUpperCase()} · {r.name}
+                  </span>
+                )) : (
+                  <span className="text-xs text-gray-400 italic">No C-Level roles found</span>
+                )}
+              </div>
+              <div className="text-[10px] text-gray-400 mt-1">
+                Each C-Level receives the directive and delegates to their reports
+              </div>
+            </div>
+          )}
+
+          {/* Directive */}
+          <div>
+            <label className="block text-[11px] font-bold text-[var(--desk-dark)] uppercase tracking-wider mb-2">
+              Directive
+            </label>
+            <textarea
+              ref={inputRef}
+              value={directive}
+              onChange={(e) => setDirective(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="e.g. Report current status across all departments"
+              className="w-full h-28 p-3 rounded-lg border border-white/10 bg-white/5 text-sm text-white/90 placeholder-white/25 resize-none focus:outline-none focus:border-white/25 transition-colors"
+            />
+            <div className="text-[10px] text-gray-400 mt-1">Cmd+Enter to dispatch</div>
+          </div>
         </div>
 
         {/* Footer */}
         <div className="flex justify-end gap-3 px-5 pb-5">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 cursor-pointer"
+            className="px-4 py-2 text-sm rounded-lg border border-white/15 text-white/60 hover:bg-white/5 cursor-pointer"
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!directive.trim()}
+            disabled={!directive.trim() || cLevelRoles.length === 0}
             className="px-5 py-2 text-sm text-white rounded-lg font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ background: '#B71C1C' }}
           >
-            Dispatch Wave
+            Dispatch to {cLevelRoles.length} Role{cLevelRoles.length !== 1 ? 's' : ''}
           </button>
         </div>
       </div>

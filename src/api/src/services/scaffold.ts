@@ -6,6 +6,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeConfig } from './company-config.js';
+import type { CompanyConfig } from './company-config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -145,7 +147,7 @@ export function scaffold(config: ScaffoldConfig): string[] {
     'company', 'roles', 'projects', 'architecture',
     'operations', 'operations/standup', 'operations/waves',
     'operations/decisions', 'knowledge', '.claude/skills',
-    '.claude/skills/_shared',
+    '.claude/skills/_shared', '.the-company',
   ];
   for (const dir of dirs) {
     fs.mkdirSync(path.join(root, dir), { recursive: true });
@@ -175,10 +177,21 @@ export function scaffold(config: ScaffoldConfig): string[] {
     created.push('.gitignore');
   }
 
-  // Write .env (API key)
+  // Write .the-company/config.json (engine + API key)
   if (config.apiKey) {
+    const companyConfig: CompanyConfig = {
+      engine: 'direct-api',
+      apiKey: config.apiKey,
+    };
+    writeConfig(root, companyConfig);
+    created.push('.the-company/config.json');
+    // Also write .env for backward compatibility
     fs.writeFileSync(path.join(root, '.env'), `ANTHROPIC_API_KEY=${config.apiKey}\n`);
     created.push('.env');
+  } else {
+    const companyConfig: CompanyConfig = { engine: 'claude-cli' };
+    writeConfig(root, companyConfig);
+    created.push('.the-company/config.json');
   }
 
   // Create team roles + install skills

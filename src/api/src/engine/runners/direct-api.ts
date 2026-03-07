@@ -1,5 +1,6 @@
 import { runAgentLoop } from '../agent-loop.js';
 import { AnthropicProvider, type LLMProvider } from '../llm-adapter.js';
+import { getTokenLedger } from '../../services/token-ledger.js';
 import type { ExecutionRunner, RunnerConfig, RunnerCallbacks, RunnerHandle, RunnerResult } from './types.js';
 
 /* ─── Direct API Runner ──────────────────────── */
@@ -24,6 +25,8 @@ export class DirectApiRunner implements ExecutionRunner {
   execute(config: RunnerConfig, callbacks: RunnerCallbacks): RunnerHandle {
     const abortController = new AbortController();
 
+    const tokenLedger = getTokenLedger(config.companyRoot);
+
     const promise = runAgentLoop({
       companyRoot: config.companyRoot,
       roleId: config.roleId,
@@ -34,6 +37,9 @@ export class DirectApiRunner implements ExecutionRunner {
       maxTurns: config.maxTurns,
       llm: this.llm,
       abortSignal: abortController.signal,
+      jobId: config.jobId,
+      model: config.model,
+      tokenLedger,
       onText: (text) => callbacks.onText?.(text),
       onToolExec: (name, input) => callbacks.onToolUse?.(name, input),
       onDispatch: (roleId, task) => callbacks.onDispatch?.(roleId, task),

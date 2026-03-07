@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { COMPANY_ROOT } from '../services/file-reader.js';
 import { getAllActivities, setActivity, updateActivity, completeActivity } from '../services/activity-tracker.js';
-import { buildOrgTree, canDispatchTo } from '../engine/org-tree.js';
+import { buildOrgTree, canDispatchTo, getSubordinates } from '../engine/org-tree.js';
 import { createRunner, type RunnerResult } from '../engine/runners/index.js';
 import {
   getSession,
@@ -12,9 +12,11 @@ import {
 import { jobManager, type Job } from '../services/job-manager.js';
 import { ActivityStream, type ActivityEvent, type ActivitySubscriber } from '../services/activity-stream.js';
 
-/* ─── Shared Runner instance (for session messages that still use direct SSE) ── */
+/* ─── Runner — lazy, re-created when engine changes ── */
 
-const runner = createRunner();
+function getRunner() {
+  return createRunner();
+}
 
 /* ─── Active execution tracking (legacy, kept for /api/exec/status compat) ──── */
 
@@ -115,7 +117,7 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
   const targetRole = (body.targetRole as string) || 'cto';
   const parentJobId = body.parentJobId as string | undefined;
 
-  // Wave shorthand
+  // Wave shorthand — broadcast to ALL C-level direct reports
   if (type === 'wave') {
     if (!directive) {
       jsonResponse(res, 400, { error: 'directive is required for wave jobs' });
@@ -123,21 +125,27 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
     }
 
     const orgTree = buildOrgTree(COMPANY_ROOT);
-    if (!canDispatchTo(orgTree, 'ceo', targetRole)) {
-      jsonResponse(res, 403, { error: `CEO cannot dispatch to ${targetRole}.` });
+    const cLevelRoles = getSubordinates(orgTree, 'ceo');
+
+    if (cLevelRoles.length === 0) {
+      jsonResponse(res, 400, { error: 'No C-level roles found to dispatch wave.' });
       return;
     }
 
-    const job = jobManager.startJob({
-      type: 'wave',
-      roleId: targetRole,
-      task: `[CEO Wave] ${directive}`,
-      sourceRole: 'ceo',
-      parentJobId,
-    });
+    const jobIds: string[] = [];
+    for (const cRole of cLevelRoles) {
+      const job = jobManager.startJob({
+        type: 'wave',
+        roleId: cRole,
+        task: `[CEO Wave] ${directive}`,
+        sourceRole: 'ceo',
+        parentJobId,
+      });
+      roleStatus.set(cRole, 'working');
+      jobIds.push(job.id);
+    }
 
-    roleStatus.set(targetRole, 'working');
-    jsonResponse(res, 200, { jobId: job.id });
+    jsonResponse(res, 200, { jobIds });
     return;
   }
 
@@ -371,7 +379,6 @@ function handleAssign(body: Record<string, unknown>, req: IncomingMessage, res: 
 
 function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: ServerResponse): void {
   const directive = body.directive as string;
-  const target = (body.targetRole as string) || 'cto';
 
   if (!directive) {
     jsonResponse(res, 400, { error: 'directive is required' });
@@ -379,67 +386,89 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
   }
 
   const orgTree = buildOrgTree(COMPANY_ROOT);
+  const cLevelRoles = getSubordinates(orgTree, 'ceo');
 
-  if (!canDispatchTo(orgTree, 'ceo', target)) {
-    jsonResponse(res, 403, {
-      error: `CEO cannot dispatch to ${target}. Only direct reports (C-level) are valid wave targets.`,
-    });
+  if (cLevelRoles.length === 0) {
+    jsonResponse(res, 400, { error: 'No C-level roles found to dispatch wave.' });
     return;
   }
 
-  // Start job via JobManager
-  const job = jobManager.startJob({
-    type: 'wave',
-    roleId: target,
-    task: `[CEO Wave] ${directive}`,
-    sourceRole: 'ceo',
-  });
-  roleStatus.set(target, 'working');
+  // Start a job for EACH C-level role
+  const jobs: Job[] = [];
+  for (const cRole of cLevelRoles) {
+    const job = jobManager.startJob({
+      type: 'wave',
+      roleId: cRole,
+      task: `[CEO Wave] ${directive}`,
+      sourceRole: 'ceo',
+    });
+    roleStatus.set(cRole, 'working');
+    jobs.push(job);
+  }
 
-  // Bridge: stream job events as legacy SSE
+  // Bridge: stream ALL job events as SSE, close when all done
   startSSE(res);
-  sendSSE(res, 'start', { id: job.id, directive, targetRole: target });
+  sendSSE(res, 'start', {
+    ids: jobs.map((j) => j.id),
+    directive,
+    targetRoles: cLevelRoles,
+  });
 
-  const subscriber = (event: ActivityEvent) => {
-    switch (event.type) {
-      case 'text':
-        sendSSE(res, 'output', { text: event.data.text });
-        break;
-      case 'thinking':
-        sendSSE(res, 'thinking', { text: event.data.text });
-        break;
-      case 'tool:start':
-        sendSSE(res, 'tool', { name: event.data.name, input: event.data.input });
-        break;
-      case 'dispatch:start':
-        sendSSE(res, 'dispatch', { roleId: event.data.targetRoleId, task: event.data.task, childJobId: event.data.childJobId });
-        break;
-      case 'turn:complete':
-        sendSSE(res, 'turn', { turn: event.data.turn });
-        break;
-      case 'stderr':
-        sendSSE(res, 'stderr', { message: event.data.message });
-        break;
-      case 'job:done':
-        roleStatus.set(target, 'idle');
-        sendSSE(res, 'done', event.data);
-        res.end();
-        job.stream.unsubscribe(subscriber);
-        break;
-      case 'job:error':
-        roleStatus.set(target, 'idle');
-        sendSSE(res, 'error', { message: event.data.message });
-        res.end();
-        job.stream.unsubscribe(subscriber);
-        break;
-    }
-  };
+  let doneCount = 0;
+  const subscribers: Array<{ job: Job; sub: ActivitySubscriber }> = [];
 
-  job.stream.subscribe(subscriber);
+  for (const job of jobs) {
+    const subscriber: ActivitySubscriber = (event: ActivityEvent) => {
+      const rolePrefix = job.roleId;
+      switch (event.type) {
+        case 'text':
+          sendSSE(res, 'output', { roleId: rolePrefix, text: event.data.text });
+          break;
+        case 'thinking':
+          sendSSE(res, 'thinking', { roleId: rolePrefix, text: event.data.text });
+          break;
+        case 'tool:start':
+          sendSSE(res, 'tool', { roleId: rolePrefix, name: event.data.name, input: event.data.input });
+          break;
+        case 'dispatch:start':
+          sendSSE(res, 'dispatch', { roleId: rolePrefix, targetRoleId: event.data.targetRoleId, task: event.data.task, childJobId: event.data.childJobId });
+          break;
+        case 'turn:complete':
+          sendSSE(res, 'turn', { roleId: rolePrefix, turn: event.data.turn });
+          break;
+        case 'stderr':
+          sendSSE(res, 'stderr', { roleId: rolePrefix, message: event.data.message });
+          break;
+        case 'job:done':
+          roleStatus.set(rolePrefix, 'idle');
+          sendSSE(res, 'role:done', { roleId: rolePrefix, ...event.data });
+          doneCount++;
+          if (doneCount >= jobs.length) {
+            sendSSE(res, 'done', { directive, completedRoles: cLevelRoles });
+            res.end();
+          }
+          break;
+        case 'job:error':
+          roleStatus.set(rolePrefix, 'idle');
+          sendSSE(res, 'role:error', { roleId: rolePrefix, message: event.data.message });
+          doneCount++;
+          if (doneCount >= jobs.length) {
+            sendSSE(res, 'done', { directive, completedRoles: cLevelRoles });
+            res.end();
+          }
+          break;
+      }
+    };
 
-  // Client disconnect → unsubscribe only (job keeps running!)
+    job.stream.subscribe(subscriber);
+    subscribers.push({ job, sub: subscriber });
+  }
+
+  // Client disconnect → unsubscribe all (jobs keep running)
   req.on('close', () => {
-    job.stream.unsubscribe(subscriber);
+    for (const { job, sub } of subscribers) {
+      job.stream.unsubscribe(sub);
+    }
   });
 }
 
@@ -623,7 +652,7 @@ function handleSessionMessage(
     childSubscriptions.push({ job: childJob, subscriber });
   });
 
-  const handle = runner.execute(
+  const handle = getRunner().execute(
     { companyRoot: COMPANY_ROOT, roleId, task: fullTask, sourceRole: 'ceo', orgTree, readOnly, model: orgTree.nodes.get(roleId)?.model },
     {
       onText: (text) => {

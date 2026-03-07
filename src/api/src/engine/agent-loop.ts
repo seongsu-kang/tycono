@@ -4,6 +4,7 @@ import { assembleContext, type TeamStatus } from './context-assembler.js';
 import { validateDispatch } from './authority-validator.js';
 import { getToolsForRole } from './tools/definitions.js';
 import { executeTool, type ToolExecutorOptions } from './tools/executor.js';
+import { type TokenLedger } from '../services/token-ledger.js';
 
 /* ─── Types ──────────────────────────────────── */
 
@@ -20,6 +21,9 @@ export interface AgentConfig {
   visitedRoles?: Set<string>; // Circular dispatch detection
   abortSignal?: AbortSignal;  // Abort signal for cancellation
   teamStatus?: TeamStatus;    // Current team member statuses
+  jobId?: string;             // Job ID for token tracking
+  model?: string;             // LLM model name for cost tracking
+  tokenLedger?: TokenLedger;  // Token usage ledger (optional)
   // Callbacks
   onText?: (text: string) => void;
   onToolExec?: (name: string, input: Record<string, unknown>) => void;
@@ -113,9 +117,16 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
         depth: depth + 1,
         visitedRoles: new Set(visitedRoles), // Copy for parallel dispatch support
         abortSignal,
+        jobId: config.jobId,
+        model: config.model,
+        tokenLedger: config.tokenLedger,
         onText: (text) => onText?.(`[${targetRoleId}] ${text}`),
         onToolExec,
       });
+
+      // Aggregate sub-agent tokens into parent totals
+      totalInput += subResult.totalTokens.input;
+      totalOutput += subResult.totalTokens.output;
 
       return subResult.output;
     },
@@ -143,6 +154,16 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
     const response = await llm.chat(context.systemPrompt, messages, tools, abortSignal);
     totalInput += response.usage.inputTokens;
     totalOutput += response.usage.outputTokens;
+
+    // Record token usage
+    config.tokenLedger?.record({
+      ts: new Date().toISOString(),
+      jobId: config.jobId ?? 'unknown',
+      roleId,
+      model: config.model ?? 'unknown',
+      inputTokens: response.usage.inputTokens,
+      outputTokens: response.usage.outputTokens,
+    });
 
     // Process response content
     const assistantContent: MessageContent[] = response.content;
@@ -226,6 +247,14 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
         const verifyResponse = await llm.chat(context.systemPrompt, messages, tools, abortSignal);
         totalInput += verifyResponse.usage.inputTokens;
         totalOutput += verifyResponse.usage.outputTokens;
+        config.tokenLedger?.record({
+          ts: new Date().toISOString(),
+          jobId: config.jobId ?? 'unknown',
+          roleId,
+          model: config.model ?? 'unknown',
+          inputTokens: verifyResponse.usage.inputTokens,
+          outputTokens: verifyResponse.usage.outputTokens,
+        });
 
         messages.push({ role: 'assistant', content: verifyResponse.content });
 
@@ -266,6 +295,14 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
             const summaryResponse = await llm.chat(context.systemPrompt, messages, tools, abortSignal);
             totalInput += summaryResponse.usage.inputTokens;
             totalOutput += summaryResponse.usage.outputTokens;
+            config.tokenLedger?.record({
+              ts: new Date().toISOString(),
+              jobId: config.jobId ?? 'unknown',
+              roleId,
+              model: config.model ?? 'unknown',
+              inputTokens: summaryResponse.usage.inputTokens,
+              outputTokens: summaryResponse.usage.outputTokens,
+            });
             for (const block of summaryResponse.content) {
               if (block.type === 'text' && block.text) {
                 outputParts.push(block.text);

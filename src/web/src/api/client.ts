@@ -1,4 +1,4 @@
-import type { Company, Role, RoleDetail, Project, ProjectDetail, Standup, Wave, Decision, Session, CreateRoleInput, JobInfo, CompanyStatus, EngineDetection, PathValidation, ScaffoldInput, ScaffoldResult, TeamTemplate, BrowseResult, ConnectAkbResult, KnowledgeDoc, KnowledgeDocDetail } from '../types';
+import type { Company, Role, RoleDetail, Project, ProjectDetail, Standup, Wave, Decision, Session, CreateRoleInput, JobInfo, CompanyStatus, EngineDetection, PathValidation, ScaffoldInput, ScaffoldResult, TeamTemplate, BrowseResult, ConnectAkbResult, KnowledgeDoc, KnowledgeDocDetail, OrgTreeResponse } from '../types';
 
 const BASE = '/api';
 
@@ -50,6 +50,9 @@ export const api = {
   getWaves: () => get<Wave[]>('/operations/waves'),
   getDecisions: () => get<Decision[]>('/operations/decisions'),
 
+  // Engine
+  getOrgTree: () => get<OrgTreeResponse>('/engine/org'),
+
   // Roles (Engine)
   createRole: (input: CreateRoleInput) =>
     post<{ ok: boolean; roleId: string }>('/engine/roles', input),
@@ -71,7 +74,7 @@ export const api = {
 
   // Jobs
   startJob: (params: { type?: string; roleId?: string; task?: string; directive?: string; sourceRole?: string; readOnly?: boolean; targetRole?: string }) =>
-    post<{ jobId: string }>('/jobs', params),
+    post<{ jobId: string; jobIds?: string[] }>('/jobs', params),
   getJob: (id: string) => get<JobInfo>(`/jobs/${id}`),
   listJobs: (filter?: { status?: string; roleId?: string }) => {
     const params = new URLSearchParams();
@@ -104,4 +107,26 @@ export const api = {
     }).then(r => { if (!r.ok) throw new Error(`API error: ${r.status}`); return r.json(); });
   },
   deleteKnowledgeDoc: (id: string) => del<{ id: string; status: string }>(`/knowledge/${id}`),
+
+  // Preferences
+  getPreferences: () => get<{ appearances: Record<string, unknown>; theme: string }>('/preferences'),
+  updatePreferences: (data: Record<string, unknown>) =>
+    patch_<{ ok: boolean; appearances: Record<string, unknown>; theme: string }>('/preferences', data),
+
+  // Save (Git)
+  getSaveStatus: () => get<{
+    dirty: boolean; modified: string[]; untracked: string[];
+    lastCommit: { sha: string; message: string; date: string } | null;
+    branch: string; hasRemote: boolean; synced: boolean; noGit: boolean;
+  }>('/save/status'),
+  save: (message?: string) => post<{
+    ok: boolean; commitSha: string; message: string;
+    filesChanged: number; pushed: boolean; pushError?: string;
+  }>('/save', { message }),
+  getSaveHistory: (limit = 20) => get<Array<{
+    sha: string; shortSha: string; message: string; date: string;
+  }>>(`/save/history?limit=${limit}`),
+  restoreSave: (sha: string, paths?: string[]) => post<{
+    ok: boolean; commitSha: string; restoredFiles: string[];
+  }>('/save/restore', { sha, paths }),
 };

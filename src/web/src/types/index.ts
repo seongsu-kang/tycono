@@ -99,6 +99,22 @@ export interface CreateRoleInput {
   reports: { daily: string; weekly: string };
 }
 
+/* ─── Org Tree Types ─────────────────────── */
+
+export interface OrgNode {
+  id: string;
+  name: string;
+  level: 'c-level' | 'team-lead' | 'member';
+  reportsTo: string;
+  children: string[];
+}
+
+export interface OrgTreeResponse {
+  root: string;
+  nodes: Record<string, OrgNode>;
+  chart: string;
+}
+
 /* ─── Activity Stream Types ──────────────── */
 
 export type ActivityEventType =

@@ -7,14 +7,16 @@ interface ActivityPanelProps {
   title: string;
   color: string;
   variant: 'modal' | 'inline';
+  style?: React.CSSProperties;
   onClose: () => void;
+  onMinimize?: () => void;
   onDone?: () => void;
   onNavigateToJob?: (childJobId: string) => void;
   onOpenKnowledgeDoc?: (docId: string) => void;
 }
 
 export default function ActivityPanel({
-  jobId, title, color, variant, onClose, onDone, onNavigateToJob, onOpenKnowledgeDoc,
+  jobId, title, color, variant, style, onClose, onMinimize, onDone, onNavigateToJob, onOpenKnowledgeDoc,
 }: ActivityPanelProps) {
   const { events, status, textOutput, childJobIds } = useActivityStream(jobId);
   const [elapsed, setElapsed] = useState(0);
@@ -75,10 +77,13 @@ export default function ActivityPanel({
   const canClose = status === 'done' || status === 'error';
 
   const content = (
-    <div className={variant === 'modal'
-      ? 'fixed top-[5%] left-1/2 -translate-x-1/2 w-[720px] max-w-[95vw] h-[85vh] z-[61] bg-[var(--terminal-bg)] rounded-2xl shadow-2xl overflow-hidden flex flex-col'
-      : 'bg-[var(--terminal-bg)] rounded-xl border border-[var(--terminal-border)] overflow-hidden flex flex-col max-h-[400px]'
-    }>
+    <div
+      className={variant === 'modal'
+        ? 'fixed top-[5%] left-1/2 -translate-x-1/2 w-[720px] max-w-[95vw] h-[85vh] z-[61] bg-[var(--terminal-bg)] rounded-2xl shadow-2xl overflow-hidden flex flex-col'
+        : 'bg-[var(--terminal-bg)] rounded-xl border border-[var(--terminal-border)] overflow-hidden flex flex-col max-h-[400px]'
+      }
+      style={style}
+    >
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--terminal-border)] shrink-0">
         <div className="flex items-center gap-3">
@@ -92,6 +97,15 @@ export default function ActivityPanel({
           <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: `${statusColor}22`, color: statusColor }}>
             {statusLabel}
           </span>
+          {onMinimize && variant === 'modal' && (
+            <button
+              onClick={onMinimize}
+              title="Minimize"
+              className="text-[var(--terminal-text-muted)] hover:text-[var(--terminal-text)] text-sm cursor-pointer px-1"
+            >
+              &#x2013;
+            </button>
+          )}
           {canClose && (
             <button onClick={onClose} className="text-[var(--terminal-text-muted)] hover:text-[var(--terminal-text)] text-lg cursor-pointer">&times;</button>
           )}
