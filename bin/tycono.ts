@@ -14,17 +14,17 @@ const VERSION = JSON.parse(
 
 function printHelp(): void {
   console.log(`
-  the-company v${VERSION}
+  tycono v${VERSION}
 
   Build an AI company. Watch them work.
 
   Usage:
-    the-company              Start the server and open dashboard
-    the-company init         Initialize a new company in current directory
-    the-company init -y      Use defaults (skip prompts)
-    the-company init --name "Acme Corp"  Set company name
-    the-company --help       Show this help message
-    the-company --version    Show version
+    tycono              Start the server and open dashboard
+    tycono init         Initialize a new company in current directory
+    tycono init -y      Use defaults (skip prompts)
+    tycono init --name "Acme Corp"  Set company name
+    tycono --help       Show this help message
+    tycono --version    Show version
 
   AI Engine (auto-detected):
     1. Claude Code CLI       Install from https://claude.ai/download (recommended)
@@ -74,7 +74,7 @@ function printBanner(companyName: string, port: number, url: string, engine: str
   console.log(`
   ┌${'─'.repeat(w)}┐
   │${' '.repeat(w)}│
-  │   the-company v${VERSION.padEnd(w - 18)}│
+  │   tycono v${VERSION.padEnd(w - 18)}│
   │${' '.repeat(w)}│
   │   Company:  ${pad(companyName)}│
   │   Engine:   ${pad(engineLabel)}│
@@ -138,7 +138,7 @@ async function startServer(): Promise<void> {
     console.log(`
   ┌─────────────────────────────────────────────┐
   │                                             │
-  │   the-company v${VERSION.padEnd(29)}│
+  │   tycono v${VERSION.padEnd(29)}│
   │                                             │
   │   No company found — starting setup wizard  │
   │   URL:      ${url.padEnd(31)}│

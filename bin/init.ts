@@ -214,7 +214,7 @@ export async function runInit(args: string[] = []): Promise<void> {
   console.log(`
   ┌─────────────────────────────────────────┐
   │                                         │
-  │   the-company init                      │
+  │   tycono init                      │
   │   Create your AI company                │
   │                                         │
   └─────────────────────────────────────────┘
@@ -301,6 +301,6 @@ export async function runInit(args: string[] = []): Promise<void> {
   console.log('  Done! Your AI company is ready.\n');
   console.log('  Next steps:');
   console.log('    1. cd into this directory');
-  console.log('    2. Run: npx the-company');
+  console.log('    2. Run: npx tycono');
   console.log('    3. Open the dashboard in your browser\n');
 }

@@ -3,7 +3,7 @@
   "name": "Knowledge Gate",
   "description": "Knowledge documentation gatekeeper. Dynamic domain expert analysis to find optimal placement and connections for new knowledge.",
   "version": "1.0.0",
-  "author": "the-company",
+  "author": "tycono",
   "tags": ["knowledge", "documentation", "core"],
   "category": "core",
   "compatibleRoles": ["*"],

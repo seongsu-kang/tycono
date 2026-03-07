@@ -133,7 +133,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
     const context = assembleContext(companyRoot, roleId, task, sourceRole, orgTree, { teamStatus });
 
     // 2. System prompt를 임시 파일로 저장 (CLI arg 길이 제한 대비)
-    const tmpDir = path.join(os.tmpdir(), 'the-company-engine');
+    const tmpDir = path.join(os.tmpdir(), 'tycono-engine');
     fs.mkdirSync(tmpDir, { recursive: true });
     const promptFile = path.join(tmpDir, `ctx-${roleId}-${Date.now()}.md`);
     fs.writeFileSync(promptFile, context.systemPrompt);

@@ -2,7 +2,7 @@ import { COMPANY_ROOT } from './services/file-reader.js';
 import { applyConfig } from './services/company-config.js';
 import { createHttpServer } from './create-server.js';
 
-// Load .the-company/config.json and apply to process.env
+// Load .tycono/config.json and apply to process.env
 const config = applyConfig(COMPANY_ROOT);
 console.log(`[STARTUP] Engine: ${config.engine}, API key: ${config.apiKey ? 'set' : 'none'}`);
 

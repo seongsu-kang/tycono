@@ -1,4 +1,4 @@
-# The Company Platform — E2E Test Cases
+# Tycono Platform — E2E Test Cases
 
 > 사용자가 이 플랫폼에서 수행할 수 있는 모든 주요 액션을 테스트 케이스로 정의.
 > 각 케이스는 자동화 가능한 형태(Given-When-Then)로 작성.
@@ -145,7 +145,7 @@ when:
       apiKey: "sk-ant-xxx"
     }
 then:
-  - .the-company/config.json 생성됨
+  - .tycono/config.json 생성됨
   - config.engine: "direct-api"
   - config.apiKey: "sk-ant-xxx"
   - .env 파일에 ANTHROPIC_API_KEY 포함

@@ -3,8 +3,21 @@ import type { CharacterAppearance, OfficeTheme } from '../types/appearance';
 import { getDefaultAppearance, OFFICE_THEMES } from '../types/appearance';
 import { api } from '../api/client';
 
-const STORAGE_KEY_APPEARANCES = 'the-company-appearances';
-const STORAGE_KEY_THEME = 'the-company-theme';
+const STORAGE_KEY_APPEARANCES = 'tycono-appearances';
+const STORAGE_KEY_THEME = 'tycono-theme';
+
+// Migrate from old keys (one-time)
+(() => {
+  try {
+    for (const [oldKey, newKey] of [['the-company-appearances', STORAGE_KEY_APPEARANCES], ['the-company-theme', STORAGE_KEY_THEME]]) {
+      const old = localStorage.getItem(oldKey);
+      if (old && !localStorage.getItem(newKey)) {
+        localStorage.setItem(newKey, old);
+        localStorage.removeItem(oldKey);
+      }
+    }
+  } catch { /* ignore */ }
+})();
 
 function loadAppearances(): Record<string, CharacterAppearance> {
   try {

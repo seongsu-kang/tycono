@@ -73,7 +73,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   const [waves, setWaves] = useState<Wave[]>([]);
   const [decisions, setDecisions] = useState<Decision[]>([]);
   const [knowledgeDocs, setKnowledgeDocs] = useState<KnowledgeDoc[]>([]);
-  const [companyName, setCompanyName] = useState('THE COMPANY INC');
+  const [companyName, setCompanyName] = useState('TYCONO');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

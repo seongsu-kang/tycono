@@ -147,7 +147,7 @@ export function scaffold(config: ScaffoldConfig): string[] {
     'company', 'roles', 'projects', 'architecture',
     'operations', 'operations/standup', 'operations/waves',
     'operations/decisions', 'knowledge', '.claude/skills',
-    '.claude/skills/_shared', '.the-company',
+    '.claude/skills/_shared', '.tycono',
   ];
   for (const dir of dirs) {
     fs.mkdirSync(path.join(root, dir), { recursive: true });
@@ -177,21 +177,21 @@ export function scaffold(config: ScaffoldConfig): string[] {
     created.push('.gitignore');
   }
 
-  // Write .the-company/config.json (engine + API key)
+  // Write .tycono/config.json (engine + API key)
   if (config.apiKey) {
     const companyConfig: CompanyConfig = {
       engine: 'direct-api',
       apiKey: config.apiKey,
     };
     writeConfig(root, companyConfig);
-    created.push('.the-company/config.json');
+    created.push('.tycono/config.json');
     // Also write .env for backward compatibility
     fs.writeFileSync(path.join(root, '.env'), `ANTHROPIC_API_KEY=${config.apiKey}\n`);
     created.push('.env');
   } else {
     const companyConfig: CompanyConfig = { engine: 'claude-cli' };
     writeConfig(root, companyConfig);
-    created.push('.the-company/config.json');
+    created.push('.tycono/config.json');
   }
 
   // Create team roles + install skills

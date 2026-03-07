@@ -1,12 +1,12 @@
-# Contributing to the-company
+# Contributing to tycono
 
 Thanks for your interest in contributing!
 
 ## Development Setup
 
 ```bash
-git clone https://github.com/seongsu-kang/the-company.git
-cd the-company
+git clone https://github.com/seongsu-kang/tycono.git
+cd tycono
 
 # Install dependencies
 npm install

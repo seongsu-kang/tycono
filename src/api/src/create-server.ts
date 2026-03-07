@@ -109,17 +109,18 @@ export function createHttpServer(): http.Server {
 
   // Status — frontend checks this to decide wizard vs office
   app.get('/api/status', (_req, res) => {
-    const claudeMdPath = path.join(COMPANY_ROOT, 'CLAUDE.md');
-    const initialized = fs.existsSync(claudeMdPath);
+    const config = readConfig(COMPANY_ROOT);
+    const tyconoDir = path.join(COMPANY_ROOT, '.tycono', 'config.json');
+    const initialized = fs.existsSync(tyconoDir);
     let companyName: string | null = null;
     if (initialized) {
       try {
+        const claudeMdPath = path.join(COMPANY_ROOT, 'CLAUDE.md');
         const content = fs.readFileSync(claudeMdPath, 'utf-8');
         const match = content.match(/^#\s+(.+)/m);
         if (match) companyName = match[1].trim();
       } catch { /* ignore */ }
     }
-    const config = readConfig(COMPANY_ROOT);
     res.json({ initialized, companyName, engine: config.engine || process.env.EXECUTION_ENGINE || 'none', companyRoot: COMPANY_ROOT });
   });
 

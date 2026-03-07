@@ -1,10 +1,10 @@
 {
-  "name": "the-company",
+  "name": "tycono",
   "version": "0.1.0",
   "description": "Build an AI company. Watch them work.",
   "type": "module",
   "bin": {
-    "the-company": "./bin/cli.js"
+    "tycono": "./bin/cli.js"
   },
   "files": [
     "bin/",

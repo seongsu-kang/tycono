@@ -1,5 +1,5 @@
 /**
- * preferences.ts — .the-company/preferences.json 관리
+ * preferences.ts — .tycono/preferences.json 관리
  *
  * 캐릭터 외모, 오피스 테마 등 사용자 설정을 서버 파일로 영속화한다.
  * company-config.ts의 readConfig/writeConfig 패턴을 따른다.
@@ -20,7 +20,7 @@ export interface Preferences {
   theme: string;
 }
 
-const CONFIG_DIR = '.the-company';
+const CONFIG_DIR = '.tycono';
 const PREFS_FILE = 'preferences.json';
 const DEFAULT: Preferences = { appearances: {}, theme: 'default' };
 
@@ -28,7 +28,7 @@ function prefsPath(companyRoot: string): string {
   return path.join(companyRoot, CONFIG_DIR, PREFS_FILE);
 }
 
-/** Read preferences from .the-company/preferences.json. Returns defaults if missing. */
+/** Read preferences from .tycono/preferences.json. Returns defaults if missing. */
 export function readPreferences(companyRoot: string): Preferences {
   const p = prefsPath(companyRoot);
   if (!fs.existsSync(p)) return { ...DEFAULT, appearances: {} };
@@ -43,7 +43,7 @@ export function readPreferences(companyRoot: string): Preferences {
   }
 }
 
-/** Write preferences to .the-company/preferences.json. Creates dir if needed. */
+/** Write preferences to .tycono/preferences.json. Creates dir if needed. */
 export function writePreferences(companyRoot: string, prefs: Preferences): void {
   const dir = path.join(companyRoot, CONFIG_DIR);
   fs.mkdirSync(dir, { recursive: true });

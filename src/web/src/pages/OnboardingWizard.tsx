@@ -345,7 +345,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
           style={{ background: 'var(--terminal-bg)', borderBottom: '1px solid var(--terminal-border)' }}
         >
           <div className="text-lg font-bold" style={{ color: 'var(--terminal-text)', fontFamily: 'var(--pixel-font)' }}>
-            the-company
+            tycono
           </div>
           <div className="text-xs mt-1" style={{ color: 'var(--terminal-text-secondary)' }}>
             Build an AI company. Watch them work.

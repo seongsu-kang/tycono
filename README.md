@@ -1,18 +1,18 @@
-# the-company
+# tycono
 
 > Build an AI company. Watch them work.
 
-**the-company** is an open-source platform that lets you create and run an AI-powered organization. Define roles (CTO, PM, Engineer...), assign them AI agents, and watch them collaborate through a real-time dashboard.
+**tycono** is an open-source platform that lets you create and run an AI-powered organization. Define roles (CTO, PM, Engineer...), assign them AI agents, and watch them collaborate through a real-time dashboard.
 
 ## Quick Start
 
 ```bash
 # Create a new company
 mkdir my-company && cd my-company
-npx the-company init
+npx tycono init
 
 # Start the dashboard
-npx the-company
+npx tycono
 ```
 
 That's it. Your browser opens to a live dashboard showing your AI team at work.
@@ -74,10 +74,10 @@ your-company/
 ## CLI Usage
 
 ```bash
-the-company              # Start server + open dashboard
-the-company init          # Create a new company
-the-company --help        # Show help
-the-company --version     # Show version
+tycono              # Start server + open dashboard
+tycono init          # Create a new company
+tycono --help        # Show help
+tycono --version     # Show version
 ```
 
 ## Environment Variables
@@ -91,8 +91,8 @@ the-company --version     # Show version
 ## Development
 
 ```bash
-git clone https://github.com/seongsu-kang/the-company.git
-cd the-company
+git clone https://github.com/seongsu-kang/tycono.git
+cd tycono
 npm install
 cd src/api && npm install && cd ../..
 cd src/web && npm install && cd ../..
@@ -114,4 +114,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ---
 
-*Built with the-company. An AI company that builds itself.*
+*Built with tycono. An AI company that builds itself.*

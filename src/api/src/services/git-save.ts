@@ -59,7 +59,7 @@ const SAVE_PATHS = [
   'operations/cost/',
   'operations/activity-streams/',
   '.claude/skills/',
-  '.the-company/',
+  '.tycono/',
   'CLAUDE.md',
 ];
 
@@ -160,7 +160,7 @@ export function gitSave(root: string, message?: string): SaveResult {
     runOrThrow(`git add "${file}"`, root);
   }
 
-  const prefix = '[the-company] ';
+  const prefix = '[tycono] ';
   const commitMsg = message
     ? `${prefix}${message}`
     : `${prefix}Save — ${new Date().toISOString().slice(0, 16)} (${allFiles.length} files)`;
@@ -232,7 +232,7 @@ export function gitRestore(root: string, sha: string, paths?: string[]): Restore
     throw new Error('No files could be restored from that commit');
   }
 
-  const msg = `[the-company] Restore from ${sha.slice(0, 7)} (${restoredFiles.length} paths)`;
+  const msg = `[tycono] Restore from ${sha.slice(0, 7)} (${restoredFiles.length} paths)`;
   runOrThrow('git add -A', root);
   runOrThrow(`git commit -m "${msg}"`, root);
 

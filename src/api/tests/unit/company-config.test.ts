@@ -24,7 +24,7 @@ describe('readConfig', () => {
   });
 
   it('reads config.json when present', () => {
-    const dir = path.join(testRoot, '.the-company');
+    const dir = path.join(testRoot, '.tycono');
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({
       engine: 'direct-api',
@@ -37,7 +37,7 @@ describe('readConfig', () => {
   });
 
   it('returns defaults on malformed JSON', () => {
-    const dir = path.join(testRoot, '.the-company');
+    const dir = path.join(testRoot, '.tycono');
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'config.json'), 'not json');
 
@@ -47,10 +47,10 @@ describe('readConfig', () => {
 });
 
 describe('writeConfig', () => {
-  it('creates .the-company dir and config.json', () => {
+  it('creates .tycono dir and config.json', () => {
     writeConfig(testRoot, { engine: 'direct-api', apiKey: 'sk-abc' });
 
-    const configPath = path.join(testRoot, '.the-company', 'config.json');
+    const configPath = path.join(testRoot, '.tycono', 'config.json');
     expect(fs.existsSync(configPath)).toBe(true);
 
     const written = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
