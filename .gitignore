@@ -3,6 +3,11 @@ node_modules/
 
 # Build output (keep src/web/dist/ for npm package)
 build/
+dist/
+
+# Test output
+test-results/
+playwright-report/
 
 # Environment
 .env
