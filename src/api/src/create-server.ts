@@ -100,6 +100,51 @@ function handleImportKnowledge(req: http.IncomingMessage, res: http.ServerRespon
 export function createHttpServer(): http.Server {
   cleanupStaleActivities();
 
+  const app = createExpressApp();
+
+  const server = http.createServer((req, res) => {
+    const url = req.url ?? '';
+    const method = req.method ?? '';
+
+    // SSE 엔드포인트: Express 우회하여 raw HTTP로 처리
+    if ((url.startsWith('/api/exec/') || url.startsWith('/api/jobs') || url === '/api/setup/import-knowledge') && method === 'POST') {
+      setExecCors(req, res);
+      if (url === '/api/setup/import-knowledge') {
+        handleImportKnowledge(req, res);
+      } else {
+        handleExecRequest(req, res);
+      }
+      return;
+    }
+
+    // CORS preflight for exec/jobs endpoints
+    if ((url.startsWith('/api/exec/') || url.startsWith('/api/jobs')) && method === 'OPTIONS') {
+      setExecCors(req, res);
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    // Non-SSE exec/jobs endpoints (GET, DELETE)
+    if ((url.startsWith('/api/exec/') || url.startsWith('/api/jobs')) && (method === 'GET' || method === 'DELETE')) {
+      setExecCors(req, res);
+      handleExecRequest(req, res);
+      return;
+    }
+
+    // 나머지는 Express 처리
+    (app as (req: http.IncomingMessage, res: http.ServerResponse) => void)(req, res);
+  });
+
+  server.timeout = 0;
+  server.requestTimeout = 0;
+
+  return server;
+}
+
+export function createExpressApp(): express.Application {
   const app = express();
 
   app.use(cors({ origin: corsOrigin }));
@@ -155,53 +200,14 @@ export function createHttpServer(): http.Server {
     res.status(status).json({ error: err.message });
   });
 
-  function setExecCors(req: http.IncomingMessage, res: http.ServerResponse): void {
-    const origin = req.headers.origin;
-    if (!origin) return;
-    if (isProd || /^http:\/\/localhost:\d+$/.test(origin)) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
-    }
+  return app;
+}
+
+function setExecCors(req: http.IncomingMessage, res: http.ServerResponse): void {
+  const origin = req.headers.origin;
+  if (!origin) return;
+  if (isProd || /^http:\/\/localhost:\d+$/.test(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
   }
-
-  const server = http.createServer((req, res) => {
-    const url = req.url ?? '';
-    const method = req.method ?? '';
-
-    // SSE 엔드포인트: Express 우회하여 raw HTTP로 처리
-    if ((url.startsWith('/api/exec/') || url.startsWith('/api/jobs') || url === '/api/setup/import-knowledge') && method === 'POST') {
-      setExecCors(req, res);
-      if (url === '/api/setup/import-knowledge') {
-        handleImportKnowledge(req, res);
-      } else {
-        handleExecRequest(req, res);
-      }
-      return;
-    }
-
-    // CORS preflight for exec/jobs endpoints
-    if ((url.startsWith('/api/exec/') || url.startsWith('/api/jobs')) && method === 'OPTIONS') {
-      setExecCors(req, res);
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-      res.writeHead(204);
-      res.end();
-      return;
-    }
-
-    // Non-SSE exec/jobs endpoints (GET, DELETE)
-    if ((url.startsWith('/api/exec/') || url.startsWith('/api/jobs')) && (method === 'GET' || method === 'DELETE')) {
-      setExecCors(req, res);
-      handleExecRequest(req, res);
-      return;
-    }
-
-    // 나머지는 Express 처리
-    (app as (req: http.IncomingMessage, res: http.ServerResponse) => void)(req, res);
-  });
-
-  server.timeout = 0;
-  server.requestTimeout = 0;
-
-  return server;
 }
