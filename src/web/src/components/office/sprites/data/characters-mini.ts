@@ -1,7 +1,7 @@
 /* =========================================================
    MINI CHARACTER BLUEPRINTS — 12x22 logical pixels (P=1)
    For TopDown office view + card view.
-   Same color token system as full-size blueprints.
+   Uses TyconoForge color token system ($skin, $hair, etc.).
    ========================================================= */
 
 import type { CharacterBlueprint, Pixel } from '../engine/blueprint';

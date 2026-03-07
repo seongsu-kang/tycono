@@ -19,7 +19,7 @@ import { resolveColor } from './blueprint';
  * @param blueprint - Character blueprint data
  * @param bobY - Idle bob offset (0 or 1)
  * @param appearance - Optional color overrides
- * @param scale - Pixel scale factor (default 2 for full-size, 1 for mini)
+ * @param scale - Pixel scale factor (default 2, use 1 for mini blueprints)
  */
 export function renderCharacter(
   ctx: CanvasRenderingContext2D,

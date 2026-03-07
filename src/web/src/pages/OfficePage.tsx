@@ -234,7 +234,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     // No cleanup abort — import runs in background on server
   }, [importJob]);
 
-  /* View mode: card grid vs isometric */
+  /* View mode: card grid vs topdown */
   const [viewMode, setViewMode] = useState<'card' | 'iso'>('card');
 
   /* Window width for mobile responsive */
