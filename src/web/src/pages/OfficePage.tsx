@@ -1128,6 +1128,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
               onCreateChatChannel={officeChat.createChannel}
               onDeleteChatChannel={officeChat.deleteChannel}
               onUpdateChatMembers={officeChat.updateMembers}
+              unreadChannels={officeChat.unreadChannels}
             />
           </div>
         )}
@@ -1250,6 +1251,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           }}
           onUpdateRole={handleUpdateRole}
           appearance={getAppearance(selectedRole.id)}
+          relationships={ambient.relationships}
         />
         );
       })()}

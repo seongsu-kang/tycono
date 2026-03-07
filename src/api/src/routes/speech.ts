@@ -9,8 +9,16 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { COMPANY_ROOT } from '../services/file-reader.js';
 import { buildOrgTree } from '../engine/index.js';
 import { AnthropicProvider } from '../engine/llm-adapter.js';
+import { TokenLedger } from '../services/token-ledger.js';
 
 export const speechRouter = Router();
+
+// Lazy-init token ledger for cost tracking
+let ledger: TokenLedger | null = null;
+function getLedger(): TokenLedger {
+  if (!ledger) { ledger = new TokenLedger(COMPANY_ROOT); }
+  return ledger;
+}
 
 // Lazy-init LLM provider (Haiku for cost efficiency)
 let llm: AnthropicProvider | null = null;
@@ -124,6 +132,18 @@ Rules:
 
     // [SILENT] means the role has nothing to say
     const message = raw === '[SILENT]' ? '' : raw;
+
+    // Record usage in token ledger (category: chat)
+    if (response.usage) {
+      getLedger().record({
+        ts: new Date().toISOString(),
+        jobId: `chat-${channelId}`,
+        roleId,
+        model: process.env.SPEECH_MODEL || 'claude-haiku-4-5-20251001',
+        inputTokens: response.usage.inputTokens ?? 0,
+        outputTokens: response.usage.outputTokens ?? 0,
+      });
+    }
 
     res.json({
       message,

@@ -28,14 +28,19 @@ function ChatMsg({ msg }: { msg: ChatMessage }) {
   const name = ROLE_NAMES[msg.roleId] ?? msg.roleId;
 
   if (msg.type === 'dispatch') {
+    // Determine icon and color based on text content
+    const isWave = msg.text.includes('WAVE');
+    const isComplete = msg.text.includes('completed') || msg.text.includes('완료');
+    const icon = isWave ? '📡' : isComplete ? '✓' : '→';
+    const textColor = isComplete ? 'text-green-400/70' : 'text-[var(--terminal-text-muted)]';
+
     return (
-      <div className="flex items-start gap-2 px-3 py-1.5 hover:bg-white/[0.02]">
+      <div className="flex items-start gap-2 px-3 py-1 hover:bg-white/[0.02]">
         <span className="text-[10px] text-[var(--terminal-text-muted)] shrink-0 w-10 text-right mt-0.5">
           {formatTime(msg.ts)}
         </span>
-        <div className="flex-1 min-w-0">
-          <span className="text-xs text-[var(--terminal-text-muted)]">{msg.text}</span>
-        </div>
+        <span className="text-[10px] shrink-0 mt-0.5">{icon}</span>
+        <span className={`text-[11px] ${textColor}`}>{msg.text}</span>
       </div>
     );
   }

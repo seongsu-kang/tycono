@@ -56,37 +56,66 @@ export interface UseOfficeChatReturn {
   deleteChannel: (id: string) => void;
   /** Add/remove members from a channel */
   updateMembers: (channelId: string, members: string[]) => void;
+  /** Channels with unread messages (set of channel ids) */
+  unreadChannels: Set<string>;
 }
 
 export function useOfficeChat(): UseOfficeChatReturn {
   const [channels, setChannels] = useState<ChatChannel[]>(loadChannels);
   const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
+  const [unreadChannels, setUnreadChannels] = useState<Set<string>>(new Set());
 
   // Save on change
   useEffect(() => {
     saveChannels(channels);
   }, [channels]);
 
+  // Clear unread when switching to a channel
+  const handleSetActiveChannelId = useCallback((id: string | null) => {
+    setActiveChannelId(id);
+    if (id) {
+      setUnreadChannels(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  }, []);
+
   const pushMessage = useCallback((msg: Omit<ChatMessage, 'id'>) => {
     const fullMsg: ChatMessage = { ...msg, id: nextMsgId() };
 
-    setChannels(prev => prev.map(ch => {
-      // #office: system logs only (dispatch events)
-      if (ch.id === 'office') {
-        if (msg.type === 'dispatch') {
+    setChannels(prev => {
+      const updated = prev.map(ch => {
+        // #office: system logs only (dispatch events)
+        if (ch.id === 'office') {
+          if (msg.type === 'dispatch') {
+            return { ...ch, messages: [...ch.messages, fullMsg].slice(-MAX_MESSAGES) };
+          }
+          return ch;
+        }
+        // Custom channels: only if sender is a member
+        if (ch.members.length > 0 && ch.members.includes(msg.roleId)) {
           return { ...ch, messages: [...ch.messages, fullMsg].slice(-MAX_MESSAGES) };
         }
         return ch;
-      }
-      // Custom channels: only if sender is a member
-      if (ch.members.length > 0) {
-        const isMember = ch.members.includes(msg.roleId);
-        if (isMember) {
-          return { ...ch, messages: [...ch.messages, fullMsg].slice(-MAX_MESSAGES) };
+      });
+
+      // Mark unread for channels that received the message (if not currently viewing)
+      setUnreadChannels(prevUnread => {
+        const next = new Set(prevUnread);
+        for (const ch of updated) {
+          const oldCh = prev.find(c => c.id === ch.id);
+          if (oldCh && ch.messages.length > oldCh.messages.length) {
+            // This channel got a new message
+            next.add(ch.id);
+          }
         }
-      }
-      return ch;
-    }));
+        return next;
+      });
+
+      return updated;
+    });
   }, []);
 
   const createChannel = useCallback((name: string, members: string[]) => {
@@ -116,10 +145,11 @@ export function useOfficeChat(): UseOfficeChatReturn {
   return {
     channels,
     activeChannelId,
-    setActiveChannelId,
+    setActiveChannelId: handleSetActiveChannelId,
     pushMessage,
     createChannel,
     deleteChannel,
     updateMembers,
+    unreadChannels,
   };
 }

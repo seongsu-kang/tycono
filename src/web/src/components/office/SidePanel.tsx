@@ -27,6 +27,7 @@ interface Props {
   onCustomize?: (roleId: string) => void;
   onUpdateRole?: (roleId: string, changes: { name?: string }) => Promise<void>;
   appearance?: CharacterAppearance;
+  relationships?: Array<{ roleA: string; roleB: string; familiarity: number; dispatches: number; wavesTogether: number; conversations: number }>;
 }
 
 const ROLE_ICONS: Record<string, string> = {
@@ -61,7 +62,7 @@ const fmtElapsed = (seconds: number) => `${Math.floor(seconds / 60)}:${String(se
 export default function SidePanel({
   role, allRoles, recentActivity, onClose, onFireRole, terminalWidth = 0,
   activeJobId, activeTask, isWorking, jobStartedAt, onStopJob,
-  sessions, streamingSessionId, onCreateSessionSilent, onSendMessage, onFocusTerminal, onCustomize, onUpdateRole, appearance,
+  sessions, streamingSessionId, onCreateSessionSilent, onSendMessage, onFocusTerminal, onCustomize, onUpdateRole, appearance, relationships,
 }: Props) {
   const [panelW, setPanelW] = useState(DEFAULT_WIDTH);
   const [isResizing, setIsResizing] = useState(false);
@@ -71,6 +72,7 @@ export default function SidePanel({
   // Collapsible sections
   const [showProfile, setShowProfile] = useState(false);
   const [showAuthority, setShowAuthority] = useState(false);
+  const [showRelationships, setShowRelationships] = useState(false);
   const [showJournal, setShowJournal] = useState(false);
 
   // Idle mode input
@@ -560,6 +562,46 @@ export default function SidePanel({
                 )}
               </CollapsibleSection>
             )}
+
+            {/* Relationships */}
+            {role && relationships && (() => {
+              const roleRels = relationships
+                .filter(r => r.roleA === role.id || r.roleB === role.id)
+                .filter(r => r.familiarity > 0)
+                .sort((a, b) => b.familiarity - a.familiarity);
+              if (roleRels.length === 0) return null;
+              return (
+                <CollapsibleSection title={`Relationships (${roleRels.length})`} open={showRelationships} onToggle={() => setShowRelationships(v => !v)}>
+                  <div className="space-y-1.5">
+                    {roleRels.map((rel, i) => {
+                      const partnerId = rel.roleA === role.id ? rel.roleB : rel.roleA;
+                      const partnerRole = allRoles.find(r => r.id === partnerId);
+                      const level = rel.familiarity >= 80 ? 'Best Partner'
+                        : rel.familiarity >= 50 ? 'Friend'
+                        : rel.familiarity >= 20 ? 'Colleague'
+                        : 'Acquaintance';
+                      const barColor = rel.familiarity >= 80 ? '#4CAF50'
+                        : rel.familiarity >= 50 ? '#2196F3'
+                        : rel.familiarity >= 20 ? '#FF9800'
+                        : '#9E9E9E';
+                      return (
+                        <div key={i} className="flex items-center gap-2">
+                          <span className="text-xs w-20 truncate" style={{ color: ROLE_COLORS[partnerId] ?? 'var(--terminal-text-secondary)' }}>
+                            {partnerRole?.name ?? partnerId}
+                          </span>
+                          <div className="flex-1 h-1.5 rounded-full bg-white/10">
+                            <div className="h-full rounded-full transition-all" style={{ width: `${rel.familiarity}%`, background: barColor }} />
+                          </div>
+                          <span className="text-[10px] w-16 text-right" style={{ color: 'var(--terminal-text-muted)' }}>
+                            {level}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CollapsibleSection>
+              );
+            })()}
 
             {/* Journal */}
             {role.journal && (

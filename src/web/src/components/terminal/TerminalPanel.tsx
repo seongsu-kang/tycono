@@ -28,6 +28,7 @@ interface Props {
   onCreateChatChannel?: (name: string, members: string[]) => void;
   onDeleteChatChannel?: (id: string) => void;
   onUpdateChatMembers?: (channelId: string, members: string[]) => void;
+  unreadChannels?: Set<string>;
 }
 
 const ROLE_COLORS: Record<string, string> = {
@@ -42,7 +43,7 @@ export default function TerminalPanel({
   sessions, activeSessionId, roles, streamingSessionId, width, onWidthChange,
   onSwitchSession, onCloseSession, onCreateSession, onClearEmpty, onCloseAll,
   onSendMessage, onModeChange, onCloseTerminal,
-  chatChannels, activeChatChannelId, onSwitchChatChannel, onCreateChatChannel, onDeleteChatChannel, onUpdateChatMembers,
+  chatChannels, activeChatChannelId, onSwitchChatChannel, onCreateChatChannel, onDeleteChatChannel, onUpdateChatMembers, unreadChannels,
 }: Props) {
   const [showNewMenu, setShowNewMenu] = useState(false);
   const [showManageMenu, setShowManageMenu] = useState(false);
@@ -151,6 +152,9 @@ export default function TerminalPanel({
               >
                 <span className="text-[10px]">💬</span>
                 <span className="truncate">{ch.name}</span>
+                {unreadChannels?.has(ch.id) && activeChatChannelId !== ch.id && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
+                )}
                 {!ch.isDefault && (
                   <span
                     onClick={(e) => { e.stopPropagation(); onDeleteChatChannel?.(ch.id); }}
