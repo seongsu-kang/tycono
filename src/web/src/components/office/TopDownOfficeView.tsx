@@ -2,7 +2,7 @@ import { useRef, useEffect, useCallback, useMemo } from 'react';
 import type { Role, Project, Wave, Standup, Decision } from '../../types/index';
 import type { CharacterAppearance } from '../../types/appearance';
 import { getDefaultAppearance } from '../../types/appearance';
-import { getCharacterBlueprint, renderPixelsAt } from './sprites/engine';
+import { getCharacterBlueprint, renderPixelsAt, getAccessory, getHairStyle, getOutfitStyle } from './sprites/engine';
 import { applyStyles } from './TopDownCharCanvas';
 import './sprites/data'; // trigger blueprint registration
 import { WALK_FRAMES } from './sprites/data/walk-frames-mini';
@@ -579,6 +579,17 @@ function drawWalkChar(cx: number, cy: number, ap: CharacterAppearance, dir: stri
   const phase = wf % 4;
   const pixels = WALK_FRAMES[d][phase];
   renderPixelsAt(_ctx, pixels, cx, cy, ap);
+
+  // Overlay accessory on top of walk frame (bob offset matches frame)
+  const bob = (phase === 1 || phase === 3) ? -1 : 0;
+  if (ap.accessory && ap.accessory !== 'none') {
+    const acc = getAccessory(ap.accessory);
+    if (acc) {
+      // Accessory pixels are relative to head origin; walk frame head is at (0, bob)
+      renderPixelsAt(_ctx, acc.layer.pixels, cx, cy + bob, ap);
+    }
+  }
+
   _ctx.globalAlpha = 1;
 }
 
