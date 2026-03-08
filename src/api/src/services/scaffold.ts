@@ -1,7 +1,7 @@
 /**
  * scaffold.ts — AKB scaffolding service
  *
- * Extracted from bin/init.ts for reuse by the web onboarding wizard.
+ * AKB scaffolding used by the web onboarding wizard.
  */
 import fs from 'node:fs';
 import path from 'node:path';

@@ -7,15 +7,11 @@
 ## Quick Start
 
 ```bash
-# Create a new company
 mkdir my-company && cd my-company
-npx tycono init
-
-# Start the dashboard
 npx tycono
 ```
 
-That's it. Your browser opens to a live dashboard showing your AI team at work.
+That's it. A setup wizard guides you through creating your company, then your browser opens to a live dashboard showing your AI team at work.
 
 ## What You Get
 
@@ -33,7 +29,7 @@ That's it. Your browser opens to a live dashboard showing your AI team at work.
 
 ## Team Templates
 
-When you run `init`, pick a template:
+During setup, pick a template:
 
 | Template | Roles |
 |----------|-------|
@@ -74,8 +70,7 @@ your-company/
 ## CLI Usage
 
 ```bash
-tycono              # Start server + open dashboard
-tycono init          # Create a new company
+tycono              # Start server + open dashboard (setup wizard if first run)
 tycono --help        # Show help
 tycono --version     # Show version
 ```

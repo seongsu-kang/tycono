@@ -20,9 +20,6 @@ function printHelp(): void {
 
   Usage:
     tycono              Start the server and open dashboard
-    tycono init         Initialize a new company in current directory
-    tycono init -y      Use defaults (skip prompts)
-    tycono init --name "Acme Corp"  Set company name
     tycono --help       Show this help message
     tycono --version    Show version
 
@@ -175,12 +172,6 @@ export async function main(args: string[]): Promise<void> {
 
   if (command === '--version' || command === '-v') {
     console.log(VERSION);
-    return;
-  }
-
-  if (command === 'init') {
-    const { runInit } = await import('./init.js');
-    await runInit(args.slice(1));
     return;
   }
 
