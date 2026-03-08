@@ -153,8 +153,9 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     return () => window.removeEventListener('keydown', handler);
   }, [saveHook.dirtyCount]);
 
-  // Git status polling (every 10 seconds)
+  // Git status polling — lazy, only when git panel is open
   useEffect(() => {
+    if (!showGitPanel) return;
     let cancelled = false;
     const fetchGitStatus = async () => {
       try {
@@ -167,7 +168,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     fetchGitStatus();
     const interval = setInterval(fetchGitStatus, 10000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, []);
+  }, [showGitPanel]);
 
   /* Knowledge import state */
   interface ImportLogEntry {
@@ -297,25 +298,25 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
   const { sendMessage: streamSend } = useSessionStream();
 
-  /* Fetch all data on mount */
+  /* Fetch essential data on mount — lazy-load the rest when needed */
   useEffect(() => {
     Promise.all([
       api.getCompany().then((c) => { setCompanyName(c.name); setRoles(c.roles); }),
-      api.getProjects().then(setProjects),
-      api.getStandups().then(setStandups),
-      api.getWaves().then(setWaves),
-      api.getDecisions().then(setDecisions),
-      api.getKnowledge().then(setKnowledgeDocs).catch(() => {}),
       api.getOrgTree().then((tree) => { setOrgNodes(tree.nodes); setOrgRootId(tree.root); }).catch(() => {}),
       api.getCostSummary().then((s) => updateRoleLevels(computeRoleLevels(s.byRole))).catch(() => {}),
     ])
       .catch((err) => setError(`Failed to load: ${err.message}`))
       .finally(() => setLoading(false));
+    // Non-blocking: load secondary data after render
+    api.getProjects().then(setProjects).catch(() => {});
+    api.getStandups().then(setStandups).catch(() => {});
+    api.getWaves().then(setWaves).catch(() => {});
+    api.getDecisions().then(setDecisions).catch(() => {});
+    api.getKnowledge().then(setKnowledgeDocs).catch(() => {});
   }, []);
 
   /* Load sessions on mount — restore existing sessions (metadata only) */
   useEffect(() => {
-    api.deleteEmptySessions().catch(() => {});
     api.getSessions().then((metas) => {
       if (metas.length > 0) {
         const restored: Session[] = metas.map((m) => ({ ...m, messages: [] }));

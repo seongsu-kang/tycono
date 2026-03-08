@@ -65,14 +65,14 @@ const SAVE_PATHS = [
 
 function run(cmd: string, cwd: string): string {
   try {
-    return execSync(cmd, { cwd, encoding: 'utf-8', timeout: 30000, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+    return execSync(cmd, { cwd, encoding: 'utf-8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
   } catch {
     return '';
   }
 }
 
 function runOrThrow(cmd: string, cwd: string): string {
-  return execSync(cmd, { cwd, encoding: 'utf-8', timeout: 30000, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+  return execSync(cmd, { cwd, encoding: 'utf-8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
 }
 
 /** Check if directory is a git repository */

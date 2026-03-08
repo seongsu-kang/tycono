@@ -65,12 +65,16 @@ export function useSave(): UseSaveReturn {
     }
   }, []);
 
-  // Poll status
-  useEffect(() => {
+  // Lazy: don't poll on mount. Call refresh() to start.
+  const startPolling = useCallback(() => {
+    if (pollRef.current) return;
     fetchStatus();
     pollRef.current = setInterval(fetchStatus, POLL_INTERVAL);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [fetchStatus]);
+
+  useEffect(() => {
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
 
   const save = useCallback(async (message?: string): Promise<SaveResult> => {
     setState('saving');
@@ -116,5 +120,9 @@ export function useSave(): UseSaveReturn {
   const dirtyCount = status ? status.modified.length + status.untracked.length : 0;
   const lastSaved = status?.lastCommit?.date ?? null;
 
-  return { state, dirtyCount, lastSaved, status, save, history, loadHistory, restore, refresh: fetchStatus, initGit };
+  const refresh = useCallback(async () => {
+    startPolling();
+  }, [startPolling]);
+
+  return { state, dirtyCount, lastSaved, status, save, history, loadHistory, restore, refresh, initGit };
 }

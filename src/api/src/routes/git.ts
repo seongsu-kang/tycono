@@ -18,7 +18,7 @@ interface LastCommit {
 }
 
 function git(cmd: string): string {
-  return execSync(`git ${cmd}`, { cwd: COMPANY_ROOT, encoding: 'utf-8' }).trim();
+  return execSync(`git ${cmd}`, { cwd: COMPANY_ROOT, encoding: 'utf-8', timeout: 5000 }).trim();
 }
 
 // GET /api/git/status
