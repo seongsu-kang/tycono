@@ -423,6 +423,7 @@ function startSSE(res: ServerResponse): void {
     'Connection': 'keep-alive',
     'X-Accel-Buffering': 'no',
   });
+  res.flushHeaders();
 }
 
 /** Start SSE heartbeat + timeout. Returns cleanup function. */
