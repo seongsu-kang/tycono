@@ -264,6 +264,101 @@ function buildCompanyContext(): string {
 }
 
 /**
+ * Build role-specific AKB context by pre-fetching relevant knowledge server-side.
+ * Works with ANY engine (including claude-cli which doesn't support tool_use).
+ */
+function buildRoleContext(roleId: string): string {
+  const parts: string[] = [];
+
+  // 1. Role's own journal (most recent 2 entries)
+  try {
+    const journalDir = path.join(COMPANY_ROOT, 'roles', roleId, 'journal');
+    if (fs.existsSync(journalDir)) {
+      const files = fs.readdirSync(journalDir)
+        .filter(f => f.endsWith('.md'))
+        .sort()
+        .slice(-2);
+      for (const file of files) {
+        const content = fs.readFileSync(path.join(journalDir, file), 'utf-8');
+        // Extract title + first meaningful section (truncated)
+        const title = content.match(/^#\s+(.+)/m)?.[1] ?? file;
+        const body = content.split('\n').slice(1).join('\n').trim().slice(0, 400);
+        parts.push(`[Your Journal: ${file}] ${title}\n${body}`);
+      }
+    }
+  } catch { /* no journal */ }
+
+  // 2. Recent waves mentioning this role (last 3)
+  try {
+    const wavesDir = path.join(COMPANY_ROOT, 'operations', 'waves');
+    if (fs.existsSync(wavesDir)) {
+      const waveFiles = fs.readdirSync(wavesDir)
+        .filter(f => f.endsWith('.md'))
+        .sort()
+        .slice(-10); // scan last 10, pick up to 3 relevant
+      const relevant: string[] = [];
+      for (const file of waveFiles.reverse()) {
+        if (relevant.length >= 3) break;
+        const content = fs.readFileSync(path.join(wavesDir, file), 'utf-8');
+        const lower = content.toLowerCase();
+        if (lower.includes(roleId) || lower.includes('all roles') || lower.includes('전체')) {
+          const title = content.match(/^#\s+(.+)/m)?.[1] ?? file;
+          const tldr = content.match(/TL;DR[\s\S]*?\n\n/)?.[0]?.trim() ?? '';
+          const snippet = tldr || content.split('\n').slice(1, 6).join('\n').trim();
+          relevant.push(`[Wave: ${file}] ${title}\n${snippet.slice(0, 300)}`);
+        }
+      }
+      if (relevant.length > 0) parts.push(...relevant);
+    }
+  } catch { /* no waves */ }
+
+  // 3. Recent standup (latest, only this role's section)
+  try {
+    const standupDir = path.join(COMPANY_ROOT, 'operations', 'standup');
+    if (fs.existsSync(standupDir)) {
+      const standupFiles = fs.readdirSync(standupDir)
+        .filter(f => f.endsWith('.md'))
+        .sort()
+        .slice(-1);
+      for (const file of standupFiles) {
+        const content = fs.readFileSync(path.join(standupDir, file), 'utf-8');
+        // Try to extract this role's section from standup
+        const rolePattern = new RegExp(`(## .*${roleId}.*|### .*${roleId}.*)([\\s\\S]*?)(?=\\n## |\\n### |$)`, 'i');
+        const match = content.match(rolePattern);
+        if (match) {
+          parts.push(`[Standup: ${file}] Your report:\n${match[0].slice(0, 300)}`);
+        }
+      }
+    }
+  } catch { /* no standups */ }
+
+  // 4. Recent decisions (last 2 approved — brief titles only, full list is in company context)
+  try {
+    const decisionsDir = path.join(COMPANY_ROOT, 'operations', 'decisions');
+    if (fs.existsSync(decisionsDir)) {
+      const files = fs.readdirSync(decisionsDir)
+        .filter(f => f.endsWith('.md') && f !== 'decisions.md')
+        .sort()
+        .slice(-3);
+      const decisions: string[] = [];
+      for (const file of files) {
+        const content = fs.readFileSync(path.join(decisionsDir, file), 'utf-8');
+        const title = content.match(/^#\s+(.+)/m)?.[1] ?? file;
+        const summary = content.match(/## (?:Summary|TL;DR|요약)[\s\S]*?\n\n/)?.[0]?.trim() ?? '';
+        decisions.push(`- ${title}${summary ? ': ' + summary.split('\n').slice(1).join(' ').trim().slice(0, 150) : ''}`);
+      }
+      if (decisions.length > 0) {
+        parts.push(`[Recent Decisions]\n${decisions.join('\n')}`);
+      }
+    }
+  } catch { /* no decisions */ }
+
+  return parts.length > 0
+    ? `\n\nYOUR KNOWLEDGE (real AKB context — reference this in conversation):\n${parts.join('\n\n')}`
+    : '';
+}
+
+/**
  * Role-specific chat style guidelines.
  * Makes each role sound distinctly different in conversations.
  */
@@ -463,6 +558,9 @@ speechRouter.post('/chat', async (req: Request, res: Response, next: NextFunctio
     // Build company context (cached per request — lightweight)
     const companyCtx = buildCompanyContext();
 
+    // Build role-specific AKB context (pre-fetched, works with any engine)
+    const roleCtx = buildRoleContext(roleId);
+
     // Role-specific communication style
     const roleStyle = getRoleChatStyle(roleId, node.level);
 
@@ -471,6 +569,7 @@ Persona: ${persona}
 ${workCtx}
 ${levelCtx}
 ${companyCtx}
+${roleCtx}
 
 You are in the #${channelId} chat channel.${topicCtx}
 Members: ${memberList}
@@ -478,22 +577,11 @@ ${relContext}
 
 ${roleStyle}
 
-AKB EXPLORATION (IMPORTANT):
-You have tools to search and read the company knowledge base (AKB). Use them to ground your conversation in REAL company context.
-Before responding, consider: "Is there something in our AKB that relates to this conversation?"
-- search_akb: Search for keywords across the AKB (decisions, projects, journals, waves, standups)
-- read_file: Read a specific file for details
-- list_files: Discover what files exist in a directory
-
-Useful paths to explore:
-- operations/decisions/ — CEO decisions (what was decided and why)
-- operations/waves/ — Work dispatches (what CEO asked teams to do)
-- operations/standups/ — Daily standups (what everyone reported)
-- projects/ — Active projects and their tasks
-- roles/${roleId}/journal/ — Your own work journal
-- knowledge/ — Domain knowledge
-
-You don't need to search every time. But when the conversation touches on company work, decisions, or direction, DO search to find real facts rather than making up generic discussion.
+GROUNDING (CRITICAL):
+You have been given real company knowledge above under "YOUR KNOWLEDGE". This is from your journal, recent CEO waves, standups, and decisions.
+You MUST reference this real context in your conversations — mention specific projects, decisions, tasks, or events by name.
+Do NOT generate generic workplace chatter. Every message should show you're aware of what's actually happening in the company.
+If your knowledge section mentions a specific decision or wave, reference it naturally (e.g. "after the test minimization decision..." or "CEO's wave about side panel...").
 
 CONVERSATION RULES:
 1. Stay deeply in character — your expertise, vocabulary, and concerns should be DISTINCT from other roles.
