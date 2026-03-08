@@ -186,10 +186,12 @@ export function useChatScheduler({
       // Pick a random idle role
       const role = idleRoles[Math.floor(Math.random() * idleRoles.length)];
 
-      // Find channels this role is a member of (exclude #office)
-      const memberChannels = channelsRef.current.filter(ch =>
-        !ch.isDefault && ch.members.includes(role.id),
-      );
+      // Find channels this role is a member of
+      // Default channels: #general (all roles), #watercooler (non-C-level)
+      const memberChannels = channelsRef.current.filter(ch => {
+        if (ch.members.length === 0) return true;  // empty members = all roles
+        return ch.members.includes(role.id);
+      });
       if (memberChannels.length === 0) return;
 
       // Pick a random channel
