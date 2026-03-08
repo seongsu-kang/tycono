@@ -1006,34 +1006,11 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
               </div>
             ) : null;
           })()}
-          <button
-            onClick={() => {
-              if (saveHook.state === 'no-git') {
-                saveHook.initGit();
-              } else {
-                setShowSaveModal(true);
-              }
-            }}
-            className="flex items-center gap-1 cursor-pointer px-1.5 py-0.5"
-            style={{
+          <span className="px-1.5 py-0.5" style={{
               background: 'var(--hud-bg-alt)', border: '1px solid var(--pixel-border)',
-            }}
-            title={saveHook.state === 'no-git' ? 'Click to initialize git repository'
-              : saveHook.state === 'dirty' ? `${saveHook.dirtyCount} unsaved changes`
-              : 'All saved'}
-          >
-            <span style={{
-              display: 'inline-block',
-              width: 6, height: 6, borderRadius: '50%',
-              background: saveHook.state === 'no-git' ? 'var(--terminal-text-muted)'
-                : saveHook.state === 'saving' ? 'var(--idle-amber)'
-                : saveHook.state === 'dirty' ? 'var(--idle-amber)'
-                : saveHook.state === 'error' ? '#EF5350'
-                : 'var(--active-green)',
-              animation: saveHook.state === 'saving' ? 'pulse 1s infinite' : undefined,
-            }} />
-            <span>{today}</span>
-          </button>
+            }}>
+            {today}
+          </span>
         </div>
       </div>
 
@@ -1337,35 +1314,54 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
             {'\u2699'}
           </button>
           <span className="mx-1">|</span>
-          {/* Git Status Indicator */}
+          {/* Git + Save unified indicator */}
           <button
-            onClick={() => setShowGitPanel(true)}
-            title="Git Status"
+            onClick={() => {
+              if (saveHook.state === 'no-git') {
+                saveHook.initGit();
+              } else if (saveHook.state === 'dirty') {
+                setShowSaveModal(true);
+              } else {
+                setShowGitPanel(true);
+              }
+            }}
+            title={saveHook.state === 'dirty' ? `${saveHook.dirtyCount} unsaved — click to save` : 'Git Status'}
             style={{
               background: 'none', border: 'none', cursor: 'pointer', fontSize: 10,
               fontFamily: 'var(--pixel-font)',
-              color: gitStatus
-                ? (gitStatus.worktrees.some(w => w.status === 'stale') ? '#ff6b6b'
-                  : gitStatus.worktrees.some(w => w.status === 'pending-merge') ? '#FFB74D'
-                  : gitStatus.worktrees.length > 0 ? '#4FC3F7'
-                  : '#81C784')
-                : 'var(--terminal-text-muted)',
+              color: 'var(--terminal-text-muted)',
+              display: 'flex', alignItems: 'center', gap: 4,
             }}
           >
-            {gitStatus
-              ? (gitStatus.worktrees.length === 0 && gitStatus.staleBranches.length === 0
-                ? '\u2713 clean'
-                : `\uD83D\uDCC2 ${gitStatus.worktrees.length} worktree${gitStatus.worktrees.length !== 1 ? 's' : ''}${gitStatus.staleBranches.length > 0 ? ` \u00B7 \u26A0 ${gitStatus.staleBranches.length} branch${gitStatus.staleBranches.length !== 1 ? 'es' : ''}` : ''}`)
-              : 'GIT'}
+            {/* Save status dot */}
+            <span style={{
+              display: 'inline-block', width: 6, height: 6, borderRadius: '50%',
+              background: saveHook.state === 'no-git' ? 'var(--terminal-text-muted)'
+                : saveHook.state === 'saving' ? 'var(--idle-amber)'
+                : saveHook.state === 'dirty' ? 'var(--idle-amber)'
+                : saveHook.state === 'error' ? '#EF5350'
+                : 'var(--active-green)',
+              animation: saveHook.state === 'saving' ? 'pulse 1s infinite' : undefined,
+            }} />
+            {/* Save text */}
+            <span style={{ color: saveHook.state === 'dirty' ? 'var(--idle-amber)' : 'var(--terminal-text-muted)' }}>
+              {saveHook.state === 'no-git' ? 'No git'
+                : saveHook.state === 'saving' ? 'Saving...'
+                : saveHook.state === 'dirty' ? `${saveHook.dirtyCount} unsaved`
+                : 'Saved'}
+            </span>
+            {/* Git info (only when git exists and has worktrees/branches) */}
+            {gitStatus && (gitStatus.worktrees.length > 0 || gitStatus.staleBranches.length > 0) && (
+              <span style={{
+                color: gitStatus.worktrees.some(w => w.status === 'stale') ? '#ff6b6b'
+                  : gitStatus.worktrees.some(w => w.status === 'pending-merge') ? '#FFB74D'
+                  : '#4FC3F7',
+              }}>
+                {'\u00B7'} {'\uD83D\uDCC2'} {gitStatus.worktrees.length} worktree{gitStatus.worktrees.length !== 1 ? 's' : ''}
+                {gitStatus.staleBranches.length > 0 && ` \u00B7 \u26A0 ${gitStatus.staleBranches.length} branch${gitStatus.staleBranches.length !== 1 ? 'es' : ''}`}
+              </span>
+            )}
           </button>
-          <span className="mx-1">|</span>
-          <span style={{ color: saveHook.state === 'dirty' ? 'var(--idle-amber)' : 'var(--terminal-text-muted)' }}>
-            {saveHook.state === 'no-git' ? 'No git'
-              : saveHook.state === 'saving' ? 'Saving...'
-              : saveHook.state === 'dirty' ? `${saveHook.dirtyCount} unsaved`
-              : saveHook.lastSaved ? `Saved ${(() => { const m = Math.floor((Date.now() - new Date(saveHook.lastSaved).getTime()) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m}m ago` : `${Math.floor(m / 60)}h ago`; })()}`
-              : 'Saved'}
-          </span>
         </div>
         <div className="flex items-center gap-2">
           {/* Minimized wave command center indicator */}
@@ -1419,7 +1415,6 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
             TERMINAL
           </button>
         </div>
-        <span>Expand: +{Math.max(0, 10 - roles.length)} desks available</span>
       </div>
 
       {/* ─── Side Panels ─── */}
