@@ -19,21 +19,37 @@ interface Props {
   onClose: () => void;
   onMinimize: () => void;
   onDone?: () => void;
+  onSave?: (jobIds: string[]) => Promise<void>;
   onOpenKnowledgeDoc?: (docId: string) => void;
 }
 
 export default function WaveCommandCenter({
   directive, rootJobs, orgNodes, rootRoleId,
-  onClose, onMinimize, onDone, onOpenKnowledgeDoc,
+  onClose, onMinimize, onDone, onOpenKnowledgeDoc, onSave,
 }: Props) {
   const { nodes, selectedRoleId, selectNode, progress, allDone, connectStream } = useWaveTree(rootJobs, orgNodes, rootRoleId);
   const [elapsed, setElapsed] = useState(0);
   const [collapsedThinking, setCollapsedThinking] = useState<Set<number>>(new Set());
   const [replyText, setReplyText] = useState('');
   const [replying, setReplying] = useState(false);
+  const [saving, setSaving] = useState(false);
   const outputRef = useRef<HTMLDivElement>(null);
   const startTime = useRef(Date.now());
   const doneFired = useRef(false);
+
+  const handleSave = useCallback(async () => {
+    if (!onSave) return;
+    setSaving(true);
+    try {
+      const jobIds = rootJobs.map(j => j.jobId);
+      await onSave(jobIds);
+    } catch (err) {
+      console.error('Save failed:', err);
+    } finally {
+      setSaving(false);
+      onClose();
+    }
+  }, [onSave, rootJobs, onClose]);
 
   const handleReply = useCallback(async () => {
     if (!selectedRoleId || !replyText.trim()) return;
@@ -110,11 +126,8 @@ export default function WaveCommandCenter({
 
   return (
     <>
-      {/* Dimmer */}
-      <div
-        className="fixed inset-0 bg-black/40 z-[60] backdrop-blur-sm"
-        onClick={allDone ? onClose : undefined}
-      />
+      {/* Dimmer — no auto-close on backdrop click */}
+      <div className="fixed inset-0 bg-black/40 z-[60] backdrop-blur-sm" />
 
       {/* Main panel */}
       <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[960px] max-w-[95vw] h-[85vh] z-[61] bg-[var(--terminal-bg)] rounded-2xl shadow-2xl overflow-hidden flex flex-col">
@@ -167,14 +180,13 @@ export default function WaveCommandCenter({
             >
               &#x2013;
             </button>
-            {allDone && (
-              <button
-                onClick={onClose}
-                className="text-[var(--terminal-text-muted)] hover:text-[var(--terminal-text)] text-lg cursor-pointer"
-              >
-                &times;
-              </button>
-            )}
+            <button
+              onClick={onClose}
+              className="text-[var(--terminal-text-muted)] hover:text-[var(--terminal-text)] text-lg cursor-pointer"
+              title={allDone ? 'Dismiss wave' : 'Close (jobs keep running)'}
+            >
+              &times;
+            </button>
           </div>
         </div>
 
@@ -346,13 +358,25 @@ export default function WaveCommandCenter({
                 {selectedNode && selectedNode.events.length > 0 && `${selectedNode.events.length} events`}
               </div>
               {allDone && (
-                <button
-                  onClick={onClose}
-                  className="px-4 py-1.5 text-xs text-white rounded-lg font-semibold cursor-pointer"
-                  style={{ background: '#2E7D32' }}
-                >
-                  Close
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={onClose}
+                    className="px-4 py-1.5 text-xs rounded-lg font-semibold cursor-pointer"
+                    style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--terminal-text-muted)' }}
+                  >
+                    Dismiss
+                  </button>
+                  {onSave && (
+                    <button
+                      onClick={handleSave}
+                      disabled={saving}
+                      className="px-4 py-1.5 text-xs text-white rounded-lg font-semibold cursor-pointer disabled:opacity-50"
+                      style={{ background: '#2E7D32' }}
+                    >
+                      {saving ? 'Saving...' : 'Save Wave'}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </div>

@@ -1,4 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
 import { COMPANY_ROOT } from '../services/file-reader.js';
 import { getAllActivities, setActivity, updateActivity, completeActivity } from '../services/activity-tracker.js';
 import { buildOrgTree, canDispatchTo, getSubordinates } from '../engine/org-tree.js';
@@ -28,6 +30,12 @@ const roleStatus = new Map<string, 'idle' | 'working' | 'done'>();
 export function handleExecRequest(req: IncomingMessage, res: ServerResponse): void {
   const url = req.url ?? '';
   const method = req.method ?? '';
+
+  // ── /api/waves/save ──
+  if (method === 'POST' && url === '/api/waves/save') {
+    readBody(req).then((body) => handleSaveWave(body, res));
+    return;
+  }
 
   // ── /api/jobs/* routes ──
   if (url.startsWith('/api/jobs')) {
@@ -293,6 +301,79 @@ function handleReplyToJob(jobId: string, body: Record<string, unknown>, res: Ser
   }
 
   jsonResponse(res, 200, { jobId: newJob.id, roleId: newJob.roleId });
+}
+
+/* ─── POST /api/waves/save ──────────────── */
+
+function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): void {
+  const directive = body.directive as string;
+  const jobIds = body.jobIds as string[];
+
+  if (!directive || !jobIds || jobIds.length === 0) {
+    jsonResponse(res, 400, { error: 'directive and jobIds are required' });
+    return;
+  }
+
+  // Build wave summary from job streams
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10);
+  const timeStr = now.toTimeString().slice(0, 5);
+  const lines: string[] = [
+    `# Wave — ${dateStr} ${timeStr}`,
+    '',
+    `> ${directive}`,
+    '',
+  ];
+
+  for (const jobId of jobIds) {
+    const events = ActivityStream.readAll(jobId);
+    const startEvent = events.find(e => e.type === 'job:start');
+    const roleId = startEvent?.roleId ?? 'unknown';
+    const doneEvent = events.find(e => e.type === 'job:done' || e.type === 'job:awaiting_input');
+
+    lines.push(`## ${roleId.toUpperCase()}`);
+    lines.push('');
+
+    // Collect text output
+    const textParts: string[] = [];
+    for (const e of events) {
+      if (e.type === 'text' && typeof e.data.text === 'string') {
+        textParts.push(e.data.text);
+      }
+    }
+    const fullText = textParts.join('');
+    // Take last 1500 chars as summary
+    const summary = fullText.length > 1500
+      ? '...' + fullText.slice(-1500)
+      : fullText;
+
+    if (summary.trim()) {
+      lines.push(summary.trim());
+    } else {
+      lines.push('(No text output)');
+    }
+
+    if (doneEvent) {
+      const turns = doneEvent.data.turns as number ?? 0;
+      const tools = doneEvent.data.toolCalls as number ?? 0;
+      lines.push('');
+      lines.push(`*${turns} turns, ${tools} tool calls*`);
+    }
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+  }
+
+  // Write to operations/waves/
+  const wavesDir = path.join(COMPANY_ROOT, 'operations', 'waves');
+  if (!fs.existsSync(wavesDir)) {
+    fs.mkdirSync(wavesDir, { recursive: true });
+  }
+  const filename = `wave-${dateStr}-${Date.now()}.md`;
+  const filePath = path.join(wavesDir, filename);
+  fs.writeFileSync(filePath, lines.join('\n'), 'utf-8');
+
+  jsonResponse(res, 200, { ok: true, path: `operations/waves/${filename}` });
 }
 
 /* ═══════════════════════════════════════════════

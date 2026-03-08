@@ -102,6 +102,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     rootJobs: Array<{ jobId: string; roleId: string; roleName: string }>;
   } | null>(null);
   const [waveMinimized, setWaveMinimized] = useState(false);
+  const [waveDone, setWaveDone] = useState(false);
 
   /* Role levels from token usage */
   const [roleLevels, setRoleLevels] = useState<RoleLevelData>({});
@@ -1370,15 +1371,15 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           {waveState && waveMinimized && (
             <button
               onClick={() => setWaveMinimized(false)}
-              className="px-3 py-1 font-black text-white cursor-pointer animate-pulse"
+              className={`px-3 py-1 font-black text-white cursor-pointer ${waveDone ? '' : 'animate-pulse'}`}
               style={{
-                background: '#B71C1C',
-                border: '2px solid #7f121288',
+                background: waveDone ? '#2E7D32' : '#B71C1C',
+                border: `2px solid ${waveDone ? '#1b5e2088' : '#7f121288'}`,
                 fontFamily: 'var(--pixel-font)',
                 borderRadius: 4,
               }}
             >
-              WAVE
+              {waveDone ? 'WAVE DONE' : 'WAVE'}
             </button>
           )}
           {/* Minimized job indicator */}
@@ -1492,15 +1493,26 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           rootJobs={waveState.rootJobs}
           orgNodes={orgNodes}
           rootRoleId={orgRootId}
-          onClose={() => { setWaveState(null); setWaveMinimized(false); }}
+          onClose={() => { setWaveState(null); setWaveMinimized(false); setWaveDone(false); }}
           onMinimize={() => setWaveMinimized(true)}
           onDone={() => {
             handleJobDone();
-            addToast('Wave complete', '#2E7D32');
+            setWaveDone(true);
+            addToast('Wave complete — review & save results', '#2E7D32');
+          }}
+          onSave={async (jobIds) => {
+            try {
+              await api.saveWave({ directive: waveState.directive, jobIds });
+              handleJobDone();
+              addToast('Wave saved to bulletin', '#2E7D32');
+            } catch (err) {
+              addToast(`Save failed: ${err instanceof Error ? err.message : 'unknown'}`, '#C62828');
+            }
           }}
           onOpenKnowledgeDoc={(docId) => {
             setWaveState(null);
             setWaveMinimized(false);
+            setWaveDone(false);
             setPanel({ type: 'knowledge', docId });
             api.getKnowledge().then(setKnowledgeDocs).catch(() => {});
           }}

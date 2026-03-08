@@ -95,6 +95,8 @@ export const api = {
   abortJob: (id: string) => del<{ ok: boolean }>(`/jobs/${id}`),
   replyToJob: (id: string, message: string) =>
     post<{ jobId: string; roleId: string }>(`/jobs/${id}/reply`, { message }),
+  saveWave: (params: { directive: string; jobIds: string[] }) =>
+    post<{ ok: boolean; path: string }>('/waves/save', params),
 
   // Setup / Onboarding
   getStatus: () => get<CompanyStatus>('/status'),
