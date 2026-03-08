@@ -513,6 +513,10 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   const handleUpdateRole = async (roleId: string, changes: { name?: string }) => {
     await api.updateRole(roleId, changes);
     refreshRoles();
+    // Refresh selectedRole detail so SidePanel shows updated name
+    if (panel.type === 'role' && panel.roleId === roleId) {
+      api.getRole(roleId).then(setSelectedRole).catch(console.error);
+    }
     if (changes.name) addToast(`${roleId.toUpperCase()} renamed to "${changes.name}"`, '#1565C0');
   };
 
