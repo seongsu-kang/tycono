@@ -164,6 +164,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
   const [scaffoldDone, setScaffoldDone] = useState(false);
   const [scaffoldError, setScaffoldError] = useState<string | null>(null);
   const [createdFiles, setCreatedFiles] = useState<string[]>([]);
+  const [scaffoldProjectRoot, setScaffoldProjectRoot] = useState<string>('');
   const [connectingAkb, setConnectingAkb] = useState(false);
 
   // Dynamic steps based on knowledge mode
@@ -277,6 +278,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
       }
       const result = await api.scaffold(input);
       setCreatedFiles(result.created);
+      setScaffoldProjectRoot(result.projectRoot);
       setScaffoldDone(true);
     } catch (err) {
       setScaffoldError(err instanceof Error ? err.message : 'Scaffold failed');
@@ -711,6 +713,14 @@ export default function OnboardingWizard({ onComplete }: Props) {
               {scaffoldDone && (
                 <>
                   <div className="text-center py-4 text-4xl">{'\uD83C\uDFE2'}</div>
+                  {scaffoldProjectRoot && (
+                    <div
+                      className="rounded-lg p-3 text-xs"
+                      style={{ background: 'var(--terminal-bg)', color: 'var(--terminal-text)', border: '1px solid var(--terminal-border)', fontFamily: 'var(--pixel-font)' }}
+                    >
+                      <span className="opacity-50">Location:</span> {scaffoldProjectRoot}
+                    </div>
+                  )}
                   <div
                     className="rounded-lg p-4 text-xs max-h-40 overflow-y-auto"
                     style={{ background: 'var(--terminal-bg)', color: 'var(--terminal-text)', border: '1px solid var(--terminal-border)', fontFamily: 'var(--pixel-font)' }}
