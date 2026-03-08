@@ -127,7 +127,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   /* Customization */
   const { getAppearance, setAppearance, resetAppearance, theme, setTheme, speechSettings, setSpeechSettings, language, setLanguage } = useCustomization();
   const [customizeTarget, setCustomizeTarget] = useState<Role | null>(null);
-  const [customizeInitialTab, setCustomizeInitialTab] = useState<'character' | 'office' | 'settings'>('character');
+  const [, setCustomizeInitialTab] = useState<'character' | 'office' | 'settings'>('character');
 
   /* Save system */
   const saveHook = useSave();

@@ -46,7 +46,6 @@ export default function SyncPanel({ onClose, onSyncComplete }: SyncPanelProps) {
       }
 
       // 2. Check Cloud API for updates
-      let cloudAvailable = false;
       try {
         const checkResult = await cloudApi.syncCheck(
           syncableRoles.map(r => ({
@@ -55,7 +54,6 @@ export default function SyncPanel({ onClose, onSyncComplete }: SyncPanelProps) {
             currentVersion: r.source.upstream_version ?? r.source.forked_at ?? '0.0.0',
           }))
         );
-        cloudAvailable = true;
         setCloudConnected(true);
 
         // 3. For roles with updates, pull full data to compute diffs
