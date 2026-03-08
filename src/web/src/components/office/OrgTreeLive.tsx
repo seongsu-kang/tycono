@@ -99,9 +99,10 @@ export default function OrgTreeLive({ nodes, rootId, selectedRoleId, onSelectNod
   return (
     <svg
       viewBox={`0 0 ${width} ${height}`}
-      width="100%"
-      height="100%"
+      width={Math.max(width, 280)}
+      height={height}
       className="block"
+      style={{ minWidth: width }}
     >
       <defs>
         <filter id="glow">

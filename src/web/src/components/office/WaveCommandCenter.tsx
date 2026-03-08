@@ -185,44 +185,43 @@ export default function WaveCommandCenter({
           </span>
         </div>
 
-        {/* Body: Left org tree + Right activity feed */}
-        <div className="flex flex-1 min-h-0">
-          {/* Left: Org Tree */}
-          <div className="w-[280px] shrink-0 border-r border-[var(--terminal-border)] flex flex-col">
-            <div className="px-3 py-2 border-b border-[var(--terminal-border)]">
+        {/* Body: Top org tree + Bottom activity feed */}
+        <div className="flex flex-col flex-1 min-h-0">
+          {/* Top: Org Tree (horizontal banner) */}
+          <div className="shrink-0 border-b border-[var(--terminal-border)] flex flex-col">
+            <div className="flex items-center gap-3 px-4 py-1.5">
               <span className="text-[10px] font-bold text-[var(--terminal-text-secondary)] uppercase tracking-wider">
                 Org Propagation
               </span>
+              {/* Legend inline */}
+              <div className="flex gap-x-3 ml-auto">
+                {[
+                  { label: 'running', color: '#FBBF24', dot: true },
+                  { label: 'awaiting', color: '#F59E0B', dot: true },
+                  { label: 'done', color: '#2E7D32', dot: false },
+                  { label: 'waiting', color: '#888', dot: false },
+                  { label: 'error', color: '#C62828', dot: false },
+                ].map((item) => (
+                  <div key={item.label} className="flex items-center gap-1">
+                    <span
+                      className="w-2 h-2 rounded-full inline-block"
+                      style={{
+                        background: item.color,
+                        animation: item.dot ? 'wave-pulse 1.5s ease-in-out infinite' : undefined,
+                      }}
+                    />
+                    <span className="text-[8px] text-[var(--terminal-text-muted)]">{item.label}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="flex-1 overflow-auto p-3">
+            <div className="overflow-x-auto overflow-y-hidden px-3 pb-2" style={{ maxHeight: '180px' }}>
               <OrgTreeLive
                 nodes={nodes}
                 rootId={rootRoleId}
                 selectedRoleId={selectedRoleId}
                 onSelectNode={selectNode}
               />
-            </div>
-
-            {/* Legend */}
-            <div className="px-3 py-2 border-t border-[var(--terminal-border)] flex flex-wrap gap-x-3 gap-y-1">
-              {[
-                { label: 'running', color: '#FBBF24', dot: true },
-                { label: 'awaiting', color: '#F59E0B', dot: true },
-                { label: 'done', color: '#2E7D32', dot: false },
-                { label: 'waiting', color: '#888', dot: false },
-                { label: 'error', color: '#C62828', dot: false },
-              ].map((item) => (
-                <div key={item.label} className="flex items-center gap-1">
-                  <span
-                    className="w-2 h-2 rounded-full inline-block"
-                    style={{
-                      background: item.color,
-                      animation: item.dot ? 'wave-pulse 1.5s ease-in-out infinite' : undefined,
-                    }}
-                  />
-                  <span className="text-[8px] text-[var(--terminal-text-muted)]">{item.label}</span>
-                </div>
-              ))}
             </div>
           </div>
 
