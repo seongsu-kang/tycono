@@ -164,14 +164,33 @@ export function assembleContext(
 /* ─── Section Builders ───────────────────────── */
 
 function loadCompanyRules(companyRoot: string): string | null {
-  const claudeMdPath = path.join(companyRoot, 'CLAUDE.md');
-  if (!fs.existsSync(claudeMdPath)) return null;
+  const parts: string[] = [];
 
-  // Give the full CLAUDE.md — it contains the routing table, folder structure,
-  // Hub-first principle, and other navigation info that roles need to work effectively.
-  // Previously we extracted only AKB + Git rules, but that stripped out the most
-  // practically useful parts (routing table, folder structure, skill principle).
-  return fs.readFileSync(claudeMdPath, 'utf-8');
+  // 1. System rules (CLAUDE.md — Tycono managed)
+  const claudeMdPath = path.join(companyRoot, 'CLAUDE.md');
+  if (fs.existsSync(claudeMdPath)) {
+    parts.push(fs.readFileSync(claudeMdPath, 'utf-8'));
+  }
+
+  // 2. User custom rules (.tycono/custom-rules.md — user owned)
+  const customPath = path.join(companyRoot, '.tycono', 'custom-rules.md');
+  if (fs.existsSync(customPath)) {
+    const custom = fs.readFileSync(customPath, 'utf-8').trim();
+    if (custom) {
+      parts.push('---\n\n## Company Custom Rules\n\n' + custom);
+    }
+  }
+
+  // 3. Company info (company/company.md — user owned)
+  const companyMdPath = path.join(companyRoot, 'company', 'company.md');
+  if (fs.existsSync(companyMdPath)) {
+    const companyInfo = fs.readFileSync(companyMdPath, 'utf-8').trim();
+    if (companyInfo) {
+      parts.push('---\n\n## Company Info\n\n' + companyInfo);
+    }
+  }
+
+  return parts.length > 0 ? parts.join('\n\n') : null;
 }
 
 function buildOrgContextSection(orgTree: OrgTree, node: OrgNode): string {

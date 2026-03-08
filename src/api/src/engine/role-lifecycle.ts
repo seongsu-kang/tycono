@@ -99,9 +99,6 @@ export class RoleLifecycleManager {
 
     // 5. Update roles.md Hub
     this.addToRolesHub(def);
-
-    // 6. Update CLAUDE.md org table
-    this.addToClaudeMdOrgTable(def);
   }
 
   /**
@@ -160,8 +157,6 @@ export class RoleLifecycleManager {
 
     // Remove from roles.md Hub
     this.removeFromRolesHub(id);
-    // Remove from CLAUDE.md org table
-    this.removeFromClaudeMdOrgTable(id);
   }
 
   /**
@@ -337,25 +332,6 @@ ${def.authority.needsApproval.map((a) => `- ${a}`).join('\n')}
     fs.writeFileSync(hubPath, updatedContent);
   }
 
-  private addToClaudeMdOrgTable(def: RoleDefinition): void {
-    const claudeMdPath = path.join(this.companyRoot, 'CLAUDE.md');
-    if (!fs.existsSync(claudeMdPath)) return;
-
-    const content = fs.readFileSync(claudeMdPath, 'utf-8');
-    if (content.includes(`| **${def.name}**`)) {
-      return; // Already exists
-    }
-
-    const row = `| **${def.name}** | AI (${def.id}) | ${def.level} | ${def.reportsTo.toUpperCase()} | Active |`;
-
-    const orgSectionMatch = content.match(/## (?:조직|Organization)[\s\S]*?\n(\|[^\n]*\n)+/);
-    if (orgSectionMatch) {
-      const insertPos = (orgSectionMatch.index ?? 0) + orgSectionMatch[0].length;
-      const updated = content.slice(0, insertPos) + row + '\n' + content.slice(insertPos);
-      fs.writeFileSync(claudeMdPath, updated);
-    }
-  }
-
   private removeFromRolesHub(id: string): void {
     const hubPath = path.join(this.companyRoot, 'roles', 'roles.md');
     if (!fs.existsSync(hubPath)) return;
@@ -369,16 +345,6 @@ ${def.authority.needsApproval.map((a) => `- ${a}`).join('\n')}
     fs.writeFileSync(hubPath, lines.join('\n'));
   }
 
-  private removeFromClaudeMdOrgTable(id: string): void {
-    const claudeMdPath = path.join(this.companyRoot, 'CLAUDE.md');
-    if (!fs.existsSync(claudeMdPath)) return;
-
-    const content = fs.readFileSync(claudeMdPath, 'utf-8');
-    const lines = content.split('\n').filter((line) => {
-      return !line.includes(`(${id})`) || !line.startsWith('|');
-    });
-    fs.writeFileSync(claudeMdPath, lines.join('\n'));
-  }
 }
 
 /* ─── Helpers ──────────────────────────────── */
