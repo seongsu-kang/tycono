@@ -644,12 +644,21 @@ function PublishToStore({ role, appearance }: { role: RoleDetail; appearance?: C
   const [status, setStatus] = useState<'idle' | 'publishing' | 'done' | 'error'>('idle');
   const [message, setMessage] = useState('');
   const [confirm, setConfirm] = useState(false);
+  const [publishedVersion, setPublishedVersion] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  // Check if already published
+  useEffect(() => {
+    cloudApi.getCharacterVersion(role.id)
+      .then(v => setPublishedVersion(v?.version ?? null))
+      .catch(() => setPublishedVersion(null));
+  }, [role.id]);
 
   const handlePublish = async () => {
     if (!confirm) { setConfirm(true); return; }
     setStatus('publishing');
     try {
-      // Fetch real SKILL.md content from local API
       let skillExport = null;
       try { skillExport = await api.exportSkills(role.id); } catch { /* no skills */ }
 
@@ -673,7 +682,6 @@ function PublishToStore({ role, appearance }: { role: RoleDetail; appearance?: C
       };
       if (appearance) data.appearance = appearance;
 
-      // Check if already published — bump version
       let version = '1.0.0';
       try {
         const existing = await cloudApi.getCharacterVersion(role.id);
@@ -687,6 +695,7 @@ function PublishToStore({ role, appearance }: { role: RoleDetail; appearance?: C
       await cloudApi.publishCharacter({ id: role.id, name: role.name || role.id, version, data });
       setStatus('done');
       setMessage(`Published v${version}`);
+      setPublishedVersion(version);
       setConfirm(false);
     } catch (err) {
       setStatus('error');
@@ -695,31 +704,83 @@ function PublishToStore({ role, appearance }: { role: RoleDetail; appearance?: C
     }
   };
 
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await cloudApi.deleteCharacter(role.id);
+      setPublishedVersion(null);
+      setStatus('idle');
+      setMessage('');
+      setDeleteConfirm(false);
+    } catch {
+      setMessage('Delete failed');
+    }
+    setDeleting(false);
+  };
+
   return (
     <div className="px-4 pb-2 shrink-0">
       <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--terminal-border)' }}>
-        <div className="px-3 py-2.5 flex items-center justify-between" style={{ background: 'var(--hud-bg-alt)' }}>
-          <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--terminal-text-secondary)', fontFamily: 'var(--pixel-font)' }}>
-            Cloud Store
-          </span>
-          {status === 'done' ? (
-            <span className="text-[10px] font-semibold" style={{ color: 'var(--active-green)' }}>{message}</span>
-          ) : status === 'error' ? (
-            <span className="text-[10px] font-semibold" style={{ color: '#ef4444' }}>{message}</span>
-          ) : (
-            <button
-              onClick={handlePublish}
-              disabled={status === 'publishing'}
-              className="text-[10px] px-2.5 py-1 rounded font-semibold cursor-pointer transition-colors disabled:opacity-50"
-              style={{
-                background: confirm ? 'rgba(59,130,246,0.3)' : 'rgba(59,130,246,0.15)',
-                color: '#60a5fa',
-                border: confirm ? '1px solid rgba(59,130,246,0.5)' : '1px solid transparent',
-              }}
-            >
-              {status === 'publishing' ? 'Publishing...' : confirm ? 'Confirm Publish?' : 'Publish to Store'}
-            </button>
-          )}
+        <div className="px-3 py-2.5 flex items-center justify-between gap-2" style={{ background: 'var(--hud-bg-alt)' }}>
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-[11px] font-bold uppercase tracking-wider shrink-0" style={{ color: 'var(--terminal-text-secondary)', fontFamily: 'var(--pixel-font)' }}>
+              Cloud Store
+            </span>
+            {publishedVersion && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded shrink-0" style={{ background: 'rgba(34,197,94,0.1)', color: 'rgba(34,197,94,0.6)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                v{publishedVersion}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {status === 'done' ? (
+              <span className="text-[10px] font-semibold" style={{ color: 'var(--active-green)' }}>{message}</span>
+            ) : status === 'error' ? (
+              <span className="text-[10px] font-semibold" style={{ color: '#ef4444' }}>{message}</span>
+            ) : (
+              <button
+                onClick={handlePublish}
+                disabled={status === 'publishing'}
+                className="text-[10px] px-2.5 py-1 rounded font-semibold cursor-pointer transition-colors disabled:opacity-50"
+                style={{
+                  background: confirm ? 'rgba(59,130,246,0.3)' : 'rgba(59,130,246,0.15)',
+                  color: '#60a5fa',
+                  border: confirm ? '1px solid rgba(59,130,246,0.5)' : '1px solid transparent',
+                }}
+              >
+                {status === 'publishing' ? 'Publishing...' : confirm ? 'Confirm?' : publishedVersion ? 'Update' : 'Publish'}
+              </button>
+            )}
+            {publishedVersion && !deleteConfirm && (
+              <button
+                onClick={() => setDeleteConfirm(true)}
+                className="text-[10px] px-1.5 py-1 rounded cursor-pointer transition-colors"
+                style={{ color: 'rgba(239,68,68,0.4)' }}
+                title="Remove from store"
+              >
+                {'\u2715'}
+              </button>
+            )}
+            {deleteConfirm && (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="text-[10px] px-2 py-1 rounded font-semibold cursor-pointer disabled:opacity-50"
+                  style={{ background: 'rgba(239,68,68,0.2)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}
+                >
+                  {deleting ? '...' : 'Delete'}
+                </button>
+                <button
+                  onClick={() => setDeleteConfirm(false)}
+                  className="text-[10px] px-1.5 py-1 rounded cursor-pointer"
+                  style={{ color: 'var(--terminal-text-muted)' }}
+                >
+                  No
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

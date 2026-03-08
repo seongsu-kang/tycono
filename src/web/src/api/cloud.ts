@@ -29,6 +29,10 @@ export interface CloudCharacterSummary {
   level: string;
   price: string;
   installs: number;
+  upvotes: number;
+  downvotes: number;
+  vote_score: number;
+  my_vote?: number | null;
 }
 
 export interface CloudCharacterDetail {
@@ -53,13 +57,29 @@ export interface SyncCheckResult {
   }>;
 }
 
+export type StoreSortOption = 'name' | 'popular' | 'installs' | 'newest';
+
 export const cloudApi = {
   health: () => cloudGet<{ status: string; version: string }>('/api/health'),
 
   // Store
-  getCharacters: () => cloudGet<{ characters: CloudCharacterSummary[] }>('/api/store/characters'),
+  getCharacters: (opts?: { sort?: StoreSortOption; instanceId?: string }) => {
+    const params = new URLSearchParams();
+    if (opts?.sort) params.set('sort', opts.sort);
+    if (opts?.instanceId) params.set('instance_id', opts.instanceId);
+    const qs = params.toString();
+    return cloudGet<{ characters: CloudCharacterSummary[] }>(`/api/store/characters${qs ? `?${qs}` : ''}`);
+  },
   getCharacter: (id: string) => cloudGet<CloudCharacterDetail>(`/api/store/characters/${id}`),
   getCharacterVersion: (id: string) => cloudGet<{ id: string; version: string }>(`/api/store/characters/${id}/version`),
+
+  // Voting
+  voteCharacter: (id: string, instanceId: string, vote: 1 | -1 | 0) =>
+    cloudPost<{ ok: boolean; upvotes: number; downvotes: number }>(`/api/store/characters/${id}/vote`, { instanceId, vote }),
+
+  // Install tracking
+  trackInstall: (id: string) =>
+    cloudPost<{ ok: boolean; installs: number }>(`/api/store/characters/${id}/install`, {}),
 
   // Sync
   syncCheck: (roles: Array<{ roleId: string; sourceId: string; currentVersion: string }>) =>

@@ -5,7 +5,7 @@ import type { SkillExport } from '../../types/store';
 import CharacterEditor, { randomAppearance } from './CharacterEditor';
 import TopDownCharCanvas from './TopDownCharCanvas';
 import { api } from '../../api/client';
-import { cloudApi } from '../../api/cloud';
+import { cloudApi, type CloudCharacterSummary, type StoreSortOption } from '../../api/cloud';
 
 interface Props {
   existingRoles: { id: string; name: string }[];
@@ -46,6 +46,18 @@ function defaultsForLevel(level: CreateRoleInput['level']) {
   }
 }
 
+/* ─── Instance ID for voting ─── */
+
+function getInstanceId(): string {
+  const key = 'tycono_instance_id';
+  let id = localStorage.getItem(key);
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem(key, id);
+  }
+  return id;
+}
+
 const TOTAL_STEPS = 4;
 
 /* ─── Bulk hire types ─── */
@@ -80,12 +92,15 @@ function parseBulkLine(line: string, existingIds: Set<string>, seenIds: Set<stri
 export default function HireRoleModal({ existingRoles, onClose, onHire }: Props) {
   const [mode, setMode] = useState<'single' | 'bulk' | 'store'>('single');
 
-  /* ─── Store import state ─── */
-  const [storeId, setStoreId] = useState('');
+  /* ─── Store browse state ─── */
+  const [storeChars, setStoreChars] = useState<CloudCharacterSummary[]>([]);
+  const [storeLoading, setStoreLoading] = useState(false);
+  const [storeSort, setStoreSort] = useState<StoreSortOption>('popular');
+  const [storeSearch, setStoreSearch] = useState('');
   const [storeCharacter, setStoreCharacter] = useState<Record<string, any> | null>(null);
   const [storeFetching, setStoreFetching] = useState(false);
   const [storeError, setStoreError] = useState('');
-  const [storeStep, setStoreStep] = useState<'input' | 'review'>('input');
+  const [storeStep, setStoreStep] = useState<'browse' | 'review'>('browse');
   const [storeName, setStoreName] = useState('');
   const [storeRoleId, setStoreRoleId] = useState('');
   const [storeReportsTo, setStoreReportsTo] = useState('ceo');
@@ -121,10 +136,43 @@ export default function HireRoleModal({ existingRoles, onClose, onHire }: Props)
     if (mode === 'single') {
       if (step === 1) nameRef.current?.focus();
       if (step === 2) personaRef.current?.focus();
-    } else {
+    } else if (mode === 'bulk') {
       if (bulkStep === 'input') bulkRef.current?.focus();
     }
   }, [step, mode, bulkStep]);
+
+  /* ─── Load store characters ─── */
+  useEffect(() => {
+    if (mode === 'store' && storeStep === 'browse' && storeChars.length === 0) {
+      loadStoreChars();
+    }
+  }, [mode, storeStep]);
+
+  const loadStoreChars = async () => {
+    setStoreLoading(true);
+    try {
+      const data = await cloudApi.getCharacters({ sort: storeSort, instanceId: getInstanceId() });
+      setStoreChars(data.characters);
+    } catch { setStoreError('Failed to load store'); }
+    setStoreLoading(false);
+  };
+
+  // Reload on sort change
+  useEffect(() => {
+    if (mode === 'store' && storeStep === 'browse') {
+      loadStoreChars();
+    }
+  }, [storeSort]);
+
+  const filteredChars = useMemo(() => {
+    if (!storeSearch.trim()) return storeChars;
+    const q = storeSearch.toLowerCase();
+    return storeChars.filter(c =>
+      c.name.toLowerCase().includes(q) ||
+      c.id.toLowerCase().includes(q) ||
+      (c.tagline ?? '').toLowerCase().includes(q)
+    );
+  }, [storeChars, storeSearch]);
 
   /* ─── Bulk parsing ─── */
   const existingIds = useMemo(() => new Set(existingRoles.map(r => r.id)), [existingRoles]);
@@ -201,23 +249,37 @@ export default function HireRoleModal({ existingRoles, onClose, onHire }: Props)
     }
   };
 
-  /* ─── Store import handlers ─── */
-  const handleStoreFetch = async () => {
+  /* ─── Store handlers ─── */
+  const handleStoreSelect = async (charId: string) => {
     setStoreFetching(true);
     setStoreError('');
     try {
-      const cleanId = storeId.replace(/^tycono:/, '').trim();
-      if (!cleanId) { setStoreError('Please enter a character ID'); setStoreFetching(false); return; }
-      const ch = await cloudApi.getCharacter(cleanId);
+      const ch = await cloudApi.getCharacter(charId);
       setStoreCharacter(ch);
       setStoreName(ch.name || '');
-      setStoreRoleId(slugify(ch.name || cleanId));
+      setStoreRoleId(slugify(ch.name || charId));
       setStoreStep('review');
     } catch {
-      setStoreError('Character not found. Check the ID and try again.');
+      setStoreError('Failed to load character details');
     } finally {
       setStoreFetching(false);
     }
+  };
+
+  const handleVote = async (charId: string, vote: 1 | -1) => {
+    const existing = storeChars.find(c => c.id === charId);
+    if (!existing) return;
+    const newVote = existing.my_vote === vote ? 0 : vote;
+    try {
+      const result = await cloudApi.voteCharacter(charId, getInstanceId(), newVote as 1 | -1 | 0);
+      setStoreChars(prev => prev.map(c => c.id === charId ? {
+        ...c,
+        upvotes: result.upvotes,
+        downvotes: result.downvotes,
+        vote_score: result.upvotes - result.downvotes,
+        my_vote: newVote === 0 ? null : newVote,
+      } : c));
+    } catch { /* silently fail */ }
   };
 
   const handleStoreHire = async () => {
@@ -243,11 +305,20 @@ export default function HireRoleModal({ existingRoles, onClose, onHire }: Props)
         source: { id: `tycono/${ch.id}`, sync: 'manual', forked_at: '1.0.0', upstream_version: '1.0.0' },
         skillContent: isSkillExp ? (ch.skills as SkillExport) : undefined,
       }, ch.appearance ? ch.appearance : randomAppearance());
+      // Track install
+      cloudApi.trackInstall(ch.id).catch(() => {});
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to hire');
       setBusy(false);
     }
+  };
+
+  const handleStoreDelete = async (charId: string) => {
+    try {
+      await cloudApi.deleteCharacter(charId);
+      setStoreChars(prev => prev.filter(c => c.id !== charId));
+    } catch { /* ignore */ }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -260,8 +331,7 @@ export default function HireRoleModal({ existingRoles, onClose, onHire }: Props)
         if (bulkStep === 'input' && bulkValid) setBulkStep('review');
         else if (bulkStep === 'review') handleBulkHire();
       } else if (mode === 'store') {
-        if (storeStep === 'input' && storeId.trim()) handleStoreFetch();
-        else if (storeStep === 'review') handleStoreHire();
+        if (storeStep === 'review') handleStoreHire();
       }
     }
   };
@@ -296,12 +366,12 @@ export default function HireRoleModal({ existingRoles, onClose, onHire }: Props)
                 onClick={() => { setMode('store'); setError(''); }}
                 className={`px-3 py-1 text-xs font-semibold rounded-md cursor-pointer transition-colors ${mode === 'store' ? 'bg-white/20 text-white' : 'text-white/50 hover:text-white/70'}`}
               >
-                Import
+                Store
               </button>
             </div>
           </div>
           <div className="text-sm opacity-80 mt-0.5">
-            {mode === 'single' ? `Step ${step} of ${TOTAL_STEPS}` : mode === 'bulk' ? (bulkStep === 'input' ? 'Enter roles, one per line' : `Review ${bulkEntries.length} roles`) : (storeStep === 'input' ? 'Import from Tycono Store' : 'Review & customize')}
+            {mode === 'single' ? `Step ${step} of ${TOTAL_STEPS}` : mode === 'bulk' ? (bulkStep === 'input' ? 'Enter roles, one per line' : `Review ${bulkEntries.length} roles`) : (storeStep === 'browse' ? `${storeChars.length} characters available` : 'Review & customize')}
           </div>
         </div>
 
@@ -321,36 +391,57 @@ export default function HireRoleModal({ existingRoles, onClose, onHire }: Props)
         {/* Body */}
         <div className="p-5 min-h-[240px] overflow-y-auto flex-1">
           {mode === 'store' ? (
-            /* ─── Store import mode ─── */
+            /* ─── Store browse mode ─── */
             <>
-              {storeStep === 'input' && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-[11px] font-bold text-[var(--desk-dark)] uppercase tracking-wider mb-2">Character ID</label>
-                    <div className="flex gap-2">
-                      <input
-                        value={storeId}
-                        onChange={(e) => setStoreId(e.target.value)}
-                        placeholder="tycono:engineer"
-                        className="flex-1 p-2.5 rounded-lg border border-white/10 bg-white/5 text-sm text-white/90 placeholder-white/25 font-mono focus:outline-none focus:border-white/25 transition-colors"
-                        onKeyDown={(e) => { if (e.key === 'Enter' && storeId.trim()) handleStoreFetch(); }}
-                        autoFocus
-                      />
-                      <button
-                        onClick={handleStoreFetch}
-                        disabled={!storeId.trim() || storeFetching}
-                        className="px-4 py-2 text-sm text-white rounded-lg font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                        style={{ background: '#2E7D32' }}
-                      >
-                        {storeFetching ? 'Fetching...' : 'Fetch'}
-                      </button>
-                    </div>
-                    <div className="text-[10px] text-gray-400 mt-1">
-                      Copy a character ID from <a href="https://tycono.ai/store.html" target="_blank" className="text-green-400 hover:underline">tycono.ai/store</a> and paste it here
-                    </div>
+              {storeStep === 'browse' && (
+                <div className="space-y-3">
+                  {/* Search + Sort bar */}
+                  <div className="flex gap-2">
+                    <input
+                      value={storeSearch}
+                      onChange={(e) => setStoreSearch(e.target.value)}
+                      placeholder="Search characters..."
+                      className="flex-1 p-2 rounded-lg border border-white/10 bg-white/5 text-sm text-white/90 placeholder-white/25 focus:outline-none focus:border-white/25 transition-colors"
+                      autoFocus
+                    />
+                    <select
+                      value={storeSort}
+                      onChange={(e) => setStoreSort(e.target.value as StoreSortOption)}
+                      className="px-2 py-2 rounded-lg border border-white/10 bg-white/5 text-xs text-white/70 focus:outline-none cursor-pointer"
+                    >
+                      <option value="popular" className="bg-[var(--wall)]">Popular</option>
+                      <option value="installs" className="bg-[var(--wall)]">Most Hired</option>
+                      <option value="newest" className="bg-[var(--wall)]">Newest</option>
+                      <option value="name" className="bg-[var(--wall)]">A-Z</option>
+                    </select>
                   </div>
-                  {storeError && (
-                    <div className="text-xs text-red-400 bg-red-900/20 p-2 rounded-lg border border-red-800/30">{storeError}</div>
+
+                  {/* Characters list */}
+                  {storeLoading ? (
+                    <div className="text-center py-8 text-sm text-white/40">Loading store...</div>
+                  ) : storeError ? (
+                    <div className="text-center py-8">
+                      <div className="text-xs text-red-400 mb-2">{storeError}</div>
+                      <button onClick={loadStoreChars} className="text-xs text-green-400 hover:underline cursor-pointer">Retry</button>
+                    </div>
+                  ) : filteredChars.length === 0 ? (
+                    <div className="text-center py-8 text-sm text-white/40">
+                      {storeSearch ? 'No matches found' : 'No characters in store yet'}
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
+                      {filteredChars.map((ch) => (
+                        <StoreCharCard
+                          key={ch.id}
+                          char={ch}
+                          isHired={existingIds.has(ch.id)}
+                          onSelect={() => handleStoreSelect(ch.id)}
+                          onVote={(vote) => handleVote(ch.id, vote)}
+                          onDelete={() => handleStoreDelete(ch.id)}
+                          fetching={storeFetching}
+                        />
+                      ))}
+                    </div>
                   )}
                 </div>
               )}
@@ -719,7 +810,7 @@ export default function HireRoleModal({ existingRoles, onClose, onHire }: Props)
             )}
             {mode === 'store' && storeStep === 'review' && (
               <button
-                onClick={() => { setStoreStep('input'); setStoreCharacter(null); setError(''); }}
+                onClick={() => { setStoreStep('browse'); setStoreCharacter(null); setError(''); }}
                 disabled={busy}
                 className="px-4 py-2 text-sm rounded-lg border border-white/15 text-white/60 hover:bg-white/5 cursor-pointer disabled:opacity-40"
               >
@@ -790,6 +881,106 @@ export default function HireRoleModal({ existingRoles, onClose, onHire }: Props)
         </div>
       </div>
     </>
+  );
+}
+
+/* ─── Store Character Card ─── */
+
+function StoreCharCard({ char, isHired, onSelect, onVote, onDelete, fetching }: {
+  char: CloudCharacterSummary;
+  isHired: boolean;
+  onSelect: () => void;
+  onVote: (vote: 1 | -1) => void;
+  onDelete: () => void;
+  fetching: boolean;
+}) {
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  return (
+    <div className="flex items-center gap-3 p-3 rounded-xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] transition-colors group">
+      {/* Vote column */}
+      <div className="flex flex-col items-center gap-0.5 shrink-0 w-8">
+        <button
+          onClick={(e) => { e.stopPropagation(); onVote(1); }}
+          className={`text-[14px] leading-none cursor-pointer transition-colors ${char.my_vote === 1 ? 'text-green-400' : 'text-white/20 hover:text-green-400/60'}`}
+          title="Upvote"
+        >
+          {'\u25B2'}
+        </button>
+        <span className={`text-[11px] font-bold tabular-nums ${(char.vote_score ?? 0) > 0 ? 'text-green-400/80' : (char.vote_score ?? 0) < 0 ? 'text-red-400/80' : 'text-white/30'}`}>
+          {char.vote_score ?? 0}
+        </span>
+        <button
+          onClick={(e) => { e.stopPropagation(); onVote(-1); }}
+          className={`text-[14px] leading-none cursor-pointer transition-colors ${char.my_vote === -1 ? 'text-red-400' : 'text-white/20 hover:text-red-400/60'}`}
+          title="Downvote"
+        >
+          {'\u25BC'}
+        </button>
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0 cursor-pointer" onClick={onSelect}>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-white/90 truncate">{char.name}</span>
+          <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold uppercase ${
+            char.level === 'c-level' ? 'bg-amber-900/30 text-amber-400 border border-amber-800/30' :
+            char.level === 'team-lead' ? 'bg-blue-900/30 text-blue-400 border border-blue-800/30' :
+            'bg-white/5 text-white/40 border border-white/10'
+          }`}>
+            {char.level}
+          </span>
+          {isHired && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-green-900/20 text-green-400/60 border border-green-800/20">Hired</span>
+          )}
+        </div>
+        {char.tagline && (
+          <div className="text-[11px] text-white/40 truncate mt-0.5">{char.tagline}</div>
+        )}
+        <div className="flex items-center gap-3 mt-1">
+          <span className="text-[10px] text-white/25">{char.installs ?? 0} installs</span>
+          <span className="text-[10px] text-white/25">v{char.version}</span>
+          <span className="text-[10px] text-white/25 font-mono">{char.id}</span>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        <button
+          onClick={onSelect}
+          disabled={fetching}
+          className="px-3 py-1.5 text-[11px] font-semibold rounded-lg cursor-pointer transition-colors disabled:opacity-40 text-green-400 bg-green-900/20 border border-green-800/30 hover:bg-green-900/40"
+        >
+          Hire
+        </button>
+        {showDeleteConfirm ? (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(); setShowDeleteConfirm(false); }}
+              className="px-2 py-1.5 text-[10px] font-semibold rounded cursor-pointer text-red-400 bg-red-900/30 border border-red-800/40 hover:bg-red-900/50"
+            >
+              Confirm
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(false); }}
+              className="px-2 py-1.5 text-[10px] rounded cursor-pointer text-white/40 hover:text-white/60"
+            >
+              No
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(true); }}
+            className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer text-white/15 hover:text-red-400/60 hover:bg-red-900/10 transition-colors opacity-0 group-hover:opacity-100"
+            title="Delete from store"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+            </svg>
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
