@@ -109,17 +109,25 @@ export const api = {
 
   // Knowledge Base
   getKnowledge: () => get<KnowledgeDoc[]>('/knowledge'),
-  getKnowledgeDoc: (id: string) => get<KnowledgeDocDetail>(`/knowledge/${id}`),
+  getKnowledgeDoc: (id: string) => {
+    // Encode each path segment to handle special characters while preserving slashes
+    const encodedPath = id.split('/').map(encodeURIComponent).join('/');
+    return get<KnowledgeDocDetail>(`/knowledge/${encodedPath}`);
+  },
   createKnowledgeDoc: (params: { filename: string; title: string; category?: string; content?: string }) =>
     post<{ id: string; title: string }>('/knowledge', params),
   updateKnowledgeDoc: (id: string, content: string) => {
-    return fetch(`${BASE}/knowledge/${id}`, {
+    const encodedPath = id.split('/').map(encodeURIComponent).join('/');
+    return fetch(`${BASE}/knowledge/${encodedPath}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content }),
     }).then(r => { if (!r.ok) throw new Error(`API error: ${r.status}`); return r.json(); });
   },
-  deleteKnowledgeDoc: (id: string) => del<{ id: string; status: string }>(`/knowledge/${id}`),
+  deleteKnowledgeDoc: (id: string) => {
+    const encodedPath = id.split('/').map(encodeURIComponent).join('/');
+    return del<{ id: string; status: string }>(`/knowledge/${encodedPath}`);
+  },
 
   // Preferences
   getPreferences: () => get<{ appearances: Record<string, unknown>; theme: string; speech?: SpeechSettings; language?: string }>('/preferences'),

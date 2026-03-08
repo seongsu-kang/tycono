@@ -277,10 +277,10 @@ knowledgeRouter.get('/{*path}', (req: Request, res: Response, next: NextFunction
       return;
     }
 
-    const absPath = path.join(knowledgeDir(), docId);
+    const absPath = path.resolve(companyRoot(), docId);
 
-    // Security: ensure path stays within knowledgeDir
-    if (!absPath.startsWith(knowledgeDir())) {
+    // Security: ensure path stays within companyRoot
+    if (!absPath.startsWith(companyRoot() + path.sep) && absPath !== companyRoot()) {
       res.status(403).json({ error: 'Forbidden' });
       return;
     }
