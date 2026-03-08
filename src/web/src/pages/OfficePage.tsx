@@ -25,6 +25,7 @@ import CustomizeModal from '../components/office/CustomizeModal';
 import SaveModal from '../components/office/SaveModal';
 import { OFFICE_THEMES } from '../types/appearance';
 import type { CharacterAppearance } from '../types/appearance';
+import { computeRoleLevels, type RoleLevelData } from '../utils/role-level';
 
 /* ─── Role metadata ─────────────────────── */
 
@@ -37,10 +38,6 @@ const ROLE_COLORS: Record<string, string> = {
   cto: '#1565C0', cbo: '#E65100', pm: '#2E7D32',
   engineer: '#4A148C', designer: '#AD1457', qa: '#00695C',
   'data-analyst': '#0277BD',
-};
-const ROLE_LEVELS: Record<string, number> = {
-  cto: 8, cbo: 7, pm: 6, engineer: 5, designer: 5, qa: 4,
-  'data-analyst': 4,
 };
 const DESK_ACTIVITY: Record<string, string> = {
   cto: '\uC544\uD0A4\uD14D\uCC98', cbo: '\uC2DC\uC7A5 \uBD84\uC11D',
@@ -99,6 +96,9 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     rootJobs: Array<{ jobId: string; roleId: string; roleName: string }>;
   } | null>(null);
   const [waveMinimized, setWaveMinimized] = useState(false);
+
+  /* Role levels from token usage */
+  const [roleLevels, setRoleLevels] = useState<RoleLevelData>({});
   const [showHireModal, setShowHireModal] = useState(false);
   const [fireTarget, setFireTarget] = useState<{ roleId: string; roleName: string } | null>(null);
 
@@ -277,6 +277,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
       api.getDecisions().then(setDecisions),
       api.getKnowledge().then(setKnowledgeDocs).catch(() => {}),
       api.getOrgTree().then((tree) => { setOrgNodes(tree.nodes); setOrgRootId(tree.root); }).catch(() => {}),
+      api.getCostSummary().then((s) => setRoleLevels(computeRoleLevels(s.byRole))).catch(() => {}),
     ])
       .catch((err) => setError(`Failed to load: ${err.message}`))
       .finally(() => setLoading(false));
@@ -370,6 +371,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     }
     api.getStandups().then(setStandups).catch(console.error);
     api.getCompany().then((c) => setRoles(c.roles)).catch(console.error);
+    api.getCostSummary().then((s) => setRoleLevels(computeRoleLevels(s.byRole))).catch(() => {});
   };
 
   const handleWaveDispatch = async (directive: string) => {
@@ -877,20 +879,29 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
         </div>
         <div className="flex gap-4 text-[var(--terminal-text-secondary)] text-[11px] items-center">
           {/* Resource bars — hidden on narrow screens */}
-          <div className="hidden md:flex items-center gap-1">
-            {'\u{1F4B0}'}
-            <div className="w-[50px] h-2 bg-[#111] overflow-hidden" style={{ border: '2px solid var(--pixel-border)' }}>
-              <div className="h-full" style={{ width: '72%', background: 'linear-gradient(90deg,#22c55e,#34D399)' }} />
-            </div>
-            <strong className="text-[var(--active-green)]">$72K</strong>
-          </div>
-          <div className="hidden md:flex items-center gap-1">
-            {'\u26A1'}
-            <div className="w-[50px] h-2 bg-[#111] overflow-hidden" style={{ border: '2px solid var(--pixel-border)' }}>
-              <div className="h-full" style={{ width: '85%', background: 'linear-gradient(90deg,#3b82f6,#60A5FA)' }} />
-            </div>
-            <strong className="text-[var(--terminal-text)]">85</strong>
-          </div>
+          {(() => {
+            const totalTokens = Object.values(roleLevels).reduce((s, r) => s + r.totalTokens, 0);
+            const totalK = totalTokens >= 1_000_000 ? `${(totalTokens / 1_000_000).toFixed(1)}M` : totalTokens >= 1_000 ? `${Math.round(totalTokens / 1_000)}K` : String(totalTokens);
+            const pct = Math.min(100, Math.round(totalTokens / 250_000 * 100)); // 250K = full bar
+            const activeCount = activeExecs.length;
+            const energy = roles.length > 0 ? Math.round((activeCount / roles.length) * 100) : 0;
+            return (<>
+              <div className="hidden md:flex items-center gap-1">
+                {'\u{1F4B0}'}
+                <div className="w-[50px] h-2 bg-[#111] overflow-hidden" style={{ border: '2px solid var(--pixel-border)' }}>
+                  <div className="h-full" style={{ width: `${pct}%`, background: 'linear-gradient(90deg,#22c55e,#34D399)' }} />
+                </div>
+                <strong className="text-[var(--active-green)]">{totalK}</strong>
+              </div>
+              <div className="hidden md:flex items-center gap-1">
+                {'\u26A1'}
+                <div className="w-[50px] h-2 bg-[#111] overflow-hidden" style={{ border: '2px solid var(--pixel-border)' }}>
+                  <div className="h-full" style={{ width: `${energy}%`, background: 'linear-gradient(90deg,#3b82f6,#60A5FA)' }} />
+                </div>
+                <strong className="text-[var(--terminal-text)]">{energy}</strong>
+              </div>
+            </>);
+          })()}
           <span className="hidden sm:inline">Roles: <strong className="text-[var(--terminal-text)]">{roles.length}</strong></span>
           <span className="hidden sm:inline">Projects: <strong className="text-[var(--terminal-text)]">{projects.length}</strong></span>
           {activeExecs.length > 0 && (
@@ -1047,6 +1058,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
                         activeTask={activeExecs.find((e) => e.roleId === role.id)?.task}
                         featured
                         appearance={getAppearance(role.id)}
+                        xpLevel={roleLevels[role.id]?.level}
                       />
                     ))}
                   </div>
@@ -1064,6 +1076,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
                       liveStatus={roleStatuses[role.id]}
                       activeTask={activeExecs.find((e) => e.roleId === role.id)?.task}
                       appearance={getAppearance(role.id)}
+                      xpLevel={roleLevels[role.id]?.level}
                     />
                   ))}
                   {/* + HIRE card */}
@@ -1520,13 +1533,14 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
 
 /* ─── Pixel Card Component (Team) ─────────── */
 
-function PixelCard({ role, speech, onClick, liveStatus, activeTask, featured, appearance }: {
+function PixelCard({ role, speech, onClick, liveStatus, activeTask, featured, appearance, xpLevel }: {
   role: Role; speech: string; onClick: () => void;
   liveStatus?: string; activeTask?: string; featured?: boolean;
   appearance?: CharacterAppearance;
+  xpLevel?: number;
 }) {
   const color = ROLE_COLORS[role.id] ?? hashColor(role.id);
-  const level = ROLE_LEVELS[role.id] ?? 1;
+  const level = xpLevel ?? 1;
   const activity = DESK_ACTIVITY[role.id] ?? role.name;
   const isWorking = liveStatus === 'working';
 

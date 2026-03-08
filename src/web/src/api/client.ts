@@ -145,4 +145,10 @@ export const api = {
     ok: boolean; commitSha: string; restoredFiles: string[];
   }>('/save/restore', { sha, paths }),
   initGit: () => post<{ ok: boolean; message: string }>('/save/init', {}),
+
+  // Cost
+  getCostSummary: () => get<{
+    totalInputTokens: number; totalOutputTokens: number; totalCostUsd: number;
+    byRole: Record<string, { inputTokens: number; outputTokens: number; costUsd: number }>;
+  }>('/cost/summary'),
 };
