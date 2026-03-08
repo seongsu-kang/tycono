@@ -88,6 +88,13 @@ export interface Message {
   timestamp: string;
 }
 
+export interface RoleSource {
+  id: string;
+  sync: 'auto' | 'manual' | 'off';
+  forked_at?: string;
+  upstream_version?: string;
+}
+
 export interface CreateRoleInput {
   id: string;
   name: string;
@@ -98,6 +105,41 @@ export interface CreateRoleInput {
   knowledge: { reads: string[]; writes: string[] };
   reports: { daily: string; weekly: string };
   skills?: string[];
+  source?: RoleSource;
+}
+
+/* ─── Sync Types ────────────────────────── */
+
+export interface TrackedRole {
+  roleId: string;
+  name: string;
+  level: string;
+  source: RoleSource;
+  persona: string;
+  authority: { autonomous: string[]; needsApproval: string[] };
+  skills?: string[];
+}
+
+export interface RoleLevelInfo {
+  roleId: string;
+  name: string;
+  level: number;
+  totalTokens: number;
+  progress: number;
+  formattedTokens: string;
+  costUsd: number;
+}
+
+export interface CompanyStats {
+  company: {
+    roleCount: number;
+    totalTokens: number;
+    formattedTokens: string;
+    totalCostUsd: number;
+    avgLevel: number;
+  };
+  roles: RoleLevelInfo[];
+  byModel: Record<string, { inputTokens: number; outputTokens: number; costUsd: number }>;
 }
 
 /* ─── Org Tree Types ─────────────────────── */
@@ -260,4 +302,32 @@ export interface KnowledgeDoc {
 
 export interface KnowledgeDocDetail extends KnowledgeDoc {
   content: string;
+}
+
+/* ─── Git Status Types ───────────────────────── */
+
+export interface WorktreeInfo {
+  jobId: string;
+  path: string;
+  branch: string;
+  status: 'active' | 'done' | 'pending-merge' | 'stale';
+  createdAt: string;
+  roleId: string;
+  task: string;
+  filesChanged: number;
+  aheadBy: number;
+  conflictFiles?: string[];
+}
+
+export interface GitStatus {
+  currentBranch: string;
+  worktrees: WorktreeInfo[];
+  staleBranches: string[];
+  lastCommit: { sha: string; message: string; date: string } | null;
+  unsavedCount: number;
+  lastMerge?: {
+    branch: string;
+    mergedAt: string;
+    roleId: string;
+  };
 }

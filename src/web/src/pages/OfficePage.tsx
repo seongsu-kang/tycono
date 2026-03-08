@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { api } from '../api/client';
-import type { Role, RoleDetail, Project, Standup, Wave, Decision, Session, Message, StreamEvent, CreateRoleInput, ImportJob, KnowledgeDoc, OrgNode } from '../types';
+import type { Role, RoleDetail, Project, Standup, Wave, Decision, Session, Message, StreamEvent, CreateRoleInput, ImportJob, KnowledgeDoc, OrgNode, GitStatus } from '../types';
 import SidePanel from '../components/office/SidePanel';
 import OperationsPanel from '../components/office/OperationsPanel';
 import ProjectPanel from '../components/office/ProjectPanel';
@@ -23,6 +23,9 @@ import TopDownOfficeView from '../components/office/TopDownOfficeView';
 import KnowledgePanel from '../components/office/KnowledgePanel';
 import CustomizeModal from '../components/office/CustomizeModal';
 import SaveModal from '../components/office/SaveModal';
+import CompanyStatsPanel from '../components/office/CompanyStatsPanel';
+import SyncPanel from '../components/office/SyncPanel';
+import GitStatusPanel from '../components/office/GitStatusPanel';
 import { OFFICE_THEMES } from '../types/appearance';
 import type { CharacterAppearance } from '../types/appearance';
 import { computeRoleLevels, type RoleLevelData } from '../utils/role-level';
@@ -127,6 +130,10 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   /* Save system */
   const saveHook = useSave();
   const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showStatsPanel, setShowStatsPanel] = useState(false);
+  const [showSyncPanel, setShowSyncPanel] = useState(false);
+  const [showGitPanel, setShowGitPanel] = useState(false);
+  const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
 
   // Cmd+S / Ctrl+S → open save modal (or quick save if no modal open)
   useEffect(() => {
@@ -141,6 +148,22 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [saveHook.dirtyCount]);
+
+  // Git status polling (every 10 seconds)
+  useEffect(() => {
+    let cancelled = false;
+    const fetchGitStatus = async () => {
+      try {
+        const data = await api.getGitStatus();
+        if (!cancelled) setGitStatus(data);
+      } catch {
+        // API may not exist yet — silently ignore
+      }
+    };
+    fetchGitStatus();
+    const interval = setInterval(fetchGitStatus, 10000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
 
   /* Knowledge import state */
   interface ImportLogEntry {
@@ -317,6 +340,18 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     const interval = setInterval(poll, 3000);
     return () => clearInterval(interval);
   }, []);
+
+  /* Merge streaming chat status into roleStatuses so cards show yellow border */
+  const effectiveRoleStatuses = useMemo(() => {
+    const result = { ...roleStatuses };
+    if (streamingSessionId) {
+      const streamingSession = sessions.find(s => s.id === streamingSessionId);
+      if (streamingSession) {
+        result[streamingSession.roleId] = 'working';
+      }
+    }
+    return result;
+  }, [roleStatuses, streamingSessionId, sessions]);
 
   /* Load role detail when panel opens */
   useEffect(() => {
@@ -520,7 +555,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     // If role is working, open the ActivityPanel for its active job
     const exec = activeExecs.find(e => e.roleId === roleId);
     const jobId = exec?.jobId ?? exec?.id;
-    if (jobId && roleStatuses[roleId] === 'working') {
+    if (jobId && effectiveRoleStatuses[roleId] === 'working') {
       const role = roles.find(r => r.id === roleId);
       const color = ROLE_COLORS[roleId] ?? '#666';
       const title = `${roleId.toUpperCase()} · ${role?.name ?? roleId}`;
@@ -1080,7 +1115,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
               waves={waves}
               standups={standups}
               decisions={decisions}
-              roleStatuses={roleStatuses}
+              roleStatuses={effectiveRoleStatuses}
               activeExecs={activeExecs}
               onRoleClick={(id) => setPanel({ type: 'role', roleId: id })}
               onProjectClick={(id) => setPanel({ type: 'project', projectId: id })}
@@ -1108,7 +1143,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
                         role={role}
                         speech={ambient.getSpeech(role.id)}
                         onClick={() => setPanel({ type: 'role', roleId: role.id })}
-                        liveStatus={roleStatuses[role.id]}
+                        liveStatus={effectiveRoleStatuses[role.id]}
                         activeTask={activeExecs.find((e) => e.roleId === role.id)?.task}
                         featured
                         appearance={getAppearance(role.id)}
@@ -1127,7 +1162,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
                       role={role}
                       speech={ambient.getSpeech(role.id)}
                       onClick={() => setPanel({ type: 'role', roleId: role.id })}
-                      liveStatus={roleStatuses[role.id]}
+                      liveStatus={effectiveRoleStatuses[role.id]}
                       activeTask={activeExecs.find((e) => e.roleId === role.id)?.task}
                       appearance={getAppearance(role.id)}
                       xpLevel={roleLevels[role.id]?.level}
@@ -1275,6 +1310,43 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
             {OFFICE_THEMES[theme]?.icon ?? ''} {OFFICE_THEMES[theme]?.name ?? 'THEME'}
           </button>
           <span className="mx-1">|</span>
+          <button
+            className="theme-btn"
+            onClick={() => setShowStatsPanel(true)}
+            title="Company Stats"
+          >
+            STATS
+          </button>
+          <button
+            className="theme-btn"
+            onClick={() => setShowSyncPanel(true)}
+            title="Role Sync"
+          >
+            SYNC
+          </button>
+          <span className="mx-1">|</span>
+          {/* Git Status Indicator */}
+          <button
+            onClick={() => setShowGitPanel(true)}
+            title="Git Status"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer', fontSize: 10,
+              fontFamily: 'var(--pixel-font)',
+              color: gitStatus
+                ? (gitStatus.worktrees.some(w => w.status === 'stale') ? '#ff6b6b'
+                  : gitStatus.worktrees.some(w => w.status === 'pending-merge') ? '#FFB74D'
+                  : gitStatus.worktrees.length > 0 ? '#4FC3F7'
+                  : '#81C784')
+                : 'var(--terminal-text-muted)',
+            }}
+          >
+            {gitStatus
+              ? (gitStatus.worktrees.length === 0 && gitStatus.staleBranches.length === 0
+                ? '\u2713 clean'
+                : `\uD83D\uDCC2 ${gitStatus.worktrees.length} worktree${gitStatus.worktrees.length !== 1 ? 's' : ''}${gitStatus.staleBranches.length > 0 ? ` \u00B7 \u26A0 ${gitStatus.staleBranches.length} branch${gitStatus.staleBranches.length !== 1 ? 'es' : ''}` : ''}`)
+              : 'GIT'}
+          </button>
+          <span className="mx-1">|</span>
           <span style={{ color: saveHook.state === 'dirty' ? 'var(--idle-amber)' : 'var(--terminal-text-muted)' }}>
             {saveHook.state === 'no-git' ? 'No git'
               : saveHook.state === 'saving' ? 'Saving...'
@@ -1351,7 +1423,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           terminalWidth={terminalOpen ? terminalWidth : 0}
           activeJobId={roleExec?.id}
           activeTask={roleExec?.task}
-          isWorking={roleStatuses[selectedRole.id] === 'working'}
+          isWorking={effectiveRoleStatuses[selectedRole.id] === 'working'}
           jobStartedAt={roleExec?.startedAt}
           onStopJob={(jobId) => api.abortJob(jobId)}
           sessions={sessions}
@@ -1366,6 +1438,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           onUpdateRole={handleUpdateRole}
           appearance={getAppearance(selectedRole.id)}
           relationships={ambient.relationships}
+          roleLevel={roleLevels[selectedRole.id]?.level}
         />
         );
       })()}
@@ -1567,6 +1640,33 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           onRestore={saveHook.restore}
           saving={saveHook.state === 'saving'}
         />
+      )}
+
+      {/* Stats Panel */}
+      {showStatsPanel && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={() => setShowStatsPanel(false)}>
+          <div style={{ width: 420, maxHeight: '80vh', background: 'var(--terminal-bg)', border: '2px solid var(--pixel-border)', borderRadius: 8 }} onClick={e => e.stopPropagation()}>
+            <CompanyStatsPanel onClose={() => setShowStatsPanel(false)} />
+          </div>
+        </div>
+      )}
+
+      {/* Sync Panel */}
+      {showSyncPanel && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={() => setShowSyncPanel(false)}>
+          <div style={{ width: 480, maxHeight: '80vh', background: 'var(--terminal-bg)', border: '2px solid var(--pixel-border)', borderRadius: 8, overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+            <SyncPanel onClose={() => setShowSyncPanel(false)} onSyncComplete={() => { /* refresh roles if needed */ }} />
+          </div>
+        </div>
+      )}
+
+      {/* Git Status Panel */}
+      {showGitPanel && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={() => setShowGitPanel(false)}>
+          <div style={{ width: 520, maxHeight: '80vh', background: 'var(--terminal-bg)', border: '2px solid var(--pixel-border)', borderRadius: 8, overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+            <GitStatusPanel onClose={() => setShowGitPanel(false)} />
+          </div>
+        </div>
       )}
 
       {/* Phase 3: Toast Notifications */}

@@ -1,4 +1,4 @@
-import type { Company, Role, RoleDetail, Project, ProjectDetail, Standup, Wave, Decision, Session, CreateRoleInput, JobInfo, CompanyStatus, EngineDetection, PathValidation, ScaffoldInput, ScaffoldResult, TeamTemplate, BrowseResult, ConnectAkbResult, KnowledgeDoc, KnowledgeDocDetail, OrgTreeResponse } from '../types';
+import type { Company, Role, RoleDetail, Project, ProjectDetail, Standup, Wave, Decision, Session, CreateRoleInput, JobInfo, CompanyStatus, EngineDetection, PathValidation, ScaffoldInput, ScaffoldResult, TeamTemplate, BrowseResult, ConnectAkbResult, KnowledgeDoc, KnowledgeDocDetail, OrgTreeResponse, TrackedRole, CompanyStats, GitStatus } from '../types';
 import type { SpeechSettings } from '../types/speech';
 
 const BASE = '/api';
@@ -151,4 +151,20 @@ export const api = {
     totalInputTokens: number; totalOutputTokens: number; totalCostUsd: number;
     byRole: Record<string, { inputTokens: number; outputTokens: number; costUsd: number }>;
   }>('/cost/summary'),
+
+  // Sync
+  getSyncRoles: () => get<{ roles: TrackedRole[] }>('/sync/roles'),
+  applySyncUpdate: (data: {
+    roleId: string;
+    changes: { persona?: string; authority?: { autonomous: string[]; needsApproval: string[] }; skills?: string[] };
+    upstreamVersion?: string;
+  }) => post<{ ok: boolean; roleId: string; applied: string[] }>('/sync/apply', data),
+
+  // Stats (Gamification)
+  getCompanyStats: () => get<CompanyStats>('/sync/stats'),
+
+  // Git Status
+  getGitStatus: () => get<GitStatus>('/git/status'),
+  deleteWorktree: (path: string) => del<{ ok: boolean }>(`/git/worktrees/${encodeURIComponent(path)}`),
+  deleteBranch: (name: string) => del<{ ok: boolean }>(`/git/branches/${encodeURIComponent(name)}`),
 };

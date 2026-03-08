@@ -4,6 +4,7 @@ import type { CharacterAppearance } from '../../types/appearance';
 import useActivityStream from '../../hooks/useActivityStream';
 import OfficeMarkdown from './OfficeMarkdown';
 import TopDownCharCanvas from './TopDownCharCanvas';
+import { cloudApi } from '../../api/cloud';
 
 interface Props {
   role: RoleDetail | null;
@@ -28,6 +29,7 @@ interface Props {
   onUpdateRole?: (roleId: string, changes: { name?: string }) => Promise<void>;
   appearance?: CharacterAppearance;
   relationships?: Array<{ roleA: string; roleB: string; familiarity: number; dispatches: number; wavesTogether: number; conversations: number }>;
+  roleLevel?: number;
 }
 
 const ROLE_ICONS: Record<string, string> = {
@@ -38,10 +40,6 @@ const ROLE_ICONS: Record<string, string> = {
 const ROLE_COLORS: Record<string, string> = {
   cto: '#1565C0', cbo: '#E65100', pm: '#2E7D32',
   engineer: '#4A148C', designer: '#AD1457', qa: '#00695C',
-};
-
-const ROLE_LEVELS: Record<string, number> = {
-  cto: 8, cbo: 7, pm: 6, engineer: 5, designer: 5, qa: 4, 'data-analyst': 4,
 };
 
 const ROLE_NAMES: Record<string, string> = {
@@ -62,7 +60,7 @@ const fmtElapsed = (seconds: number) => `${Math.floor(seconds / 60)}:${String(se
 export default function SidePanel({
   role, allRoles, recentActivity, onClose, onFireRole, terminalWidth = 0,
   activeJobId, activeTask, isWorking, jobStartedAt, onStopJob,
-  sessions, streamingSessionId, onCreateSessionSilent, onSendMessage, onFocusTerminal, onCustomize, onUpdateRole, appearance, relationships,
+  sessions, streamingSessionId, onCreateSessionSilent, onSendMessage, onFocusTerminal, onCustomize, onUpdateRole, appearance, relationships, roleLevel,
 }: Props) {
   const [panelW, setPanelW] = useState(DEFAULT_WIDTH);
   const [isResizing, setIsResizing] = useState(false);
@@ -308,7 +306,7 @@ export default function SidePanel({
 
           {/* Stats bar */}
           <div className="relative flex items-center gap-3 px-4 py-2 text-[10px] font-bold text-white/80" style={{ background: 'rgba(0,0,0,0.2)', fontFamily: 'var(--pixel-font)' }}>
-            <span>Lv.{ROLE_LEVELS[role.id] ?? 1}</span>
+            <span>Lv.{roleLevel ?? 1}</span>
             <span style={{ color: 'rgba(255,255,255,0.3)' }}>|</span>
             <span className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full" style={{ background: isWorking ? 'var(--idle-amber)' : 'var(--active-green)' }} />
@@ -618,6 +616,9 @@ export default function SidePanel({
             )}
           </div>
 
+          {/* ─── PUBLISH TO STORE ─── */}
+          <PublishToStore role={role} appearance={appearance} />
+
           {/* ─── FIRE (always at bottom) ─── */}
           {onFireRole && (
             <div className="px-4 pb-4 mt-auto shrink-0">
@@ -633,6 +634,97 @@ export default function SidePanel({
         </div>
       </div>
     </>
+  );
+}
+
+/* ─── Publish To Store ─────────────────── */
+
+function PublishToStore({ role, appearance }: { role: RoleDetail; appearance?: CharacterAppearance }) {
+  const [status, setStatus] = useState<'idle' | 'publishing' | 'done' | 'error'>('idle');
+  const [message, setMessage] = useState('');
+  const [confirm, setConfirm] = useState(false);
+
+  const handlePublish = async () => {
+    if (!confirm) { setConfirm(true); return; }
+    setStatus('publishing');
+    try {
+      // Build skills from role.skills (role.yaml) or authority keys as fallback
+      const roleSkills: Array<{ id: string; name: string; category: string }> = (role.skills ?? []).map(s => ({
+        id: s.toLowerCase().replace(/\s+/g, '-'),
+        name: s,
+        category: 'general',
+      }));
+
+      const data: Record<string, unknown> = {
+        roleId: role.id,
+        persona: role.persona ?? '',
+        authority: role.authority ?? { autonomous: [], needsApproval: [] },
+        level: role.level,
+        tagline: (role.persona ?? '').split(/[.\n]/)[0]?.trim().slice(0, 80) || role.name,
+        chatStyle: 'Professional and focused',
+        skills: roleSkills,
+        resume: { summary: role.persona?.split('\n')[0] ?? '', strengths: [], specialties: [], experience: '' },
+        author: { id: 'tycono', name: 'Tycono' },
+        tags: [role.level, role.id],
+        price: 'free',
+        installs: 0,
+        rating: 0,
+        featured: false,
+        randomActive: true,
+        randomPersonality: '',
+      };
+      if (appearance) data.appearance = appearance;
+
+      // Check if already published — bump version
+      let version = '1.0.0';
+      try {
+        const existing = await cloudApi.getCharacterVersion(role.id);
+        if (existing?.version) {
+          const parts = existing.version.split('.').map(Number);
+          parts[2] = (parts[2] ?? 0) + 1;
+          version = parts.join('.');
+        }
+      } catch { /* not published yet */ }
+
+      await cloudApi.publishCharacter({ id: role.id, name: role.name || role.id, version, data });
+      setStatus('done');
+      setMessage(`Published v${version}`);
+      setConfirm(false);
+    } catch (err) {
+      setStatus('error');
+      setMessage(err instanceof Error ? err.message : 'Failed');
+      setConfirm(false);
+    }
+  };
+
+  return (
+    <div className="px-4 pb-2 shrink-0">
+      <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--terminal-border)' }}>
+        <div className="px-3 py-2.5 flex items-center justify-between" style={{ background: 'var(--hud-bg-alt)' }}>
+          <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--terminal-text-secondary)', fontFamily: 'var(--pixel-font)' }}>
+            Cloud Store
+          </span>
+          {status === 'done' ? (
+            <span className="text-[10px] font-semibold" style={{ color: 'var(--active-green)' }}>{message}</span>
+          ) : status === 'error' ? (
+            <span className="text-[10px] font-semibold" style={{ color: '#ef4444' }}>{message}</span>
+          ) : (
+            <button
+              onClick={handlePublish}
+              disabled={status === 'publishing'}
+              className="text-[10px] px-2.5 py-1 rounded font-semibold cursor-pointer transition-colors disabled:opacity-50"
+              style={{
+                background: confirm ? 'rgba(59,130,246,0.3)' : 'rgba(59,130,246,0.15)',
+                color: '#60a5fa',
+                border: confirm ? '1px solid rgba(59,130,246,0.5)' : '1px solid transparent',
+              }}
+            >
+              {status === 'publishing' ? 'Publishing...' : confirm ? 'Confirm Publish?' : 'Publish to Store'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 

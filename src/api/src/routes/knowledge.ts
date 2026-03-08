@@ -14,6 +14,7 @@ import { COMPANY_ROOT } from '../services/file-reader.js';
 export const knowledgeRouter = Router();
 
 const knowledgeDir = path.join(COMPANY_ROOT, 'knowledge');
+const companyRoot = COMPANY_ROOT;
 
 /* ─── Helpers ─────────────────────────────────────── */
 
@@ -60,17 +61,28 @@ function inferCategory(filePath: string, tags: string[]): string {
 
 knowledgeRouter.get('/', (_req: Request, res: Response, next: NextFunction) => {
   try {
-    if (!fs.existsSync(knowledgeDir)) {
+    if (!fs.existsSync(companyRoot)) {
       res.json([]);
       return;
     }
 
-    const files = glob.sync('**/*.{md,html}', { cwd: knowledgeDir })
-      .filter((f) => f !== 'knowledge.md')
+    const files = glob.sync('**/*.{md,html}', {
+      cwd: companyRoot,
+      ignore: [
+        'node_modules/**', '.claude/**', '.obsidian/**', '.tycono/**', '.git/**',
+        '**/node_modules/**',
+      ],
+    })
+      .filter((f) => {
+        const base = path.basename(f);
+        // Exclude hub files (folder-name.md pattern) and CLAUDE.md
+        if (base === 'CLAUDE.md') return false;
+        return true;
+      })
       .sort();
 
     const docs = files.map((f) => {
-      const absPath = path.join(knowledgeDir, f);
+      const absPath = path.join(companyRoot, f);
       let raw = '';
       try { raw = fs.readFileSync(absPath, 'utf-8'); } catch { return null; }
 
@@ -194,8 +206,8 @@ knowledgeRouter.put('/{*path}', (req: Request, res: Response, next: NextFunction
       return;
     }
 
-    const absPath = path.join(knowledgeDir, docId);
-    if (!absPath.startsWith(knowledgeDir)) {
+    const absPath = path.join(companyRoot, docId);
+    if (!absPath.startsWith(companyRoot)) {
       res.status(403).json({ error: 'Forbidden' });
       return;
     }
@@ -236,8 +248,8 @@ knowledgeRouter.delete('/{*path}', (req: Request, res: Response, next: NextFunct
       return;
     }
 
-    const absPath = path.join(knowledgeDir, docId);
-    if (!absPath.startsWith(knowledgeDir)) {
+    const absPath = path.join(companyRoot, docId);
+    if (!absPath.startsWith(companyRoot)) {
       res.status(403).json({ error: 'Forbidden' });
       return;
     }

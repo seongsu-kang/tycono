@@ -1223,7 +1223,7 @@ export default function TopDownOfficeView({
   }, [hitTest, onRoleClick, onProjectClick, onBulletinClick, onDecisionsClick, onKnowledgeClick]);
 
   return (
-    <div className="td-scene">
+    <div className={`td-scene${editMode ? ' td-scene--editing' : ''}`}>
       <div ref={wrapRef} className="td-wrap">
         <canvas
           ref={canvasRef}
@@ -1239,6 +1239,11 @@ export default function TopDownOfficeView({
         />
         <div ref={overlayRef} className="td-overlay" />
       </div>
+      {editMode && (
+        <div className="td-edit-banner">
+          <span className="td-edit-banner__icon">✎</span> EDIT MODE — Click DONE when finished
+        </div>
+      )}
       <button
         className={`td-edit-btn${editMode ? ' td-edit-btn--active' : ''}`}
         onClick={() => {

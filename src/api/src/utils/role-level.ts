@@ -28,3 +28,17 @@ export function calcLevel(totalTokens: number): number {
   }
   return Math.min(level, 10);
 }
+
+export function calcProgress(totalTokens: number): number {
+  const level = calcLevel(totalTokens);
+  if (level >= 10) return 1;
+  const current = THRESHOLDS[level - 1];
+  const next = THRESHOLDS[level];
+  return Math.min(1, (totalTokens - current) / (next - current));
+}
+
+export function formatTokens(tokens: number): string {
+  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
+  if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(0)}K`;
+  return String(tokens);
+}

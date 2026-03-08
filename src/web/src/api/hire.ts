@@ -30,6 +30,12 @@ export async function hireCharacter(
       writes: levelBasedWrites(character.level),
     },
     reports: { daily: 'standup', weekly: 'summary' },
+    source: {
+      id: `tycono/${character.id}`,
+      sync: 'manual',
+      forked_at: '1.0.0',
+      upstream_version: '1.0.0',
+    },
   };
 
   return api.createRole(input);

@@ -487,12 +487,16 @@ function handleStatus(res: ServerResponse): void {
   const runningJobs = jobManager.listJobs({ status: 'running' });
   const runningRoles = new Set(runningJobs.map(j => j.roleId));
 
-  // 3. Any role marked "working" in file/memory but NOT in JobManager → done
+  // 2b. In-memory roleStatus (includes chat streaming sessions, not just jobs)
+  const memoryWorking = new Set<string>();
+  for (const [rid, st] of roleStatus.entries()) {
+    if (st === 'working') memoryWorking.add(rid);
+  }
+
+  // 3. Any role marked "working" in file but NOT in JobManager AND NOT in memory → done
   for (const roleId of Object.keys(statuses)) {
-    if (statuses[roleId] === 'working' && !runningRoles.has(roleId)) {
+    if (statuses[roleId] === 'working' && !runningRoles.has(roleId) && !memoryWorking.has(roleId)) {
       statuses[roleId] = 'done';
-      // Also fix stale roleStatus map
-      roleStatus.set(roleId, 'idle');
       completeActivity(roleId);
     }
   }
@@ -500,6 +504,11 @@ function handleStatus(res: ServerResponse): void {
   // 4. Running jobs override everything
   for (const job of runningJobs) {
     statuses[job.roleId] = 'working';
+  }
+
+  // 5. In-memory working (chat streaming) also overrides
+  for (const rid of memoryWorking) {
+    statuses[rid] = 'working';
   }
 
   const activeExecs = runningJobs.map((j) => ({

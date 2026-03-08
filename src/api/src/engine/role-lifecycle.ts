@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
-import { buildOrgTree, type OrgNode, type OrgTree } from './org-tree.js';
+import { buildOrgTree, type OrgNode, type OrgTree, type RoleSource } from './org-tree.js';
 import { generateSkillMd } from './skill-template.js';
 
 /* ─── Types ──────────────────────────────────── */
@@ -13,6 +13,7 @@ export interface RoleDefinition {
   reportsTo: string;
   persona: string;
   skills?: string[];
+  source?: RoleSource;
   authority: {
     autonomous: string[];
     needsApproval: string[];
@@ -106,6 +107,9 @@ export class RoleLifecycleManager {
     }
     if (changes.reports !== undefined) {
       current.reports = changes.reports;
+    }
+    if (changes.source !== undefined) {
+      current.source = changes.source;
     }
 
     fs.writeFileSync(yamlPath, YAML.stringify(current));
@@ -233,6 +237,7 @@ export class RoleLifecycleManager {
       },
       reports: def.reports,
       skills: def.skills,
+      source: def.source,
     };
   }
 
@@ -246,6 +251,9 @@ export class RoleLifecycleManager {
     };
     if (def.skills?.length) {
       obj.skills = def.skills;
+    }
+    if (def.source) {
+      obj.source = def.source;
     }
     obj.authority = {
       autonomous: def.authority.autonomous,

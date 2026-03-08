@@ -14,6 +14,13 @@ export interface KnowledgeAccess {
   writes: string[];
 }
 
+export interface RoleSource {
+  id: string;
+  sync: 'auto' | 'manual' | 'off';
+  forked_at?: string;
+  upstream_version?: string;
+}
+
 export interface OrgNode {
   id: string;
   name: string;
@@ -26,6 +33,7 @@ export interface OrgNode {
   reports: { daily: string; weekly: string };
   skills?: string[];
   model?: string;
+  source?: RoleSource;
 }
 
 export interface OrgTree {
@@ -55,6 +63,12 @@ interface RawRoleYaml {
   };
   skills?: string[];
   model?: string;
+  source?: {
+    id?: string;
+    sync?: string;
+    forked_at?: string;
+    upstream_version?: string;
+  };
 }
 
 /* ─── Build ──────────────────────────────────── */
@@ -108,6 +122,12 @@ export function buildOrgTree(companyRoot: string): OrgTree {
         },
         skills: raw.skills,
         model: raw.model,
+        source: raw.source ? {
+          id: raw.source.id || '',
+          sync: (raw.source.sync as RoleSource['sync']) || 'manual',
+          forked_at: raw.source.forked_at,
+          upstream_version: raw.source.upstream_version,
+        } : undefined,
       };
       tree.nodes.set(node.id, node);
     } catch {

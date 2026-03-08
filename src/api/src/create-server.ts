@@ -26,6 +26,8 @@ import { preferencesRouter } from './routes/preferences.js';
 import { saveRouter } from './routes/save.js';
 import { speechRouter } from './routes/speech.js';
 import { costRouter } from './routes/cost.js';
+import { syncRouter } from './routes/sync.js';
+import { gitRouter } from './routes/git.js';
 import { importKnowledge } from './services/knowledge-importer.js';
 import { AnthropicProvider, type LLMProvider } from './engine/llm-adapter.js';
 import { readConfig } from './services/company-config.js';
@@ -182,6 +184,8 @@ export function createExpressApp(): express.Application {
   app.use('/api/speech', speechRouter);
   app.use('/api/save', saveRouter);
   app.use('/api/cost', costRouter);
+  app.use('/api/sync', syncRouter);
+  app.use('/api/git', gitRouter);
 
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', companyRoot: COMPANY_ROOT });
