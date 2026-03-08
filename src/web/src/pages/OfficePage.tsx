@@ -638,6 +638,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   const refreshRoles = () => {
     api.getCompany().then((c) => setRoles(c.roles)).catch(console.error);
     api.getOrgTree().then((tree) => { setOrgNodes(tree.nodes); setOrgRootId(tree.root); }).catch(console.error);
+    api.getCostSummary().then((s) => updateRoleLevels(computeRoleLevels(s.byRole))).catch(() => {});
   };
 
   const handleHireRole = async (input: CreateRoleInput, appearance: CharacterAppearance) => {
@@ -650,6 +651,11 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   const handleFireRole = async (roleId: string) => {
     await api.deleteRole(roleId);
     refreshRoles();
+    // Clean up orphaned sessions for fired role
+    setSessions((prev) => prev.filter((s) => s.roleId !== roleId));
+    if (activeSessionId && sessions.find(s => s.id === activeSessionId)?.roleId === roleId) {
+      setActiveSessionId(null);
+    }
     setFireTarget(null);
     addToast(`${roleId.toUpperCase()} removed`, '#B71C1C');
   };
