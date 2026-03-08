@@ -33,18 +33,46 @@
 
 ## AI Work Rules
 
+### The Loop (Work Cycle)
+
+Every task follows this cycle. Implementing without completing the cycle is only half the job.
+
+| Step | Action | Why |
+|------|--------|-----|
+| ① Knowledge | Check/research related docs | Without context, direction goes wrong |
+| ② Task | Define task from docs | Without requirements, you'll rework |
+| ③ Implement | Execute the actual work | Value creation |
+| ④ Knowledge Update | Update docs with new insights | Prevents knowledge decay |
+| ⑤ Task Update | Update task status, check next work | Ensures continuity |
+
+**C-Level**: Execute The Loop autonomously — decompose tasks, analyze dependencies, dispatch independent tasks in parallel, collect results.
+**Member**: After implementation, always complete steps ④ and ⑤.
+
 ### Hub-First Principle
 
-> **Read the relevant Hub document before starting any work.**
+> ⛔ **Read the relevant Hub document before starting any work.**
 
+Check the Task Routing table above to find the right "Read First" path.
 Every folder has a Hub file (`{folder-name}.md`) as its entry point.
-Check the Task Routing table above to find the right Hub, then read it first.
+Read the Hub's existing tools/scripts/guides before starting work.
+
+### Skill Check Principle
+
+> ⛔ **If `.claude/skills/{role-id}/SKILL.md` exists, you MUST read it.**
+
+Skill files define the tools, commands, and guides for each Role.
+Working without reading skills means missing existing tools and starting from scratch.
 
 ### Custom Rules (CRITICAL)
 
 > ⛔ **Before starting work, check if `.tycono/custom-rules.md` exists and read it.**
 > This file contains company-specific rules, constraints, and processes.
 > If the file doesn't exist, ignore this section.
+
+### Git Rules
+
+- Source code changes: feature branch → PR → merge
+- Direct push to main is prohibited
 
 ### Knowledge Gate
 
@@ -145,16 +173,20 @@ Check the Hub's existing tools/guides/constraints before exploring code.
 | Process change | Update procedure guide |
 | Feature removed | Remove related section |
 
-### Work Completion Checklist
+### AKB Management (CRITICAL)
 
-After completing any task:
+> **Every Role manages knowledge as part of their work. Don't just code and stop.**
 
-```
-1. Did this work produce new knowledge? -> Document it (Knowledge Gate)
-2. Are existing docs still accurate? -> Update if needed
-3. Is the new/updated doc reachable from a Hub? -> Add link
-4. Are there cross-links to related docs? -> Add references
-```
+After completing any task, check:
+
+| # | Item | Description |
+|---|------|-------------|
+| 1 | **New knowledge?** | Did this task produce new insights/decisions/analysis? |
+| 2 | **Search existing docs** | Are there related docs already? (grep 3+ keywords) |
+| 3 | **Decide location** | Add to existing doc vs create new (prefer existing) |
+| 4 | **Hub connection** | Is the new/updated doc reachable from a Hub? |
+| 5 | **Cross-link** | Are there mutual references between related docs? |
+| 6 | **Task update** | Is the task status updated? Next work identified? |
 
 ---
 
