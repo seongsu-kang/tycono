@@ -45,11 +45,15 @@
   },
   "keywords": [
     "ai",
+    "tycono",
     "company",
     "organization",
     "roles",
     "claude",
-    "agent"
+    "agent",
+    "multi-agent",
+    "agentic",
+    "local-first"
   ],
   "license": "MIT",
   "repository": {

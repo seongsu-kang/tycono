@@ -206,8 +206,8 @@ knowledgeRouter.put('/{*path}', (req: Request, res: Response, next: NextFunction
       return;
     }
 
-    const absPath = path.join(companyRoot(), docId);
-    if (!absPath.startsWith(companyRoot())) {
+    const absPath = path.resolve(companyRoot(), docId);
+    if (!absPath.startsWith(companyRoot() + path.sep) && absPath !== companyRoot()) {
       res.status(403).json({ error: 'Forbidden' });
       return;
     }
@@ -248,8 +248,8 @@ knowledgeRouter.delete('/{*path}', (req: Request, res: Response, next: NextFunct
       return;
     }
 
-    const absPath = path.join(companyRoot(), docId);
-    if (!absPath.startsWith(companyRoot())) {
+    const absPath = path.resolve(companyRoot(), docId);
+    if (!absPath.startsWith(companyRoot() + path.sep) && absPath !== companyRoot()) {
       res.status(403).json({ error: 'Forbidden' });
       return;
     }

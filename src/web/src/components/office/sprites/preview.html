@@ -398,7 +398,11 @@ function renderCustom() {
     renderPixels(ctx, pixels, scale, 0, currentAp);
     preview.appendChild(canvas);
   } catch (e) {
-    preview.innerHTML = '<span style="color:#f85149;">Error: ' + e.message + '</span>';
+    preview.textContent = '';
+    const errSpan = document.createElement('span');
+    errSpan.style.color = '#f85149';
+    errSpan.textContent = 'Error: ' + e.message;
+    preview.appendChild(errSpan);
   }
 }
 
