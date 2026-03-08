@@ -128,7 +128,13 @@ else:
  */
 export class ClaudeCliRunner implements ExecutionRunner {
   execute(config: RunnerConfig, callbacks: RunnerCallbacks): RunnerHandle {
-    const { companyRoot, roleId, task, sourceRole, orgTree, readOnly = false, teamStatus } = config;
+    const { companyRoot, roleId, task, sourceRole, orgTree, readOnly = false, teamStatus, attachments } = config;
+
+    // Note: Claude CLI doesn't support inline image attachments.
+    // Images will be ignored with a warning if passed.
+    if (attachments && attachments.length > 0) {
+      console.warn(`[ClaudeCliRunner] Warning: Image attachments (${attachments.length}) are not supported in CLI mode. Use EXECUTION_ENGINE=direct-api for vision support.`);
+    }
 
     // 1. Context Assembly
     const context = assembleContext(companyRoot, roleId, task, sourceRole, orgTree, { teamStatus });

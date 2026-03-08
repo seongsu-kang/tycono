@@ -5,6 +5,7 @@ import { validateDispatch } from './authority-validator.js';
 import { getToolsForRole } from './tools/definitions.js';
 import { executeTool, type ToolExecutorOptions } from './tools/executor.js';
 import { type TokenLedger } from '../services/token-ledger.js';
+import { type ImageAttachment } from './runners/types.js';
 
 /* ─── Types ──────────────────────────────────── */
 
@@ -24,6 +25,7 @@ export interface AgentConfig {
   jobId?: string;             // Job ID for token tracking
   model?: string;             // LLM model name for cost tracking
   tokenLedger?: TokenLedger;  // Token usage ledger (optional)
+  attachments?: ImageAttachment[];  // Image attachments for vision
   // Callbacks
   onText?: (text: string) => void;
   onToolExec?: (name: string, input: Record<string, unknown>) => void;
@@ -133,8 +135,28 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
   };
 
   // 4. Run the loop
+  // Build initial user message with optional image attachments
+  const userContent: MessageContent[] = [];
+
+  // Add image attachments first (if any)
+  if (config.attachments && config.attachments.length > 0) {
+    for (const att of config.attachments) {
+      userContent.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: att.mediaType,
+          data: att.data,
+        },
+      } as unknown as MessageContent);
+    }
+  }
+
+  // Add text content
+  userContent.push({ type: 'text', text: task });
+
   const messages: LLMMessage[] = [
-    { role: 'user', content: task },
+    { role: 'user', content: userContent.length === 1 ? task : userContent },
   ];
 
   let turns = 0;

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { api } from '../api/client';
-import type { Role, RoleDetail, Project, Standup, Wave, Decision, Session, Message, StreamEvent, CreateRoleInput, ImportJob, KnowledgeDoc, OrgNode, GitStatus } from '../types';
+import type { Role, RoleDetail, Project, Standup, Wave, Decision, Session, Message, StreamEvent, CreateRoleInput, ImportJob, KnowledgeDoc, OrgNode, GitStatus, ImageAttachment } from '../types';
 import SidePanel from '../components/office/SidePanel';
 import OperationsPanel from '../components/office/OperationsPanel';
 import ProjectPanel from '../components/office/ProjectPanel';
@@ -650,7 +650,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     }));
   };
 
-  const handleSendMessage = (sessionId: string, content: string, mode: 'talk' | 'do') => {
+  const handleSendMessage = (sessionId: string, content: string, mode: 'talk' | 'do', attachments?: ImageAttachment[]) => {
     const ceoMsg: Message = {
       id: `msg-${Date.now()}-ceo`,
       from: 'ceo',
@@ -658,6 +658,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
       type: mode === 'do' ? 'directive' : 'conversation',
       status: 'done',
       timestamp: new Date().toISOString(),
+      attachments,
     };
     const roleMsg: Message = {
       id: `msg-${Date.now() + 1}-role`,
@@ -766,7 +767,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
         }));
         setStreamingSessionId(null);
       },
-    });
+    }, attachments);
   };
 
   const handleModeChange = (sessionId: string, mode: 'talk' | 'do') => {

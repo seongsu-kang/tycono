@@ -40,6 +40,7 @@ export class DirectApiRunner implements ExecutionRunner {
       jobId: config.jobId,
       model: config.model,
       tokenLedger,
+      attachments: config.attachments,
       onText: (text) => callbacks.onText?.(text),
       onToolExec: (name, input) => callbacks.onToolUse?.(name, input),
       onDispatch: (roleId, task) => callbacks.onDispatch?.(roleId, task),

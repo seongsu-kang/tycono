@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Message, StreamEvent } from '../../types';
+import type { Message, StreamEvent, ImageAttachment } from '../../types';
 import MarkdownRenderer from './MarkdownRenderer';
 
 interface Props {
@@ -12,6 +12,62 @@ const ROLE_ICONS: Record<string, string> = {
   cto: '\u{1F3D7}\u{FE0F}', cbo: '\u{1F4CA}', pm: '\u{1F4CB}',
   engineer: '\u{2699}\u{FE0F}', designer: '\u{1F3A8}', qa: '\u{1F50D}',
 };
+
+/* ─── Image attachment preview ───────── */
+
+function AttachmentPreview({ attachments }: { attachments: ImageAttachment[] }) {
+  const [enlargedIndex, setEnlargedIndex] = useState<number | null>(null);
+
+  if (attachments.length === 0) return null;
+
+  return (
+    <>
+      <div className="flex flex-wrap gap-2 mb-2">
+        {attachments.map((att, idx) => (
+          <button
+            key={idx}
+            onClick={() => setEnlargedIndex(idx)}
+            className="relative w-20 h-20 rounded-lg overflow-hidden border border-[var(--terminal-border)] bg-[var(--terminal-inline-bg)] cursor-pointer hover:border-[var(--terminal-border-hover)] transition-colors"
+          >
+            <img
+              src={`data:${att.mediaType};base64,${att.data}`}
+              alt={att.name}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-[8px] text-white truncate px-1 py-0.5">
+              {att.name}
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* Enlarged view modal */}
+      {enlargedIndex !== null && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center"
+          onClick={() => setEnlargedIndex(null)}
+        >
+          <div className="relative max-w-[90vw] max-h-[90vh]">
+            <img
+              src={`data:${attachments[enlargedIndex].mediaType};base64,${attachments[enlargedIndex].data}`}
+              alt={attachments[enlargedIndex].name}
+              className="max-w-full max-h-[90vh] object-contain rounded-lg"
+            />
+            <button
+              onClick={() => setEnlargedIndex(null)}
+              className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/70 text-white flex items-center justify-center cursor-pointer hover:bg-black/90"
+            >
+              x
+            </button>
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/70 text-white text-sm px-3 py-1 rounded">
+              {attachments[enlargedIndex].name}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
 /* ─── Tool input summary ───────────────── */
 
@@ -291,6 +347,11 @@ export default function MessageBubble({ message, roleId, roleColor }: Props) {
       <div className="flex justify-end mb-3">
         <div className="max-w-[85%]">
           <div className="text-[10px] text-[var(--terminal-text-muted)] text-right mb-1">CEO</div>
+          {message.attachments && message.attachments.length > 0 && (
+            <div className="flex justify-end mb-1">
+              <AttachmentPreview attachments={message.attachments} />
+            </div>
+          )}
           <div className="bg-[var(--terminal-surface-light)] rounded-xl rounded-tr-sm px-4 py-2.5 text-sm text-[var(--terminal-text)] leading-relaxed">
             {message.type === 'directive' && (
               <span className="text-amber-400 text-[10px] font-bold mr-1.5">DO</span>

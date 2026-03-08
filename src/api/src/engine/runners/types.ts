@@ -12,6 +12,15 @@ import type { OrgTree } from '../org-tree.js';
  * EXECUTION_ENGINE 환경변수로 전환 (기본값: claude-cli)
  */
 
+/* ─── Attachment Types ────────────────────────── */
+
+export interface ImageAttachment {
+  type: 'image';
+  data: string;      // base64 encoded
+  name: string;
+  mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp';
+}
+
 /* ─── Config ──────────────────────────────────── */
 
 export type TeamStatus = Record<string, { status: string; task?: string }>;
@@ -27,6 +36,7 @@ export interface RunnerConfig {
   model?: string;
   jobId?: string;
   teamStatus?: TeamStatus;
+  attachments?: ImageAttachment[];
 }
 
 /* ─── Callbacks ───────────────────────────────── */

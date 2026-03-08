@@ -1,4 +1,5 @@
 import { useRef, useCallback } from 'react';
+import type { ImageAttachment } from '../types';
 
 interface StreamCallbacks {
   onText: (text: string) => void;
@@ -24,6 +25,7 @@ export default function useSessionStream() {
     content: string,
     mode: 'talk' | 'do',
     callbacks: StreamCallbacks,
+    attachments?: ImageAttachment[],
   ) => {
     // Abort any previous stream
     abort();
@@ -34,7 +36,7 @@ export default function useSessionStream() {
     fetch(`/api/exec/session/${sessionId}/message`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content, mode }),
+      body: JSON.stringify({ content, mode, attachments }),
       signal: controller.signal,
     }).then(async (response) => {
       if (!response.ok || !response.body) {

@@ -8,6 +8,7 @@ import {
   addMessage,
   updateMessage,
   type Message,
+  type ImageAttachment,
 } from '../services/session-store.js';
 import { jobManager, type Job } from '../services/job-manager.js';
 import { ActivityStream, type ActivityEvent, type ActivitySubscriber } from '../services/activity-stream.js';
@@ -597,9 +598,30 @@ function handleSessionMessage(
 
   const content = body.content as string;
   const mode = (body.mode as 'talk' | 'do') ?? session.mode;
-  if (!content) {
-    jsonResponse(res, 400, { error: 'content is required' });
+  const attachments = body.attachments as ImageAttachment[] | undefined;
+
+  // Allow empty content if there are attachments
+  if (!content && (!attachments || attachments.length === 0)) {
+    jsonResponse(res, 400, { error: 'content or attachments required' });
     return;
+  }
+
+  // Validate attachments if present
+  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+  const SUPPORTED_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+  if (attachments && attachments.length > 0) {
+    for (const att of attachments) {
+      if (!SUPPORTED_TYPES.includes(att.mediaType)) {
+        jsonResponse(res, 400, { error: `Unsupported image type: ${att.mediaType}` });
+        return;
+      }
+      // Approximate size check (base64 is ~33% larger than binary)
+      const approximateSize = (att.data.length * 3) / 4;
+      if (approximateSize > MAX_FILE_SIZE) {
+        jsonResponse(res, 400, { error: `File too large: ${att.name}. Max 5MB.` });
+        return;
+      }
+    }
   }
 
   const roleId = session.roleId;
@@ -614,17 +636,18 @@ function handleSessionMessage(
   const ceoMsg: Message = {
     id: `msg-${Date.now()}-ceo`,
     from: 'ceo',
-    content,
+    content: content || '',
     type: mode === 'do' ? 'directive' : 'conversation',
     status: 'done',
     timestamp: new Date().toISOString(),
+    attachments,
   };
   addMessage(sessionId, ceoMsg);
 
   const contextWindow = buildConversationContext(session.messages, ceoMsg);
   const fullTask = contextWindow
-    ? `${contextWindow}\n[Current Message]\nCEO: ${content}`
-    : content;
+    ? `${contextWindow}\n[Current Message]\nCEO: ${content || '(image attached)'}`
+    : content || '(image attached)';
 
   const roleMsg: Message = {
     id: `msg-${Date.now() + 1}-role`,
@@ -700,7 +723,7 @@ function handleSessionMessage(
   });
 
   const handle = getRunner().execute(
-    { companyRoot: COMPANY_ROOT, roleId, task: fullTask, sourceRole: 'ceo', orgTree, readOnly, model: orgTree.nodes.get(roleId)?.model },
+    { companyRoot: COMPANY_ROOT, roleId, task: fullTask, sourceRole: 'ceo', orgTree, readOnly, model: orgTree.nodes.get(roleId)?.model, attachments },
     {
       onText: (text) => {
         roleMsg.content += text;

@@ -4,6 +4,13 @@ import { COMPANY_ROOT } from './file-reader.js';
 
 /* ─── Types ─────────────────────────────── */
 
+export interface ImageAttachment {
+  type: 'image';
+  data: string;      // base64 encoded
+  name: string;
+  mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp';
+}
+
 export interface Message {
   id: string;
   from: 'ceo' | 'role';
@@ -11,6 +18,7 @@ export interface Message {
   type: 'conversation' | 'directive' | 'system';
   status?: 'streaming' | 'done' | 'error';
   timestamp: string;
+  attachments?: ImageAttachment[];
 }
 
 export interface Session {

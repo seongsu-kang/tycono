@@ -23,7 +23,8 @@ export interface ToolResult {
 
 export type MessageContent =
   | { type: 'text'; text: string }
-  | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> };
+  | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
+  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } };
 
 export interface LLMResponse {
   content: MessageContent[];

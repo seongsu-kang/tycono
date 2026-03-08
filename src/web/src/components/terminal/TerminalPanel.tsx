@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import type { Session, Role } from '../../types';
+import type { Session, Role, ImageAttachment } from '../../types';
 import type { ChatChannel } from '../../types/chat';
 import SessionTab from './SessionTab';
 import MessageList from './MessageList';
@@ -18,7 +18,7 @@ interface Props {
   onCreateSession: (roleId: string) => void;
   onClearEmpty?: () => void;
   onCloseAll?: () => void;
-  onSendMessage: (sessionId: string, content: string, mode: 'talk' | 'do') => void;
+  onSendMessage: (sessionId: string, content: string, mode: 'talk' | 'do', attachments?: ImageAttachment[]) => void;
   onModeChange: (sessionId: string, mode: 'talk' | 'do') => void;
   onCloseTerminal: () => void;
   /** Office Chat channels */
@@ -321,7 +321,7 @@ export default function TerminalPanel({
           <InputBar
             mode={activeSession.mode}
             onModeChange={(mode) => onModeChange(activeSession.id, mode)}
-            onSend={(content) => onSendMessage(activeSession.id, content, activeSession.mode)}
+            onSend={(content, attachments) => onSendMessage(activeSession.id, content, activeSession.mode, attachments)}
             disabled={isStreaming}
             disabledReason={isStreaming ? `${activeSession.roleId.toUpperCase()} is responding...` : undefined}
           />
