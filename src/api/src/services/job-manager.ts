@@ -331,14 +331,11 @@ class JobManager {
     const job = this.jobs.get(id);
     if (!job || job.status !== 'awaiting_input') return null;
 
-    // Mark previous job as done
+    // Mark previous job as done (don't emit job:done — the stream stays open
+    // for the continuation job which will emit its own job:done when finished)
     job.status = 'done';
     completeActivity(job.roleId);
     job.stream.emit('job:reply', job.roleId, { response });
-    job.stream.emit('job:done', job.roleId, {
-      output: job.result?.output?.slice(-1000) ?? '',
-      repliedWith: response,
-    });
 
     // Build continuation prompt with previous context
     const prevOutput = job.result?.output ?? '';

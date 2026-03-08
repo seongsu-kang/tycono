@@ -232,9 +232,14 @@ function handleJobStream(jobId: string, fromSeq: number, req: IncomingMessage, r
     if (event.seq >= fromSeq) {
       sendSSE(res, 'activity', event);
     }
-    // Auto-close SSE when job ends (done or error, NOT awaiting_input)
+    // Auto-close SSE when job ends or CEO replies (new stream takes over)
     if (event.type === 'job:done' || event.type === 'job:error') {
       sendSSE(res, 'stream:end', { reason: event.type === 'job:done' ? 'done' : 'error' });
+      res.end();
+      job.stream.unsubscribe(subscriber);
+    } else if (event.type === 'job:reply') {
+      // CEO replied → close this stream; frontend will connect to continuation job
+      sendSSE(res, 'stream:end', { reason: 'replied' });
       res.end();
       job.stream.unsubscribe(subscriber);
     }

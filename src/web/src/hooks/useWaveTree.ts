@@ -202,20 +202,23 @@ export default function useWaveTree(
                   });
                 } else if (currentEvent === 'stream:end') {
                   const reason = data.reason as string;
-                  setNodes((prev) => {
-                    const next = new Map(prev);
-                    const node = next.get(roleId);
-                    if (!node) return prev;
-                    const finalStatus = reason === 'error' ? 'error'
-                      : reason === 'awaiting_input' ? 'awaiting_input'
-                      : 'done';
-                    next.set(roleId, {
-                      ...node,
-                      status: node.status === 'running' ? (finalStatus as WaveNodeStatus) : node.status,
-                      streamStatus: finalStatus === 'error' ? 'error' : 'done',
+                  // 'replied' means CEO responded — new stream will take over, don't change status
+                  if (reason !== 'replied') {
+                    setNodes((prev) => {
+                      const next = new Map(prev);
+                      const node = next.get(roleId);
+                      if (!node) return prev;
+                      const finalStatus = reason === 'error' ? 'error'
+                        : reason === 'awaiting_input' ? 'awaiting_input'
+                        : 'done';
+                      next.set(roleId, {
+                        ...node,
+                        status: node.status === 'running' ? (finalStatus as WaveNodeStatus) : node.status,
+                        streamStatus: finalStatus === 'error' ? 'error' : 'done',
+                      });
+                      return next;
                     });
-                    return next;
-                  });
+                  }
                 }
               } catch { /* skip malformed */ }
               currentEvent = '';
