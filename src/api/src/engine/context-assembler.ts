@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { readPreferences } from '../services/preferences.js';
+import { readConfig } from '../services/company-config.js';
 import {
   type OrgTree,
   type OrgNode,
@@ -98,7 +99,13 @@ export function assembleContext(
     sections.push('# CEO Decisions (전사 공지)\n\n' + ceoDecisions);
   }
 
-  // 9. Task는 별도 필드로 분리
+  // 9. Code Root (코드 프로젝트 경로)
+  const config = readConfig(companyRoot);
+  if (config.codeRoot) {
+    sections.push(`# Code Project\n\nThe code repository is located at: \`${config.codeRoot}\`\nUse this path when working with source code (reading, writing, building, testing).`);
+  }
+
+  // 10. Task는 별도 필드로 분리
   const subordinates = getSubordinates(orgTree, roleId);
 
   // Dispatch 도구 안내 (하위 Role이 있는 경우)

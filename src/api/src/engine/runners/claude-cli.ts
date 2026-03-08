@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { assembleContext } from '../context-assembler.js';
 import { getSubordinates } from '../org-tree.js';
+import { readConfig } from '../../services/company-config.js';
 import type { ExecutionRunner, RunnerConfig, RunnerCallbacks, RunnerHandle, RunnerResult } from './types.js';
 
 /* ─── Dispatch Bridge Script (Python3) ────── */
@@ -199,10 +200,13 @@ export class ClaudeCliRunner implements ExecutionRunner {
     cleanEnv.DISPATCH_CMD = dispatchScript;
 
     const modelName = config.model ?? 'claude-sonnet-4-5';
-    console.log(`[Runner] Spawning claude -p: role=${roleId}, model=${modelName}, maxTurns=${maxTurns}, jobId=${config.jobId ?? 'none'}, subordinates=[${subordinates.join(',')}]`);
+    // Use codeRoot as cwd if configured, otherwise fall back to companyRoot
+    const companyConfig = readConfig(companyRoot);
+    const cwd = companyConfig.codeRoot || companyRoot;
+    console.log(`[Runner] Spawning claude -p: role=${roleId}, model=${modelName}, maxTurns=${maxTurns}, jobId=${config.jobId ?? 'none'}, cwd=${cwd}, subordinates=[${subordinates.join(',')}]`);
 
     const proc = spawn('claude', args, {
-      cwd: companyRoot,
+      cwd,
       env: cleanEnv,
       stdio: ['ignore', 'pipe', 'pipe'],
     });

@@ -11,6 +11,7 @@ export interface CompanyConfig {
   engine: 'claude-cli' | 'direct-api';
   model?: string;
   apiKey?: string;
+  codeRoot?: string;  // 코드 프로젝트 경로 (AKB와 분리된 코드 repo)
 }
 
 export const TYCONO_DIR = '.tycono';

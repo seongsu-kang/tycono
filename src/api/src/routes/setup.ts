@@ -14,7 +14,7 @@ import type { ScaffoldConfig } from '../services/scaffold.js';
 import { importKnowledge } from '../services/knowledge-importer.js';
 import { AnthropicProvider, type LLMProvider } from '../engine/llm-adapter.js';
 import { jobManager } from '../services/job-manager.js';
-import { applyConfig, readConfig } from '../services/company-config.js';
+import { applyConfig, readConfig, writeConfig } from '../services/company-config.js';
 
 export const setupRouter = Router();
 
@@ -81,7 +81,7 @@ setupRouter.post('/validate-path', (req, res) => {
  * POST /api/setup/scaffold
  */
 setupRouter.post('/scaffold', (req, res) => {
-  const { companyName, description, apiKey, team, existingProjectPath, knowledgePaths } = req.body;
+  const { companyName, description, apiKey, team, existingProjectPath, knowledgePaths, codeRoot } = req.body;
 
   if (!companyName || typeof companyName !== 'string') {
     res.status(400).json({ error: 'companyName is required' });
@@ -105,7 +105,11 @@ setupRouter.post('/scaffold', (req, res) => {
 
     process.env.COMPANY_ROOT = projectRoot;
     // Load config.json written by scaffold and apply to process.env
-    applyConfig(projectRoot);
+    const scaffoldConfig = applyConfig(projectRoot);
+    // Save codeRoot if provided
+    if (codeRoot && typeof codeRoot === 'string') {
+      writeConfig(projectRoot, { ...scaffoldConfig, codeRoot });
+    }
     jobManager.refreshRunner();
 
     res.json({ ok: true, companyName, projectRoot, created });
@@ -197,7 +201,7 @@ setupRouter.post('/connect-akb', (req, res) => {
   applyConfig(resolved);
   jobManager.refreshRunner();
 
-  res.json({ ok: true, companyName, companyRoot: resolved, engine: config.engine });
+  res.json({ ok: true, companyName, companyRoot: resolved, engine: config.engine, codeRoot: config.codeRoot || null });
 });
 
 /**
@@ -248,6 +252,31 @@ setupRouter.post('/import-knowledge', (req, res) => {
     sendSSE('error', { message: err instanceof Error ? err.message : 'Import failed' });
     res.end();
   });
+});
+
+/**
+ * POST /api/setup/code-root
+ * Set or update the codeRoot config field.
+ */
+setupRouter.post('/code-root', (req, res) => {
+  const { codeRoot: newCodeRoot } = req.body;
+  const companyRoot = process.env.COMPANY_ROOT || process.cwd();
+
+  if (!newCodeRoot || typeof newCodeRoot !== 'string') {
+    res.status(400).json({ ok: false, error: 'codeRoot path is required' });
+    return;
+  }
+
+  const resolved = path.resolve(newCodeRoot);
+  if (!fs.existsSync(resolved)) {
+    res.status(400).json({ ok: false, error: 'Path does not exist' });
+    return;
+  }
+
+  const config = readConfig(companyRoot);
+  writeConfig(companyRoot, { ...config, codeRoot: resolved });
+
+  res.json({ ok: true, codeRoot: resolved });
 });
 
 /**
