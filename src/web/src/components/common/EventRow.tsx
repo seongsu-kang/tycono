@@ -43,13 +43,13 @@ export default function EventRow({ event, isThinkingCollapsed, onToggleThinking,
         <div className="group">
           <button
             onClick={onToggleThinking}
-            className="text-[var(--terminal-text-muted)] hover:text-[var(--terminal-text-secondary)] text-[10px] cursor-pointer flex items-center gap-1"
+            className="text-[var(--terminal-text-muted)] hover:text-[var(--terminal-text-secondary)] text-[10px] cursor-pointer flex items-center gap-1 select-text"
           >
             <span>{isThinkingCollapsed ? '\u25B6' : '\u25BC'}</span>
             <span className="italic">thinking...</span>
           </button>
           {!isThinkingCollapsed && (
-            <div className={`ml-3 text-[var(--terminal-text-muted)] italic whitespace-pre-wrap opacity-60 text-[11px] overflow-y-auto ${compact ? 'max-h-[60px]' : 'max-h-[120px]'}`}>
+            <div className={`ml-3 text-[var(--terminal-text-muted)] italic whitespace-pre-wrap opacity-60 text-[11px] overflow-hidden ${compact ? 'max-h-[60px]' : 'max-h-[120px]'}`}>
               {text.slice(0, compact ? 200 : 500)}{text.length > (compact ? 200 : 500) ? '...' : ''}
             </div>
           )}
