@@ -32,6 +32,7 @@ import { skillsRouter } from './routes/skills.js';
 import { importKnowledge } from './services/knowledge-importer.js';
 import { AnthropicProvider, type LLMProvider } from './engine/llm-adapter.js';
 import { readConfig } from './services/company-config.js';
+import { ensureClaudeMd } from './services/claude-md-manager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -103,6 +104,7 @@ function handleImportKnowledge(req: http.IncomingMessage, res: http.ServerRespon
 
 export function createHttpServer(): http.Server {
   cleanupStaleActivities();
+  ensureClaudeMd(COMPANY_ROOT);
 
   const app = createExpressApp();
 
@@ -166,8 +168,9 @@ export function createExpressApp(): express.Application {
     let companyName: string | null = null;
     if (initialized) {
       try {
-        const claudeMdPath = path.join(COMPANY_ROOT, 'CLAUDE.md');
-        const content = fs.readFileSync(claudeMdPath, 'utf-8');
+        // Read company name from company/company.md (user-owned data)
+        const companyMdPath = path.join(COMPANY_ROOT, 'company', 'company.md');
+        const content = fs.readFileSync(companyMdPath, 'utf-8');
         const match = content.match(/^#\s+(.+)/m);
         if (match) companyName = match[1].trim();
       } catch { /* ignore */ }

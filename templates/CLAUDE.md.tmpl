@@ -1,13 +1,6 @@
-# {{COMPANY_NAME}}
+# Company Rules
 
-> {{DESCRIPTION}}
-
----
-
-## Organization
-
-| Role | Assignee | Level | Reports To | Status |
-|------|----------|-------|------------|--------|
+> Powered by [Tycono](https://tycono.ai) — AI Company Operating Platform
 
 ---
 
@@ -46,6 +39,12 @@
 
 Every folder has a Hub file (`{folder-name}.md`) as its entry point.
 Check the Task Routing table above to find the right Hub, then read it first.
+
+### Custom Rules (CRITICAL)
+
+> ⛔ **Before starting work, check if `.tycono/custom-rules.md` exists and read it.**
+> This file contains company-specific rules, constraints, and processes.
+> If the file doesn't exist, ignore this section.
 
 ### Knowledge Gate
 
@@ -162,10 +161,15 @@ After completing any task:
 ## Folder Structure
 
 ```
-{{COMPANY_NAME}}/
-+-- CLAUDE.md                <- AI entry point
+{company}/
++-- CLAUDE.md                <- AI entry point (Tycono managed)
++-- .tycono/
+|   +-- config.json          <- Engine settings
+|   +-- preferences.json     <- UI preferences
+|   +-- custom-rules.md      <- Company custom rules (user owned)
+|   +-- rules-version        <- Current CLAUDE.md version
 +-- company/
-|   +-- company.md           <- Mission, vision
+|   +-- company.md           <- Mission, vision, company info
 +-- roles/
 |   +-- roles.md             <- Role listing (Hub)
 |   +-- {role-id}/
@@ -189,4 +193,5 @@ After completing any task:
 
 ---
 
-*Powered by [tycono](https://github.com/seongsu-kang/the-company)*
+<!-- tycono:managed v{{VERSION}} — This file is managed by Tycono. Do not edit manually. -->
+<!-- Company-specific rules go in .tycono/custom-rules.md -->

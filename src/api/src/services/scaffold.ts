@@ -13,6 +13,16 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TEMPLATES_DIR = path.resolve(__dirname, '../../../../templates');
 
+function getPackageVersion(): string {
+  const pkgPath = path.resolve(__dirname, '../../../../package.json');
+  try {
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+    return pkg.version || '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
+
 export interface ScaffoldConfig {
   companyName: string;
   description: string;
@@ -155,10 +165,22 @@ export function scaffold(config: ScaffoldConfig): string[] {
     created.push(dir + '/');
   }
 
-  // Write CLAUDE.md
+  // Write CLAUDE.md (no variable substitution — 100% Tycono managed)
   const claudeTmpl = loadTemplate('CLAUDE.md.tmpl');
-  fs.writeFileSync(path.join(root, 'CLAUDE.md'), renderTemplate(claudeTmpl, vars));
+  const pkgVersion = getPackageVersion();
+  fs.writeFileSync(path.join(root, 'CLAUDE.md'), claudeTmpl.replaceAll('{{VERSION}}', pkgVersion));
   created.push('CLAUDE.md');
+
+  // Write .tycono/rules-version
+  fs.writeFileSync(path.join(root, '.tycono', 'rules-version'), pkgVersion);
+  created.push('.tycono/rules-version');
+
+  // Write .tycono/custom-rules.md (empty stub — user owned)
+  const customRulesPath = path.join(root, '.tycono', 'custom-rules.md');
+  if (!fs.existsSync(customRulesPath)) {
+    fs.writeFileSync(customRulesPath, `# Custom Rules\n\n> Company-specific rules, constraints, and processes.\n> This file is owned by you — Tycono will never overwrite it.\n\n<!-- Add your custom rules below -->\n`);
+    created.push('.tycono/custom-rules.md');
+  }
 
   // Write company/company.md
   const companyTmpl = loadTemplate('company.md.tmpl');
@@ -310,16 +332,4 @@ function createRole(root: string, role: TeamRole): void {
     fs.writeFileSync(rolesHubPath, hubContent.trimEnd() + '\n' + row + '\n');
   }
 
-  // Append to CLAUDE.md org table
-  const claudeMdPath = path.join(root, 'CLAUDE.md');
-  if (fs.existsSync(claudeMdPath)) {
-    const claudeContent = fs.readFileSync(claudeMdPath, 'utf-8');
-    const orgRow = `| **${role.name}** | AI (${role.id}) | ${role.level} | ${role.reportsTo} | Active |`;
-    const orgMatch = claudeContent.match(/(## Organization[\s\S]*?\n(\|[^\n]*\n)+)/);
-    if (orgMatch) {
-      const insertPos = (orgMatch.index ?? 0) + orgMatch[0].length;
-      const updated = claudeContent.slice(0, insertPos) + orgRow + '\n' + claudeContent.slice(insertPos);
-      fs.writeFileSync(claudeMdPath, updated);
-    }
-  }
 }
