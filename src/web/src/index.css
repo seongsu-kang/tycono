@@ -1331,6 +1331,8 @@ body {
   font-weight: 900;
   padding: 4px 10px;
   cursor: pointer;
+  background: transparent;
+  color: var(--terminal-text-secondary);
   border: 2px solid var(--pixel-border);
   transition: all 0.15s;
 }

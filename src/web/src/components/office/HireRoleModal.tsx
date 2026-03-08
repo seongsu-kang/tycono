@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import type { CreateRoleInput } from '../../types';
 import type { CharacterAppearance } from '../../types/appearance';
+import type { SkillExport } from '../../types/store';
 import CharacterEditor, { randomAppearance } from './CharacterEditor';
 import TopDownCharCanvas from './TopDownCharCanvas';
 import { api } from '../../api/client';
+import { cloudApi } from '../../api/cloud';
 
 interface Props {
   existingRoles: { id: string; name: string }[];
@@ -76,7 +78,17 @@ function parseBulkLine(line: string, existingIds: Set<string>, seenIds: Set<stri
 }
 
 export default function HireRoleModal({ existingRoles, onClose, onHire }: Props) {
-  const [mode, setMode] = useState<'single' | 'bulk'>('single');
+  const [mode, setMode] = useState<'single' | 'bulk' | 'store'>('single');
+
+  /* ─── Store import state ─── */
+  const [storeId, setStoreId] = useState('');
+  const [storeCharacter, setStoreCharacter] = useState<Record<string, any> | null>(null);
+  const [storeFetching, setStoreFetching] = useState(false);
+  const [storeError, setStoreError] = useState('');
+  const [storeStep, setStoreStep] = useState<'input' | 'review'>('input');
+  const [storeName, setStoreName] = useState('');
+  const [storeRoleId, setStoreRoleId] = useState('');
+  const [storeReportsTo, setStoreReportsTo] = useState('ceo');
 
   /* ─── Single mode state ─── */
   const [step, setStep] = useState(1);
@@ -189,15 +201,67 @@ export default function HireRoleModal({ existingRoles, onClose, onHire }: Props)
     }
   };
 
+  /* ─── Store import handlers ─── */
+  const handleStoreFetch = async () => {
+    setStoreFetching(true);
+    setStoreError('');
+    try {
+      const cleanId = storeId.replace(/^tycono:/, '').trim();
+      if (!cleanId) { setStoreError('Please enter a character ID'); setStoreFetching(false); return; }
+      const ch = await cloudApi.getCharacter(cleanId);
+      setStoreCharacter(ch);
+      setStoreName(ch.name || '');
+      setStoreRoleId(slugify(ch.name || cleanId));
+      setStoreStep('review');
+    } catch {
+      setStoreError('Character not found. Check the ID and try again.');
+    } finally {
+      setStoreFetching(false);
+    }
+  };
+
+  const handleStoreHire = async () => {
+    if (!storeCharacter) return;
+    setBusy(true);
+    setError('');
+    const ch = storeCharacter;
+    const lvl = (ch.level === 'c-level' || ch.level === 'team-lead') ? ch.level : 'member' as const;
+    const defaults = defaultsForLevel(lvl);
+
+    const isSkillExp = ch.skills != null && typeof ch.skills === 'object' && !Array.isArray(ch.skills) && 'primary' in ch.skills;
+
+    try {
+      await onHire({
+        id: storeRoleId,
+        name: storeName.trim(),
+        level: lvl,
+        reportsTo: storeReportsTo,
+        persona: ch.persona || `${storeName}. Imported from Tycono Store.`,
+        authority: ch.authority || defaults.authority,
+        knowledge: defaults.knowledge,
+        reports: defaults.reports,
+        source: { id: `tycono/${ch.id}`, sync: 'manual', forked_at: '1.0.0', upstream_version: '1.0.0' },
+        skillContent: isSkillExp ? (ch.skills as SkillExport) : undefined,
+      }, ch.appearance ? ch.appearance : randomAppearance());
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to hire');
+      setBusy(false);
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') onClose();
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       if (mode === 'single') {
         if (step < TOTAL_STEPS && canNext(step)) setStep(step + 1);
         else if (step === TOTAL_STEPS) handleHire();
-      } else {
+      } else if (mode === 'bulk') {
         if (bulkStep === 'input' && bulkValid) setBulkStep('review');
         else if (bulkStep === 'review') handleBulkHire();
+      } else if (mode === 'store') {
+        if (storeStep === 'input' && storeId.trim()) handleStoreFetch();
+        else if (storeStep === 'review') handleStoreHire();
       }
     }
   };
@@ -228,10 +292,16 @@ export default function HireRoleModal({ existingRoles, onClose, onHire }: Props)
               >
                 Bulk
               </button>
+              <button
+                onClick={() => { setMode('store'); setError(''); }}
+                className={`px-3 py-1 text-xs font-semibold rounded-md cursor-pointer transition-colors ${mode === 'store' ? 'bg-white/20 text-white' : 'text-white/50 hover:text-white/70'}`}
+              >
+                Import
+              </button>
             </div>
           </div>
           <div className="text-sm opacity-80 mt-0.5">
-            {mode === 'single' ? `Step ${step} of ${TOTAL_STEPS}` : bulkStep === 'input' ? 'Enter roles, one per line' : `Review ${bulkEntries.length} roles`}
+            {mode === 'single' ? `Step ${step} of ${TOTAL_STEPS}` : mode === 'bulk' ? (bulkStep === 'input' ? 'Enter roles, one per line' : `Review ${bulkEntries.length} roles`) : (storeStep === 'input' ? 'Import from Tycono Store' : 'Review & customize')}
           </div>
         </div>
 
