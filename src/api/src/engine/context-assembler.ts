@@ -57,10 +57,10 @@ export function assembleContext(
 
   const sections: string[] = [];
 
-  // 1. CLAUDE.md (전사 규칙 — 축약)
+  // 1. Company Rules (CLAUDE.md + custom-rules.md + company.md)
   const companyRules = loadCompanyRules(companyRoot);
   if (companyRules) {
-    sections.push('# Company Rules\n\n' + companyRules);
+    sections.push(companyRules);
   }
 
   // 2. Org Context
