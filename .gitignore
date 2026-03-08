@@ -44,6 +44,7 @@ fixtures/*/.tycono/preferences.json
 
 # Screenshots
 *.png
+!.github/assets/*.png
 
 # Claude Code worktrees
 .claude/worktrees/
