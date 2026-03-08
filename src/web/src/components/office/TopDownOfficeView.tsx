@@ -939,7 +939,7 @@ export default function TopDownOfficeView({
       if (lbl) {
         const lp = facilityLabelPos(fz);
         lbl.style.left = (lp.cx / _layout.canvasW * 100) + '%';
-        lbl.style.top = (lp.botY * z + 2) + 'px';
+        lbl.style.top = (lp.botY * z - 4) + 'px';
         lbl.classList.toggle('td-facility-label--hover', _hoverFacility === fz.id);
       }
     }
