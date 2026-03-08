@@ -11,13 +11,27 @@ rolesRouter.get('/', (_req: Request, res: Response, next: NextFunction) => {
     const content = readFile('roles/roles.md');
     const rows = parseMarkdownTable(content);
 
-    const roles = rows.map(row => ({
-      id: row.id ?? '',
-      name: row.role ?? row.name ?? '',
-      level: row.level ?? '',
-      reportsTo: row.reports_to ?? '',
-      status: row.상태 ?? row.status ?? '',
-    }));
+    const roles = rows.map(row => {
+      const id = row.id ?? '';
+      let name = row.role ?? row.name ?? '';
+
+      // role.yaml의 name이 있으면 우선 사용 (rename 반영)
+      const yamlPath = `roles/${id}/role.yaml`;
+      if (id && fileExists(yamlPath)) {
+        try {
+          const raw = YAML.parse(readFile(yamlPath)) as Record<string, unknown>;
+          if (raw.name) name = raw.name as string;
+        } catch { /* fallback to roles.md name */ }
+      }
+
+      return {
+        id,
+        name,
+        level: row.level ?? '',
+        reportsTo: row.reports_to ?? '',
+        status: row.상태 ?? row.status ?? '',
+      };
+    });
 
     res.json(roles);
   } catch (err) {
@@ -51,11 +65,13 @@ rolesRouter.get('/:id', (req: Request, res: Response, next: NextFunction) => {
       journal: '',
     };
 
-    // role.yaml에서 persona + authority 읽기
+    // role.yaml에서 name + persona + authority + skills 읽기
     const yamlPath = `roles/${id}/role.yaml`;
     if (fileExists(yamlPath)) {
       const raw = YAML.parse(readFile(yamlPath)) as Record<string, unknown>;
+      if (raw.name) role.name = raw.name;
       if (raw.persona) role.persona = raw.persona;
+      if (Array.isArray(raw.skills)) role.skills = raw.skills;
       const auth = raw.authority as Record<string, string[]> | undefined;
       if (auth) {
         role.authority = {
