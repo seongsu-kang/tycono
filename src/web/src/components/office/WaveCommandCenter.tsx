@@ -227,7 +227,7 @@ export default function WaveCommandCenter({
                 ))}
               </div>
             </div>
-            <div className="overflow-x-auto overflow-y-hidden px-3 pb-2" style={{ maxHeight: '180px' }}>
+            <div className="overflow-x-auto overflow-y-auto px-3 pb-2" style={{ maxHeight: '35vh' }}>
               <OrgTreeLive
                 nodes={nodes}
                 rootId={rootRoleId}
