@@ -124,6 +124,20 @@ class JobManager {
       sourceRole: params.sourceRole ?? 'ceo',
     });
 
+    // If this job has a parent, emit dispatch:start on the parent's stream
+    // so the Wave Command Center can track this child job.
+    if (params.parentJobId) {
+      const parentJob = this.jobs.get(params.parentJobId);
+      if (parentJob) {
+        parentJob.childJobIds.push(jobId);
+        parentJob.stream.emit('dispatch:start', parentJob.roleId, {
+          targetRoleId: params.roleId,
+          task: params.task,
+          childJobId: jobId,
+        });
+      }
+    }
+
     // Set activity tracker
     setActivity(params.roleId, params.task);
 
@@ -164,20 +178,14 @@ class JobManager {
           });
         },
         onDispatch: (subRoleId, subTask) => {
-          // Create child job for the dispatch
-          const childJob = this.startJob({
+          // Create child job — startJob() auto-emits dispatch:start
+          // on parent stream when parentJobId is set.
+          this.startJob({
             type: 'assign',
             roleId: subRoleId,
             task: subTask,
             sourceRole: params.roleId,
             parentJobId: jobId,
-          });
-          job.childJobIds.push(childJob.id);
-
-          stream.emit('dispatch:start', params.roleId, {
-            targetRoleId: subRoleId,
-            task: subTask,
-            childJobId: childJob.id,
           });
         },
         onTurnComplete: (turn) => {

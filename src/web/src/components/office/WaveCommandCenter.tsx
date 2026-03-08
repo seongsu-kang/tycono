@@ -258,7 +258,7 @@ export default function WaveCommandCenter({
           </div>
 
           {/* Right: Activity Feed */}
-          <div className="flex-1 flex flex-col min-w-0">
+          <div className="flex-1 flex flex-col min-w-0 min-h-0">
             {/* Selected role header */}
             {selectedNode && (
               <div
@@ -299,7 +299,7 @@ export default function WaveCommandCenter({
             )}
 
             {/* Events */}
-            <div ref={outputRef} className="flex-1 overflow-y-auto p-4 space-y-1 text-xs font-mono select-text">
+            <div ref={outputRef} className="flex-1 min-h-0 overflow-y-auto p-4 space-y-1 text-xs font-mono select-text">
               {selectedNode && selectedNode.events.length === 0 && (
                 <div className="text-[var(--terminal-text-muted)]">
                   {selectedNode.status === 'waiting'

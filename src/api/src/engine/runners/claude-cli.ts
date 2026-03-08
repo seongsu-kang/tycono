@@ -272,15 +272,9 @@ export class ClaudeCliRunner implements ExecutionRunner {
               appendOutput: (t) => { output += t; },
               addToolCall: (name, input) => {
                 toolCalls.push({ name, input });
-                // Detect dispatch calls via Bash (dispatch bridge)
-                if (name === 'Bash' && typeof input?.command === 'string') {
-                  const cmd = input.command;
-                  // Match: python3 "$DISPATCH_CMD" <roleId> "task" or dispatch <roleId> "task"
-                  const dispatchMatch = cmd.match(/(?:DISPATCH_CMD|dispatch(?:\.py)?)[^\n]*?\s+(\w+)\s+["'](.+?)["']/);
-                  if (dispatchMatch) {
-                    callbacks.onDispatch?.(dispatchMatch[1], dispatchMatch[2]);
-                  }
-                }
+                // Dispatch detection removed — child jobs created by the Python
+                // dispatch bridge script via POST /api/jobs with parentJobId.
+                // JobManager.startJob() now auto-emits dispatch:start on parent stream.
               },
               incrementTurn: () => { turnCount++; callbacks.onTurnComplete?.(turnCount); },
               recordTokens: (input, out) => {
