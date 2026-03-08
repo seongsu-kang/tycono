@@ -100,6 +100,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
 
   /* Role levels from token usage */
   const [roleLevels, setRoleLevels] = useState<RoleLevelData>({});
+  const prevRoleLevelsRef = useRef<RoleLevelData>({});
   const [showHireModal, setShowHireModal] = useState(false);
   const [fireTarget, setFireTarget] = useState<{ roleId: string; roleName: string } | null>(null);
 
@@ -279,7 +280,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
       api.getDecisions().then(setDecisions),
       api.getKnowledge().then(setKnowledgeDocs).catch(() => {}),
       api.getOrgTree().then((tree) => { setOrgNodes(tree.nodes); setOrgRootId(tree.root); }).catch(() => {}),
-      api.getCostSummary().then((s) => setRoleLevels(computeRoleLevels(s.byRole))).catch(() => {}),
+      api.getCostSummary().then((s) => updateRoleLevels(computeRoleLevels(s.byRole))).catch(() => {}),
     ])
       .catch((err) => setError(`Failed to load: ${err.message}`))
       .finally(() => setLoading(false));
@@ -359,6 +360,20 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000);
   };
 
+  /** Update role levels and detect level-ups */
+  const updateRoleLevels = (newLevels: RoleLevelData) => {
+    const prev = prevRoleLevelsRef.current;
+    for (const [roleId, data] of Object.entries(newLevels)) {
+      const prevLevel = prev[roleId]?.level ?? 0;
+      if (prevLevel > 0 && data.level > prevLevel) {
+        const roleName = roles.find(r => r.id === roleId)?.name ?? roleId.toUpperCase();
+        addToast(`${roleName} leveled up to Lv.${data.level}!`, '#7C3AED');
+      }
+    }
+    prevRoleLevelsRef.current = newLevels;
+    setRoleLevels(newLevels);
+  };
+
   /* Badge detection — notify on newly earned badges */
   useEffect(() => {
     const badgeCtx: BadgeContext = {
@@ -393,7 +408,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     }
     api.getStandups().then(setStandups).catch(console.error);
     api.getCompany().then((c) => setRoles(c.roles)).catch(console.error);
-    api.getCostSummary().then((s) => setRoleLevels(computeRoleLevels(s.byRole))).catch(() => {});
+    api.getCostSummary().then((s) => updateRoleLevels(computeRoleLevels(s.byRole))).catch(() => {});
   };
 
   const handleWaveDispatch = async (directive: string) => {
