@@ -127,37 +127,10 @@ skillsRouter.post('/registry/install', async (req: Request, res: Response, next:
   }
 });
 
-// GET /api/skills/:id — Skill detail
-skillsRouter.get('/:id', (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const id = req.params.id as string;
-
-    // Check installed first
-    const installedPath = path.join(COMPANY_ROOT, '.claude', 'skills', '_shared', id, 'SKILL.md');
-    if (fs.existsSync(installedPath)) {
-      const content = fs.readFileSync(installedPath, 'utf-8');
-      const meta = extractSkillMeta(content, id);
-      res.json({ ...meta, installed: true, content });
-      return;
-    }
-
-    // Check template
-    const templateSkills = getAvailableSkills();
-    const templateSkill = templateSkills.find(s => s.id === id);
-    if (templateSkill) {
-      res.json({ ...templateSkill, installed: false });
-      return;
-    }
-
-    res.status(404).json({ error: `Skill not found: ${id}` });
-  } catch (err) {
-    next(err);
-  }
-});
-
 /* ─── Skill Export (for Store publish) ──── */
 
 // GET /api/skills/export/:roleId — Export full SKILL.md content for publishing
+// NOTE: Must be registered BEFORE /:id to avoid "export" matching as an id
 skillsRouter.get('/export/:roleId', (req: Request, res: Response, next: NextFunction) => {
   try {
     const roleId = req.params.roleId as string;
@@ -184,6 +157,34 @@ skillsRouter.get('/export/:roleId', (req: Request, res: Response, next: NextFunc
     }
 
     res.json({ primary, shared });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/skills/:id — Skill detail (wildcard — must be LAST among GET routes)
+skillsRouter.get('/:id', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = req.params.id as string;
+
+    // Check installed first
+    const installedPath = path.join(COMPANY_ROOT, '.claude', 'skills', '_shared', id, 'SKILL.md');
+    if (fs.existsSync(installedPath)) {
+      const content = fs.readFileSync(installedPath, 'utf-8');
+      const meta = extractSkillMeta(content, id);
+      res.json({ ...meta, installed: true, content });
+      return;
+    }
+
+    // Check template
+    const templateSkills = getAvailableSkills();
+    const templateSkill = templateSkills.find(s => s.id === id);
+    if (templateSkill) {
+      res.json({ ...templateSkill, installed: false });
+      return;
+    }
+
+    res.status(404).json({ error: `Skill not found: ${id}` });
   } catch (err) {
     next(err);
   }
