@@ -135,6 +135,10 @@ export default function OnboardingWizard({ onComplete }: Props) {
   const [companyName, setCompanyName] = useState('');
   const [description, setDescription] = useState('');
   const [language, setLanguage] = useState('auto');
+  const [location, setLocation] = useState('');
+  const [locationBase, setLocationBase] = useState('');
+  const [locationEdited, setLocationEdited] = useState(false);
+  const [showLocationBrowser, setShowLocationBrowser] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
 
   // Step: Project (code repo)
@@ -171,7 +175,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
   const steps = useMemo(() => getStepsForKnowledgeMode(knowledgeMode), [knowledgeMode]);
   const currentStep = steps[stepIndex] ?? 'engine';
 
-  // Detect engine on mount
+  // Detect engine + fetch CWD on mount
   useEffect(() => {
     api.detectEngine().then(result => {
       setEngineDetection(result);
@@ -180,11 +184,22 @@ export default function OnboardingWizard({ onComplete }: Props) {
     }).catch(() => setDetectingEngine(false));
 
     api.getTeams().then(setTeams).catch(() => {});
+
+    api.getStatus().then(status => {
+      setLocationBase(status.companyRoot || '');
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
     if (currentStep === 'company') nameRef.current?.focus();
   }, [currentStep]);
+
+  // Auto-generate location path from company name (unless user manually edited)
+  useEffect(() => {
+    if (locationEdited || !locationBase) return;
+    const slug = companyName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    setLocation(slug ? `${locationBase}/${slug}` : locationBase);
+  }, [companyName, locationBase, locationEdited]);
 
   const canNext = (): boolean => {
     switch (currentStep) {
@@ -272,6 +287,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
         existingProjectPath: projectMode === 'existing' ? existingPath.trim() : undefined,
         knowledgePaths: knowledgeMode === 'import' && knowledgePaths.length > 0 ? knowledgePaths : undefined,
         language: language !== 'auto' ? language : undefined,
+        location: location.trim() || undefined,
       };
       if (engineChoice === 'direct-api' || apiKey) {
         input.apiKey = apiKey || undefined;
@@ -440,6 +456,34 @@ export default function OnboardingWizard({ onComplete }: Props) {
               <div>
                 <label className="text-xs font-medium block mb-1" style={{ color: 'var(--terminal-text-secondary)' }}>Description</label>
                 <textarea className={`${inputClass} resize-none`} rows={3} placeholder="What does your AI company do?" value={description} onChange={e => setDescription(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs font-medium block mb-1" style={{ color: 'var(--terminal-text-secondary)' }}>Location</label>
+                <div className="flex gap-2">
+                  <input
+                    className={`${inputClass} flex-1`}
+                    placeholder="/path/to/your-company"
+                    value={location}
+                    onChange={e => { setLocation(e.target.value); setLocationEdited(true); }}
+                  />
+                  <button
+                    onClick={() => setShowLocationBrowser(!showLocationBrowser)}
+                    className="px-3 py-2 rounded text-xs font-medium transition-colors shrink-0"
+                    style={{ background: 'var(--hud-bg-alt)', color: 'var(--terminal-text)', border: '1px solid var(--terminal-border)' }}
+                    title="Browse folders"
+                  >
+                    {'\uD83D\uDCC1'}
+                  </button>
+                </div>
+                <div className="text-[10px] mt-1" style={{ color: 'var(--terminal-text-muted)' }}>
+                  Where your AI company files will be created.
+                </div>
+                {showLocationBrowser && (
+                  <FolderBrowser
+                    onSelect={(p) => { setLocation(p); setLocationEdited(true); setShowLocationBrowser(false); }}
+                    onClose={() => setShowLocationBrowser(false)}
+                  />
+                )}
               </div>
               <div>
                 <label className="text-xs font-medium block mb-1" style={{ color: 'var(--terminal-text-secondary)' }}>AI Response Language</label>
@@ -685,6 +729,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
                     ) : (
                       <>
                         <div><span className="opacity-50">Company:</span> {companyName}</div>
+                        <div><span className="opacity-50">Location:</span> {location || '(default)'}</div>
                         <div><span className="opacity-50">Engine:</span> {engineChoice === 'claude-cli' ? 'Claude Code CLI' : 'Direct API'}</div>
                         <div><span className="opacity-50">Project:</span> {projectMode === 'fresh' ? 'Start Fresh' : `Existing (${existingPath})`}</div>
                         <div><span className="opacity-50">Knowledge:</span> {knowledgeMode === 'skip' ? 'Fresh (empty)' : `Import ${knowledgePaths.length} source(s)`}</div>

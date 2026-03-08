@@ -82,26 +82,31 @@ setupRouter.post('/validate-path', (req, res) => {
  * POST /api/setup/scaffold
  */
 setupRouter.post('/scaffold', (req, res) => {
-  const { companyName, description, apiKey, team, existingProjectPath, knowledgePaths, codeRoot, language } = req.body;
+  const { companyName, description, apiKey, team, existingProjectPath, knowledgePaths, codeRoot, language, location } = req.body;
 
   if (!companyName || typeof companyName !== 'string') {
     res.status(400).json({ error: 'companyName is required' });
     return;
   }
 
-  const baseRoot = process.env.COMPANY_ROOT || process.cwd();
-
-  // Safety: if CWD is a dangerous path (home dir, root, or has too many entries),
-  // scaffold into a subdirectory named after the company
-  const dangerousPaths = new Set(['/', os.homedir(), os.tmpdir()]);
-  const isDangerous = dangerousPaths.has(baseRoot) || baseRoot === '/tmp';
-  let projectRoot = baseRoot;
-  if (isDangerous) {
-    const slug = companyName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'my-company';
-    projectRoot = path.join(baseRoot, slug);
-    if (!fs.existsSync(projectRoot)) {
-      fs.mkdirSync(projectRoot, { recursive: true });
+  // Determine project root: explicit location from wizard > fallback to CWD with safety check
+  let projectRoot: string;
+  if (location && typeof location === 'string') {
+    projectRoot = path.resolve(location);
+  } else {
+    const baseRoot = process.env.COMPANY_ROOT || process.cwd();
+    const dangerousPaths = new Set(['/', os.homedir(), os.tmpdir()]);
+    const isDangerous = dangerousPaths.has(baseRoot) || baseRoot === '/tmp';
+    if (isDangerous) {
+      const slug = companyName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'my-company';
+      projectRoot = path.join(baseRoot, slug);
+    } else {
+      projectRoot = baseRoot;
     }
+  }
+
+  if (!fs.existsSync(projectRoot)) {
+    fs.mkdirSync(projectRoot, { recursive: true });
   }
 
   const config: ScaffoldConfig = {

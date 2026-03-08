@@ -238,6 +238,7 @@ export interface ScaffoldInput {
   existingProjectPath?: string;
   knowledgePaths?: string[];
   language?: string;
+  location?: string;
 }
 
 export interface ScaffoldResult {
