@@ -33,7 +33,7 @@ function BootScreen() {
 
 function applyStoredTheme(): void {
   try {
-    const raw = localStorage.getItem('tycono-theme') || localStorage.getItem('the-company-theme');
+    const raw = localStorage.getItem('tycono-theme');
     const theme = (raw && raw in OFFICE_THEMES ? raw : 'default') as OfficeTheme;
     const vars = OFFICE_THEMES[theme]?.vars;
     if (!vars) return;

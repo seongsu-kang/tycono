@@ -163,8 +163,10 @@ export class ClaudeCliRunner implements ExecutionRunner {
       mcpServers: {
         playwright: {
           type: 'stdio',
-          command: '/Users/nodias/.local/bin/playwright-mcp.sh',
-          args: ['--output-dir', runnerOutputDir],
+          command: process.env.PLAYWRIGHT_MCP_PATH || 'npx',
+          args: process.env.PLAYWRIGHT_MCP_PATH
+            ? ['--output-dir', runnerOutputDir]
+            : ['@anthropic-ai/mcp-playwright', '--output-dir', runnerOutputDir],
         },
       },
     });

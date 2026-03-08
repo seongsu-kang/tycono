@@ -45,16 +45,20 @@
   },
   "keywords": [
     "ai",
+    "tycono",
     "company",
     "organization",
     "roles",
     "claude",
-    "agent"
+    "agent",
+    "multi-agent",
+    "agentic",
+    "local-first"
   ],
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/seongsu-kang/the-company.git"
+    "url": "git+https://github.com/seongsu-kang/tycono.git"
   },
-  "homepage": "https://github.com/seongsu-kang/the-company#readme"
+  "homepage": "https://github.com/seongsu-kang/tycono#readme"
 }

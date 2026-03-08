@@ -24,12 +24,13 @@ The API server runs on `localhost:3001` and the web dev server on `localhost:517
 1. Fork the repo and create a feature branch from `main`
 2. Make your changes
 3. Run type checking: `npm run typecheck`
-4. Commit with a clear message
-5. Open a PR against `main`
+4. Build the web frontend: `npm run build:web`
+5. Commit with a clear message
+6. Open a PR against `main`
 
 ## Branch Strategy
 
-- `main` — main development branch
+- `main` — stable release branch
 - `feature/*` — feature branches (PR to main)
 - `fix/*` — bug fix branches (PR to main)
 
@@ -47,7 +48,7 @@ docs: update CLI usage examples
 
 - TypeScript for all source code
 - ESM modules (`import`/`export`)
-- No semicolons (project convention: use them)
+- Use semicolons (project convention)
 - Use `node:` prefix for Node.js built-in imports
 
 ## Project Structure

@@ -147,7 +147,7 @@
 
 ```bash
 # 1. Vite dev server 기동
-cd src/the-company/src/web && npx vite --port 5174
+cd src/web && npx vite --port 5174
 
 # 2. Playwright MCP로 테스트 (Claude Code 내)
 # browser_navigate -> http://localhost:5174
