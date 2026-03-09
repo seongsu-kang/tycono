@@ -1,37 +1,27 @@
 /* ═══════════════════════════════════════════
    Role Level System — Token-based XP
-   Cosmetic only, no performance restrictions
+   Infinite levels, quadratic scaling
+   Formula: level = floor(√(tokens ÷ 50,000))
    ═══════════════════════════════════════════ */
 
-/** Level thresholds (total tokens = input + output) */
-const THRESHOLDS = [
-  0,        // Lv.1: new hire
-  10_000,   // Lv.2
-  50_000,   // Lv.3
-  150_000,  // Lv.4
-  400_000,  // Lv.5
-  1_000_000,  // Lv.6
-  2_500_000,  // Lv.7
-  5_000_000,  // Lv.8
-  10_000_000, // Lv.9
-  25_000_000, // Lv.10: master
-];
+const BASE_XP = 50_000;
 
-/** Calculate level from total token count */
+/** Calculate level from total token count (infinite, quadratic curve) */
 export function calcLevel(totalTokens: number): number {
-  let level = 1;
-  for (let i = THRESHOLDS.length - 1; i >= 0; i--) {
-    if (totalTokens >= THRESHOLDS[i]) { level = i + 1; break; }
-  }
-  return Math.min(level, 10);
+  if (totalTokens < BASE_XP) return 1;
+  return Math.max(1, Math.floor(Math.sqrt(totalTokens / BASE_XP)));
+}
+
+/** Total tokens needed to reach a given level */
+export function tokensForLevel(level: number): number {
+  return BASE_XP * level * level;
 }
 
 /** XP progress to next level (0.0 ~ 1.0) */
 export function calcProgress(totalTokens: number): number {
   const level = calcLevel(totalTokens);
-  if (level >= 10) return 1;
-  const current = THRESHOLDS[level - 1];
-  const next = THRESHOLDS[level];
+  const current = tokensForLevel(level);
+  const next = tokensForLevel(level + 1);
   return Math.min(1, (totalTokens - current) / (next - current));
 }
 

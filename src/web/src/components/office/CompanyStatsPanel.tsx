@@ -165,11 +165,11 @@ function RoleLevelRow({ role, rank }: { role: RoleLevelInfo; rank: number }) {
 }
 
 function getLevelColor(level: number): string {
-  if (level >= 9) return '#FFD700';  // Gold
-  if (level >= 7) return '#C0A0FF';  // Purple
-  if (level >= 5) return '#4FC3F7';  // Blue
-  if (level >= 3) return '#81C784';  // Green
-  return 'rgba(255,255,255,0.4)';    // Gray
+  if (level >= 20) return '#FFD700';  // Gold
+  if (level >= 10) return '#C0A0FF';  // Purple
+  if (level >= 5) return '#4FC3F7';   // Blue
+  if (level >= 3) return '#81C784';   // Green
+  return 'rgba(255,255,255,0.4)';     // Gray
 }
 
 function formatModelName(model: string): string {
