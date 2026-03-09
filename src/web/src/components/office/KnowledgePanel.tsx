@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide } from 'd3-force';
+import { forceSimulation, forceLink, forceManyBody, forceCollide, forceX, forceY } from 'd3-force';
 import type { SimulationNodeDatum, SimulationLinkDatum } from 'd3-force';
 import type { KnowledgeDoc, KnowledgeDocDetail } from '../../types';
 import { api } from '../../api/client';
@@ -21,6 +21,33 @@ const DOMAIN_COLORS: Record<string, { bg: string; border: string; text: string }
 
 function getDomainColor(cat: string) {
   return DOMAIN_COLORS[cat] ?? DOMAIN_COLORS.general;
+}
+
+/* ─── KB-007: Cluster Anchors (domain -> grid position) ── */
+
+// Domain list for consistent ordering
+const DOMAIN_LIST = ['tech', 'market', 'strategy', 'financial', 'process', 'competitor', 'domain', 'general'];
+
+// Calculate cluster anchor positions arranged in a 4x2 grid
+function getClusterAnchors(width: number, height: number): Map<string, { x: number; y: number }> {
+  const anchors = new Map<string, { x: number; y: number }>();
+  const cols = 4;
+  const rows = 2;
+  const padX = width * 0.12; // Padding from edges
+  const padY = height * 0.15;
+  const cellW = (width - padX * 2) / cols;
+  const cellH = (height - padY * 2) / rows;
+
+  DOMAIN_LIST.forEach((domain, idx) => {
+    const col = idx % cols;
+    const row = Math.floor(idx / cols);
+    anchors.set(domain, {
+      x: padX + cellW * (col + 0.5),
+      y: padY + cellH * (row + 0.5),
+    });
+  });
+
+  return anchors;
 }
 
 /* ─── Graph Types ──────────────────────────────────── */
@@ -58,6 +85,9 @@ function KnowledgeGraph({
   const [hoveredNode, setHoveredNode] = useState<GNode | null>(null);
   const [hoveredEdgeIdx, setHoveredEdgeIdx] = useState<number | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+
+  // KB-007: Cluster anchor positions (updated when simulation runs)
+  const [clusterAnchors, setClusterAnchors] = useState<Map<string, { x: number; y: number; radius: number; count: number }>>(new Map());
 
   // Zoom/pan state
   const [viewBox, setViewBox] = useState({ x: 0, y: 0, w: 600, h: 400 });
@@ -133,17 +163,37 @@ function KnowledgeGraph({
 
     // Scale forces based on node count so large graphs spread out properly
     const n = nodes.length;
-    const chargeStrength = n > 100 ? -600 : n > 50 ? -500 : -400;
-    const linkDist = n > 100 ? 180 : n > 50 ? 160 : 140;
-    const collideRadius = n > 100 ? 60 : 50;
-    // Use a larger virtual canvas so nodes have room to spread
-    const simW = Math.max(width, n * 12);
-    const simH = Math.max(height, n * 10);
+    const chargeStrength = n > 100 ? -300 : n > 50 ? -250 : -200; // Reduced for clustering
+    const linkDist = n > 100 ? 120 : n > 50 ? 100 : 80; // Reduced for tighter clusters
+    const collideRadius = n > 100 ? 45 : 40;
+
+    // KB-007: Calculate cluster anchor positions
+    const simW = Math.max(width * 1.5, 800);
+    const simH = Math.max(height * 1.5, 600);
+    const anchors = getClusterAnchors(simW, simH);
+
+    // KB-007: Count nodes per domain for cluster sizing
+    const domainCounts = new Map<string, number>();
+    for (const node of nodes) {
+      const cat = node.category || 'general';
+      domainCounts.set(cat, (domainCounts.get(cat) || 0) + 1);
+    }
+
+    // KB-007: Cluster force strength - pulls nodes toward their domain anchor
+    const clusterStrength = 0.3; // Moderate pull toward cluster center
 
     const sim = forceSimulation<GNode>(nodes)
-      .force('link', forceLink<GNode, GLink>(links).id((d) => d.id).distance(linkDist))
+      .force('link', forceLink<GNode, GLink>(links).id((d) => d.id).distance(linkDist).strength(0.5))
       .force('charge', forceManyBody().strength(chargeStrength))
-      .force('center', forceCenter(simW / 2, simH / 2))
+      // KB-007: Replace center force with cluster forces (forceX, forceY)
+      .force('clusterX', forceX<GNode>((d) => {
+        const anchor = anchors.get(d.category || 'general');
+        return anchor?.x ?? simW / 2;
+      }).strength(clusterStrength))
+      .force('clusterY', forceY<GNode>((d) => {
+        const anchor = anchors.get(d.category || 'general');
+        return anchor?.y ?? simH / 2;
+      }).strength(clusterStrength))
       .force('collide', forceCollide(collideRadius));
 
     simRef.current = sim;
@@ -155,10 +205,40 @@ function KnowledgeGraph({
 
     // Run ticks
     sim.alpha(1).restart();
-    const ticks = n > 100 ? 300 : 150;
+    const ticks = n > 100 ? 400 : 200; // More ticks for clustering to settle
     for (let i = 0; i < ticks; i++) sim.tick();
     sim.stop();
     setGraphData({ nodes: [...nodes], links: [...links] });
+
+    // KB-007: Calculate actual cluster bounds after simulation
+    const clusterBounds = new Map<string, { minX: number; maxX: number; minY: number; maxY: number; count: number }>();
+    for (const node of nodes) {
+      const cat = node.category || 'general';
+      const nx = node.x ?? 0;
+      const ny = node.y ?? 0;
+      const existing = clusterBounds.get(cat);
+      if (existing) {
+        existing.minX = Math.min(existing.minX, nx);
+        existing.maxX = Math.max(existing.maxX, nx);
+        existing.minY = Math.min(existing.minY, ny);
+        existing.maxY = Math.max(existing.maxY, ny);
+        existing.count++;
+      } else {
+        clusterBounds.set(cat, { minX: nx, maxX: nx, minY: ny, maxY: ny, count: 1 });
+      }
+    }
+
+    // KB-007: Convert bounds to center + radius for rendering
+    const computedAnchors = new Map<string, { x: number; y: number; radius: number; count: number }>();
+    for (const [cat, bounds] of clusterBounds) {
+      const cx = (bounds.minX + bounds.maxX) / 2;
+      const cy = (bounds.minY + bounds.maxY) / 2;
+      const rx = (bounds.maxX - bounds.minX) / 2;
+      const ry = (bounds.maxY - bounds.minY) / 2;
+      const radius = Math.max(Math.sqrt(rx * rx + ry * ry), 60) + 40; // Min radius + padding
+      computedAnchors.set(cat, { x: cx, y: cy, radius, count: bounds.count });
+    }
+    setClusterAnchors(computedAnchors);
 
     // Auto-fit viewBox to actual node positions
     if (nodes.length > 0) {
@@ -170,7 +250,7 @@ function KnowledgeGraph({
         if (nx > maxX) maxX = nx;
         if (ny > maxY) maxY = ny;
       }
-      const pad = 100;
+      const pad = 120; // Larger padding for cluster backgrounds
       setViewBox({
         x: minX - pad,
         y: minY - pad,
@@ -272,6 +352,48 @@ function KnowledgeGraph({
           </pattern>
         </defs>
         <rect x={viewBox.x - 100} y={viewBox.y - 100} width={viewBox.w + 200} height={viewBox.h + 200} fill="url(#grid)" pointerEvents="none" />
+
+        {/* KB-007: Cluster background circles */}
+        {Array.from(clusterAnchors.entries()).map(([domain, { x, y, radius, count }]) => {
+          if (count === 0) return null;
+          const color = DOMAIN_COLORS[domain] ?? DOMAIN_COLORS.general;
+          return (
+            <g key={`cluster-${domain}`} style={{ pointerEvents: 'none' }}>
+              {/* Outer glow/border */}
+              <circle
+                cx={x}
+                cy={y}
+                r={radius}
+                fill="none"
+                stroke={color.border}
+                strokeWidth={1.5}
+                strokeDasharray="6 4"
+                opacity={0.3}
+              />
+              {/* Inner fill */}
+              <circle
+                cx={x}
+                cy={y}
+                r={radius - 2}
+                fill={color.bg}
+                opacity={0.4}
+              />
+              {/* Domain label */}
+              <text
+                x={x}
+                y={y - radius + 16}
+                textAnchor="middle"
+                fill={color.text}
+                fontSize={11}
+                fontFamily="monospace"
+                fontWeight="bold"
+                opacity={0.8}
+              >
+                {domain.toUpperCase()} ({count})
+              </text>
+            </g>
+          );
+        })}
 
         {/* Edges */}
         {graphData.links.map((link, i) => {
