@@ -21,10 +21,8 @@ export default function CompanyStatsPanel({ onClose }: CompanyStatsPanelProps) {
         const prefs = p as { instanceId?: string };
         if (prefs.instanceId) {
           try {
-            const { name } = await cloudApi.getMyName(prefs.instanceId);
             await cloudApi.syncStats({
               instanceId: prefs.instanceId,
-              displayName: name ?? undefined,
               roleCount: s.company.roleCount,
               totalTokens: s.company.totalTokens,
               rolesData: s.roles.map(r => ({ roleId: r.roleId, name: r.name, tokens: r.totalTokens })),

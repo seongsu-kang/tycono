@@ -110,9 +110,9 @@ export const cloudApi = {
   }) => cloudPost<{ ok: boolean }>('/api/telemetry', data),
 
   // Stats — sync company stats to Cloud for public profile
+  // Note: displayName is resolved server-side from display_names table (never sent by client)
   syncStats: (data: {
     instanceId: string;
-    displayName?: string;
     roleCount: number;
     totalTokens: number;
     rolesData: Array<{ roleId: string; name: string; tokens: number }>;
