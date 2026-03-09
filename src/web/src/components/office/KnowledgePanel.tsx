@@ -192,6 +192,55 @@ function calculateClusterBounds(clusters: DomainCluster[]): (DomainCluster & { r
   });
 }
 
+/* ─── KB-008: Local Graph Mode Types & Helpers ─────────── */
+
+type LocalGraphMode = 'global' | '1-hop' | '2-hop';
+
+/**
+ * KB-008: Calculate nodes within N hops of the selected node
+ * Returns a Set of node IDs that should be visible
+ */
+function getNodesWithinHops(
+  selectedId: string | null,
+  links: GLink[],
+  allNodeIds: Set<string>,
+  hops: 1 | 2
+): Set<string> {
+  if (!selectedId) return allNodeIds;
+
+  const result = new Set<string>([selectedId]);
+  const processed = new Set<string>();
+  let frontier = new Set<string>([selectedId]);
+
+  for (let hop = 0; hop < hops; hop++) {
+    const nextFrontier = new Set<string>();
+
+    for (const nodeId of frontier) {
+      if (processed.has(nodeId)) continue;
+      processed.add(nodeId);
+
+      for (const link of links) {
+        // Get source and target IDs
+        const sourceId = typeof link.source === 'string' ? link.source : link.source.id;
+        const targetId = typeof link.target === 'string' ? link.target : link.target.id;
+
+        if (sourceId === nodeId && !result.has(targetId)) {
+          result.add(targetId);
+          nextFrontier.add(targetId);
+        }
+        if (targetId === nodeId && !result.has(sourceId)) {
+          result.add(sourceId);
+          nextFrontier.add(sourceId);
+        }
+      }
+    }
+
+    frontier = nextFrontier;
+  }
+
+  return result;
+}
+
 /* ─── Graph View (d3-force + SVG with zoom/pan/drag) ─ */
 
 function KnowledgeGraph({
@@ -199,11 +248,15 @@ function KnowledgeGraph({
   onNodeClick,
   selectedDocId,
   matchedIds,
+  localGraphMode,
+  onLocalModeChange,
 }: {
   docs: KnowledgeDoc[];
   onNodeClick: (doc: KnowledgeDoc) => void;
   selectedDocId?: string | null;
   matchedIds: Set<string> | null; // null = show all, Set = fade non-matching
+  localGraphMode: LocalGraphMode; // KB-008
+  onLocalModeChange: (mode: LocalGraphMode) => void; // KB-008
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -234,6 +287,16 @@ function KnowledgeGraph({
     () => calculateClusterBounds(domainClusters),
     [domainClusters]
   );
+
+  // KB-008: Local graph mode — calculate visible nodes based on hop distance
+  const localNodesInView = useMemo(() => {
+    if (localGraphMode === 'global' || !selectedDocId) {
+      return null; // null means show all
+    }
+    const allIds = new Set(graphData.nodes.map((n) => n.id));
+    const hops = localGraphMode === '1-hop' ? 1 : 2;
+    return getNodesWithinHops(selectedDocId, graphData.links, allIds, hops);
+  }, [localGraphMode, selectedDocId, graphData.nodes, graphData.links]);
 
   // Observe container size
   useEffect(() => {
@@ -562,8 +625,16 @@ function KnowledgeGraph({
               const isEdgeHovered = hoveredEdgeIdx === i;
               const mx = (s.x + t.x) / 2;
               const my = (s.y + t.y) / 2;
+
+              // KB-008: Determine edge visibility based on local graph mode
+              const sourceId = typeof link.source === 'string' ? link.source : link.source.id;
+              const targetId = typeof link.target === 'string' ? link.target : link.target.id;
+              const isEdgeInLocalView = localNodesInView === null ||
+                (localNodesInView.has(sourceId) && localNodesInView.has(targetId));
+              const edgeOpacity = isEdgeInLocalView ? 1 : 0.1;
+
               return (
-                <g key={i}>
+                <g key={i} style={{ opacity: edgeOpacity, transition: 'opacity 0.3s ease' }}>
                   {/* Invisible wider hit area for hover */}
                   <line
                     x1={s.x} y1={s.y} x2={t.x} y2={t.y}
@@ -611,7 +682,9 @@ function KnowledgeGraph({
               const scale = isHovered ? 1.1 : isSelected ? 1.05 : 1;
               // KB-003: Fade non-matching nodes when search is active
               const isMatched = matchedIds === null || matchedIds.has(node.id);
-              const nodeOpacity = isMatched ? 1 : 0.2;
+              // KB-008: Fade nodes outside local graph range
+              const isInLocalView = localNodesInView === null || localNodesInView.has(node.id);
+              const nodeOpacity = (isMatched && isInLocalView) ? 1 : 0.15;
 
               // KB-006: Micro view extras
               const firstSentence = zoomLevel === 'micro' ? getFirstSentence(node.tldr, 50) : '';
@@ -782,6 +855,38 @@ function KnowledgeGraph({
         {zoomLevel === 'macro' && '📍 Overview'}
         {zoomLevel === 'standard' && '📍 Standard'}
         {zoomLevel === 'micro' && '📍 Detail'}
+      </div>
+
+      {/* KB-008: Local Graph Mode Toggle */}
+      <div
+        className="absolute bottom-3 right-3 flex gap-1 rounded overflow-hidden"
+        style={{
+          background: 'var(--hud-bg)',
+          border: '1px solid var(--terminal-border)',
+        }}
+      >
+        {(['global', '1-hop', '2-hop'] as LocalGraphMode[]).map((mode) => {
+          const isActive = localGraphMode === mode;
+          const isDisabled = mode !== 'global' && !selectedDocId;
+          const label = mode === 'global' ? '🌐 All' : mode === '1-hop' ? '1-hop' : '2-hop';
+          return (
+            <button
+              key={mode}
+              onClick={() => !isDisabled && onLocalModeChange(mode)}
+              disabled={isDisabled}
+              className="px-2 py-1 text-[10px] font-medium cursor-pointer transition-all"
+              style={{
+                background: isActive ? 'rgba(22,163,106,0.3)' : 'transparent',
+                color: isDisabled ? 'var(--terminal-text-muted)' : isActive ? '#4ade80' : 'var(--terminal-text-secondary)',
+                opacity: isDisabled ? 0.4 : 1,
+                cursor: isDisabled ? 'not-allowed' : 'pointer',
+              }}
+              title={isDisabled ? 'Select a node first' : `Show ${mode === 'global' ? 'all nodes' : `nodes within ${mode}`}`}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
 
       {docs.length === 0 && (
@@ -1726,6 +1831,9 @@ export default function KnowledgePanel({ docs, onClose, onRefresh: _onRefresh, t
   });
   const [graphSelectedDocId, setGraphSelectedDocId] = useState<string | null>(null);
 
+  // KB-008: Local graph mode state
+  const [localGraphMode, setLocalGraphMode] = useState<LocalGraphMode>('global');
+
   // KB-003: Search state
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -1913,6 +2021,8 @@ export default function KnowledgePanel({ docs, onClose, onRefresh: _onRefresh, t
                 onNodeClick={handleGraphNodeClick}
                 selectedDocId={graphSelectedDocId}
                 matchedIds={matchedIds}
+                localGraphMode={localGraphMode}
+                onLocalModeChange={setLocalGraphMode}
               />
               {/* Graph detail sidebar */}
               {selectedGraphDoc && (
