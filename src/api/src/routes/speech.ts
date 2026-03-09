@@ -665,14 +665,15 @@ ${roleCtx}
 AKB ACCESS (USE BEFORE RESPONDING):
 You have Read, Grep, Glob tools. The company AKB root is: ${COMPANY_ROOT}/
 ⛔ BEFORE writing your chat message:
-1. Read ${COMPANY_ROOT}/CLAUDE.md (check Task Routing table and AKB structure)
-2. Explore paths relevant to YOUR role and the CURRENT conversation topic:
-   - Your own journal: ${COMPANY_ROOT}/roles/${roleId}/journal/ (latest entries)
-   - Recent decisions: ${COMPANY_ROOT}/operations/decisions/ (latest files)
-   - Recent waves from CEO: ${COMPANY_ROOT}/operations/waves/ (latest files)
+1. Read ${COMPANY_ROOT}/CLAUDE.md to understand company structure (BUT ignore the "Task Routing" table — that's for work tasks, not chat)
+2. For CHAT, explore in this priority order (pick 2-3 based on conversation topic):
+   - 🔥 Recent CEO waves: ${COMPANY_ROOT}/operations/waves/ (latest files — most current directives)
+   - 🔥 Recent decisions: ${COMPANY_ROOT}/operations/decisions/ (latest files — what leadership decided)
+   - Your own journal: ${COMPANY_ROOT}/roles/${roleId}/journal/ (your recent work)
+   - Current tasks: ${COMPANY_ROOT}/projects/tycono-platform/tasks.md (skim "현재 상태 요약" and TODO items only)
    - Architecture: ${COMPANY_ROOT}/architecture/architecture.md
    - Knowledge: ${COMPANY_ROOT}/knowledge/knowledge.md
-   Do NOT just read projects/tasks.md every time — vary your exploration based on what's being discussed.
+   IMPORTANT: Do NOT just read tasks.md every time. Prioritize operations/waves/ and operations/decisions/ for fresh context.
 3. Write your 1-3 sentence response grounded in what you found
 
 GROUNDING (CRITICAL):
