@@ -26,6 +26,8 @@ export interface Job {
   createdAt: string;
   result?: RunnerResult;
   error?: string;
+  /** Which role should respond when status is awaiting_input */
+  targetRole?: string;
 }
 
 export interface JobInfo {
@@ -37,6 +39,8 @@ export interface JobInfo {
   parentJobId?: string;
   childJobIds: string[];
   createdAt: string;
+  /** Which role should respond when status is awaiting_input */
+  targetRole?: string;
 }
 
 export interface StartJobParams {
@@ -69,6 +73,24 @@ function summarizeInput(input: Record<string, unknown>): Record<string, unknown>
 function hasQuestion(output: string): boolean {
   const lastBlock = output.trim().split('\n').slice(-5).join('\n');
   return /\?\s*$/.test(lastBlock) || /할까요|해볼까요|어떨까요|확인.*필요/.test(lastBlock);
+}
+
+/**
+ * Determine who should respond to a question from this job.
+ * Priority: sourceRole (who dispatched) → parentJob's roleId → 'ceo'
+ */
+function resolveTargetRole(sourceRole: string | undefined, parentJobId: string | undefined, jobs: Map<string, Job>): string {
+  // If dispatched by a specific role, that role should answer
+  if (sourceRole && sourceRole !== 'ceo') return sourceRole;
+
+  // If there's a parent job, the parent's role is the "senior"
+  if (parentJobId) {
+    const parentJob = jobs.get(parentJobId);
+    if (parentJob && parentJob.roleId !== 'ceo') return parentJob.roleId;
+  }
+
+  // Default: CEO
+  return 'ceo';
 }
 
 /* ─── JobManager Singleton ───────────────── */
@@ -149,6 +171,7 @@ class JobManager {
     const limits = getConversationLimits(config);
     let harnessTurnCount = 0;
     let softLimitWarned = false;
+    let hardLimitReached = false;
 
     // Build team status snapshot: which roles are currently busy
     const teamStatus: Record<string, { status: string; task?: string }> = {};
@@ -218,10 +241,11 @@ class JobManager {
             });
           }
 
-          // hardLimit: 강제 종료
+          // hardLimit: 중단 후 선임에게 계속 여부 확인
           if (harnessTurnCount >= limits.hardLimit) {
-            console.error(
-              `[Harness] Job ${jobId} (${params.roleId}): turn ${harnessTurnCount} reached hardLimit (${limits.hardLimit}). Aborting.`,
+            hardLimitReached = true;
+            console.warn(
+              `[Harness] Job ${jobId} (${params.roleId}): turn ${harnessTurnCount} reached hardLimit (${limits.hardLimit}). Pausing for approval.`,
             );
             stream.emit('turn:limit', params.roleId, {
               turn: harnessTurnCount,
@@ -266,14 +290,31 @@ class JobManager {
           dispatches: result.dispatches.map((d) => ({ roleId: d.roleId, task: d.task })),
         };
 
-        // Check if output ends with a question → awaiting_input
-        // Skip for continuation jobs (CEO already replied once — avoid infinite loop)
-        if (!params.isContinuation && hasQuestion(result.output)) {
+        const targetRole = resolveTargetRole(params.sourceRole, params.parentJobId, this.jobs);
+
+        // hardLimit reached → ask senior/CEO for approval to continue
+        if (hardLimitReached) {
           job.status = 'awaiting_input';
+          job.targetRole = targetRole;
+          const question = `[Turn limit] ${harnessTurnCount}턴 도달 (hardLimit: ${limits.hardLimit}). 계속 진행할까요?`;
+          stream.emit('job:awaiting_input', params.roleId, {
+            ...doneData,
+            question,
+            awaitingInput: true,
+            targetRole,
+            reason: 'turn_limit',
+          });
+        }
+        // Check if output ends with a question → awaiting_input
+        // Skip for continuation jobs (already replied once — avoid infinite loop)
+        else if (!params.isContinuation && hasQuestion(result.output)) {
+          job.status = 'awaiting_input';
+          job.targetRole = targetRole;
           stream.emit('job:awaiting_input', params.roleId, {
             ...doneData,
             question: result.output.trim().split('\n').slice(-5).join('\n'),
             awaitingInput: true,
+            targetRole,
           });
         } else {
           job.status = 'done';
@@ -282,6 +323,21 @@ class JobManager {
         }
       })
       .catch((err: Error) => {
+        // hardLimit abort → awaiting_input instead of error
+        if (hardLimitReached) {
+          const targetRole = resolveTargetRole(params.sourceRole, params.parentJobId, this.jobs);
+          job.status = 'awaiting_input';
+          job.targetRole = targetRole;
+          const question = `[Turn limit] ${harnessTurnCount}턴 도달 (hardLimit: ${limits.hardLimit}). 계속 진행할까요?`;
+          stream.emit('job:awaiting_input', params.roleId, {
+            question,
+            awaitingInput: true,
+            targetRole,
+            reason: 'turn_limit',
+          });
+          return;
+        }
+
         job.status = 'error';
         job.error = err.message;
         completeActivity(params.roleId);
@@ -338,6 +394,7 @@ class JobManager {
       parentJobId: job.parentJobId,
       childJobIds: job.childJobIds,
       createdAt: job.createdAt,
+      targetRole: job.targetRole,
     };
   }
 
@@ -357,6 +414,7 @@ class JobManager {
         parentJobId: job.parentJobId,
         childJobIds: job.childJobIds,
         createdAt: job.createdAt,
+        targetRole: job.targetRole,
       });
     }
 
@@ -377,29 +435,34 @@ class JobManager {
   }
 
   /** Reply to an awaiting_input job → creates a continuation job */
-  replyToJob(id: string, response: string): Job | null {
+  replyToJob(id: string, response: string, responderRole?: string): Job | null {
     const job = this.jobs.get(id);
     if (!job || job.status !== 'awaiting_input') return null;
+
+    const effectiveResponder = responderRole ?? job.targetRole ?? 'ceo';
 
     // Mark previous job as done (don't emit job:done — the stream stays open
     // for the continuation job which will emit its own job:done when finished)
     job.status = 'done';
     completeActivity(job.roleId);
-    job.stream.emit('job:reply', job.roleId, { response });
+    job.stream.emit('job:reply', job.roleId, { response, responderRole: effectiveResponder });
 
     // Build continuation prompt with previous context
     const prevOutput = job.result?.output ?? '';
     const contextSummary = prevOutput.length > 2000
       ? prevOutput.slice(-2000)
       : prevOutput;
-    const continuationTask = `[Continuation — previous output follows]\n${contextSummary}\n\n[CEO Response]\n${response}`;
+
+    // Use the actual responder role name in the prompt
+    const responderLabel = effectiveResponder === 'ceo' ? 'CEO' : effectiveResponder.toUpperCase();
+    const continuationTask = `[Continuation — previous output follows]\n${contextSummary}\n\n[${responderLabel} Response]\n${response}`;
 
     // Create new job for same role (mark as continuation to skip question detection)
     const newJob = this.startJob({
       type: job.type,
       roleId: job.roleId,
       task: continuationTask,
-      sourceRole: 'ceo',
+      sourceRole: effectiveResponder,
       parentJobId: job.id,
       isContinuation: true,
     });
