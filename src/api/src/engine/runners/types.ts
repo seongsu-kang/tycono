@@ -37,6 +37,8 @@ export interface RunnerConfig {
   jobId?: string;
   teamStatus?: TeamStatus;
   attachments?: ImageAttachment[];
+  /** Selective dispatch scope — only these roles can be dispatched to */
+  targetRoles?: string[];
 }
 
 /* ─── Callbacks ───────────────────────────────── */

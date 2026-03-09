@@ -485,3 +485,157 @@ export function gitPull(root: string, repo: RepoType = 'akb'): PullResult {
     return { status: 'error', message: err instanceof Error ? err.message : 'Pull failed' };
   }
 }
+
+// ─── GitHub Integration ───────────────────────────
+
+export interface GitHubStatus {
+  ghInstalled: boolean;
+  authenticated: boolean;
+  username?: string;
+  hasRemote: boolean;
+  remoteUrl?: string;
+}
+
+export interface GitHubCreateResult {
+  ok: boolean;
+  message: string;
+  repoUrl?: string;
+  remoteUrl?: string;
+}
+
+/**
+ * Check GitHub CLI availability and auth status
+ */
+export function githubStatus(root: string, repo: RepoType = 'akb'): GitHubStatus {
+  // Check gh CLI
+  let ghInstalled = false;
+  try {
+    execSync('gh --version', { timeout: 3000, stdio: ['pipe', 'pipe', 'pipe'] });
+    ghInstalled = true;
+  } catch {
+    // gh not installed
+  }
+
+  if (!ghInstalled) {
+    return { ghInstalled: false, authenticated: false, hasRemote: false };
+  }
+
+  // Check auth
+  let authenticated = false;
+  let username: string | undefined;
+  try {
+    const status = execSync('gh auth status', {
+      timeout: 5000, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+    authenticated = true;
+    const match = status.match(/Logged in to github\.com account (\S+)/i)
+      ?? status.match(/account (\S+)/i);
+    if (match) username = match[1];
+  } catch (err) {
+    // gh auth status exits 1 if not logged in, but still outputs info to stderr
+    const output = err instanceof Error ? (err as { stderr?: string }).stderr ?? '' : '';
+    if (output.includes('Logged in')) {
+      authenticated = true;
+      const match = output.match(/account (\S+)/i);
+      if (match) username = match[1];
+    }
+  }
+
+  // Check remote
+  let hasRemote = false;
+  let remoteUrl: string | undefined;
+  try {
+    const repoRoot = resolveRepoRoot(root, repo);
+    if (isGitRepo(repoRoot)) {
+      remoteUrl = run('git remote get-url origin', repoRoot) || undefined;
+      hasRemote = !!remoteUrl;
+    }
+  } catch {
+    // ignore
+  }
+
+  return { ghInstalled, authenticated, username, hasRemote, remoteUrl };
+}
+
+/**
+ * Create a GitHub repo, set remote, and push
+ */
+export function githubCreateRepo(
+  root: string,
+  repoName: string,
+  visibility: 'private' | 'public' = 'private',
+  repo: RepoType = 'akb',
+): GitHubCreateResult {
+  const repoRoot = resolveRepoRoot(root, repo);
+
+  if (!isGitRepo(repoRoot)) {
+    return { ok: false, message: 'Not a git repository — save first to initialize' };
+  }
+
+  // Check gh + auth
+  const status = githubStatus(root, repo);
+  if (!status.ghInstalled) {
+    return { ok: false, message: 'GitHub CLI (gh) is not installed' };
+  }
+  if (!status.authenticated) {
+    return { ok: false, message: 'Not logged in to GitHub — run "gh auth login" first' };
+  }
+  if (status.hasRemote) {
+    return { ok: false, message: `Remote already configured: ${status.remoteUrl}` };
+  }
+
+  // Create repo + set remote + push
+  try {
+    const flag = visibility === 'public' ? '--public' : '--private';
+    const result = execSync(
+      `gh repo create "${repoName}" ${flag} --source=. --remote=origin --push`,
+      { cwd: repoRoot, encoding: 'utf-8', timeout: 30000, stdio: ['pipe', 'pipe', 'pipe'] },
+    ).trim();
+
+    // Extract repo URL from output
+    const urlMatch = result.match(/(https:\/\/github\.com\/\S+)/);
+    const repoUrl = urlMatch ? urlMatch[1] : undefined;
+    const remoteUrl = run('git remote get-url origin', repoRoot) || undefined;
+
+    return { ok: true, message: 'Repository created and pushed', repoUrl, remoteUrl };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Failed to create repository';
+    // Common errors
+    if (msg.includes('already exists')) {
+      return { ok: false, message: 'A repository with this name already exists on GitHub' };
+    }
+    return { ok: false, message: msg };
+  }
+}
+
+/**
+ * Manually add a git remote
+ */
+export function gitAddRemote(root: string, url: string, repo: RepoType = 'akb'): { ok: boolean; message: string } {
+  const repoRoot = resolveRepoRoot(root, repo);
+
+  if (!isGitRepo(repoRoot)) {
+    return { ok: false, message: 'Not a git repository' };
+  }
+
+  const existing = run('git remote get-url origin', repoRoot);
+  if (existing) {
+    return { ok: false, message: `Remote already configured: ${existing}` };
+  }
+
+  try {
+    runOrThrow(`git remote add origin "${url}"`, repoRoot);
+    // Try initial push
+    const branch = run('git rev-parse --abbrev-ref HEAD', repoRoot) || 'main';
+    try {
+      execSync(`git push -u origin ${branch}`, {
+        cwd: repoRoot, encoding: 'utf-8', timeout: 15000, stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      return { ok: true, message: `Remote added and pushed to ${url}` };
+    } catch {
+      return { ok: true, message: `Remote added: ${url} (push failed — check credentials)` };
+    }
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : 'Failed to add remote' };
+  }
+}

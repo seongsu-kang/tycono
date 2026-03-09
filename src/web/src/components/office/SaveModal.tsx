@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { api } from '../../api/client';
 import type { SaveStatus, CommitInfo, SaveResult, SyncInfo, PullResult, RepoType } from '../../hooks/useSave';
 
 /** Generate a commit message from changed file paths */
@@ -60,6 +61,8 @@ interface Props {
   syncInfo: SyncInfo | null;
   onPull: () => Promise<PullResult>;
   pulling: boolean;
+  onRefresh?: () => void;
+  onInitGit?: () => Promise<void>;
 }
 
 type Tab = 'save' | 'history';
@@ -75,10 +78,386 @@ function timeAgo(dateStr: string): string {
   return `${days}d ago`;
 }
 
+/** No Git sub-component — shown when git is not initialized or not installed */
+function NoGitSection({ onInitGit, onDelegate, delegateRoleName }: {
+  onInitGit: () => Promise<void>;
+  onDelegate?: () => void;
+  delegateRoleName?: string;
+}) {
+  const [initing, setIniting] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const handleInit = async () => {
+    setIniting(true);
+    setResult(null);
+    try {
+      await onInitGit();
+      setResult({ ok: true, message: 'Git repository initialized!' });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed';
+      // Check if it's a "git not installed" error
+      if (msg.includes('not installed') || msg.includes('noGitBinary')) {
+        setResult({ ok: false, message: 'git is not installed on this system' });
+      } else {
+        setResult({ ok: false, message: msg });
+      }
+    } finally {
+      setIniting(false);
+    }
+  };
+
+  const isGitMissing = result && !result.ok && result.message.includes('not installed');
+
+  return (
+    <div className="p-3 space-y-2" style={{ background: 'rgba(211,47,47,0.05)', border: '1px solid var(--pixel-border)' }}>
+      <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--terminal-text-muted)' }}>
+        No Git Repository
+      </div>
+
+      {!result && (
+        <>
+          <div className="text-[10px]" style={{ color: 'var(--terminal-text-secondary)' }}>
+            This project has no git repository. Initialize one to start saving.
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={handleInit}
+              disabled={initing}
+              className="text-[10px] font-bold px-3 py-1.5 cursor-pointer disabled:opacity-50"
+              style={{ background: 'var(--accent)', color: '#fff', border: 'none' }}
+            >
+              {initing ? 'INITIALIZING...' : 'GIT INIT'}
+            </button>
+            {onDelegate && (
+              <button
+                onClick={onDelegate}
+                className="text-[10px] font-bold px-3 py-1.5 cursor-pointer"
+                style={{ background: 'var(--terminal-bg)', color: 'var(--idle-amber)', border: '1px solid var(--idle-amber)' }}
+              >
+                {'\uD83E\uDD16'} {delegateRoleName?.toUpperCase() ?? 'AI'} FIX
+              </button>
+            )}
+          </div>
+        </>
+      )}
+
+      {result && result.ok && (
+        <div className="text-[10px] p-1.5" style={{ background: 'rgba(59,185,80,0.1)', border: '1px solid var(--active-green)', color: 'var(--active-green)' }}>
+          {result.message}
+        </div>
+      )}
+
+      {isGitMissing && (
+        <div className="space-y-2">
+          <div className="text-[10px]" style={{ color: '#EF5350' }}>
+            git is not installed on this system.
+          </div>
+          <div className="text-[10px] space-y-1" style={{ color: 'var(--terminal-text-muted)' }}>
+            <div><b>macOS:</b> xcode-select --install</div>
+            <div><b>Ubuntu/Debian:</b> sudo apt install git</div>
+            <div><b>Windows:</b>{' '}
+              <a href="https://git-scm.com/downloads" target="_blank" rel="noopener noreferrer"
+                style={{ color: 'var(--accent)', textDecoration: 'underline' }}>git-scm.com/downloads</a>
+            </div>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => { setResult(null); }}
+              className="text-[10px] font-bold px-3 py-1 cursor-pointer"
+              style={{ background: 'var(--accent)', color: '#fff', border: 'none' }}
+            >
+              RETRY
+            </button>
+            {onDelegate && (
+              <button
+                onClick={onDelegate}
+                className="text-[10px] font-bold px-3 py-1 cursor-pointer"
+                style={{ background: 'var(--terminal-bg)', color: 'var(--idle-amber)', border: '1px solid var(--idle-amber)' }}
+              >
+                {'\uD83E\uDD16'} {delegateRoleName?.toUpperCase() ?? 'AI'} FIX
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {result && !result.ok && !isGitMissing && (
+        <div className="text-[10px] p-1.5" style={{ background: 'rgba(211,47,47,0.1)', border: '1px solid #D32F2F', color: '#EF5350' }}>
+          {result.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** GitHub Connect sub-component — shown when no remote is configured */
+function GitHubConnect({ repo, onConnected, onDelegate, delegateRoleName }: {
+  repo: RepoType;
+  onConnected: () => void;
+  onDelegate?: () => void;
+  delegateRoleName?: string;
+}) {
+  const [state, setState] = useState<'idle' | 'checking' | 'ready' | 'creating' | 'manual'>('idle');
+  const [ghStatus, setGhStatus] = useState<{
+    ghInstalled: boolean; authenticated: boolean; username?: string; hasRemote: boolean;
+  } | null>(null);
+  const [repoName, setRepoName] = useState('');
+  const [visibility, setVisibility] = useState<'private' | 'public'>('private');
+  const [manualUrl, setManualUrl] = useState('');
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const checkGitHub = async () => {
+    setState('checking');
+    setResult(null);
+    try {
+      const s = await api.getGithubStatus(repo);
+      setGhStatus(s);
+      if (s.hasRemote) {
+        onConnected();
+      } else if (s.ghInstalled && s.authenticated) {
+        setState('ready');
+      } else {
+        setState('idle');
+      }
+    } catch {
+      setState('idle');
+    }
+  };
+
+  const createRepo = async () => {
+    if (!repoName.trim()) return;
+    setBusy(true);
+    setResult(null);
+    try {
+      const r = await api.githubCreateRepo(repoName.trim(), visibility, repo);
+      setResult(r);
+      if (r.ok) {
+        setTimeout(onConnected, 1500);
+      }
+    } catch (err) {
+      setResult({ ok: false, message: err instanceof Error ? err.message : 'Failed' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addManualRemote = async () => {
+    if (!manualUrl.trim()) return;
+    setBusy(true);
+    setResult(null);
+    try {
+      const r = await api.addRemote(manualUrl.trim(), repo);
+      setResult(r);
+      if (r.ok) {
+        setTimeout(onConnected, 1500);
+      }
+    } catch (err) {
+      setResult({ ok: false, message: err instanceof Error ? err.message : 'Failed' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Delegate button — appears in all non-ready states */
+  const delegateBtn = onDelegate ? (
+    <button
+      onClick={onDelegate}
+      className="text-[10px] font-bold px-3 py-1.5 cursor-pointer"
+      style={{ background: 'var(--terminal-bg)', color: 'var(--idle-amber)', border: '1px solid var(--idle-amber)' }}
+      title={`Ask ${delegateRoleName ?? 'AI'} to set up GitHub remote`}
+    >
+      {'\uD83E\uDD16'} {delegateRoleName?.toUpperCase() ?? 'AI'} FIX
+    </button>
+  ) : null;
+
+  return (
+    <div className="p-3 space-y-2" style={{ background: 'rgba(100,100,255,0.05)', border: '1px solid var(--pixel-border)' }}>
+      <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--terminal-text-muted)' }}>
+        No Remote — Local Only
+      </div>
+
+      {state === 'idle' && !ghStatus && (
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={checkGitHub}
+            className="text-[10px] font-bold px-3 py-1.5 cursor-pointer"
+            style={{ background: 'var(--accent)', color: '#fff', border: 'none' }}
+          >
+            CONNECT GITHUB
+          </button>
+          <button
+            onClick={() => setState('manual')}
+            className="text-[10px] font-bold px-3 py-1.5 cursor-pointer"
+            style={{ background: 'var(--terminal-bg)', color: 'var(--terminal-text)', border: '1px solid var(--terminal-border)' }}
+          >
+            ADD REMOTE URL
+          </button>
+          {delegateBtn}
+        </div>
+      )}
+
+      {state === 'checking' && (
+        <div className="text-[10px]" style={{ color: 'var(--terminal-text-secondary)' }}>Checking GitHub CLI...</div>
+      )}
+
+      {state === 'idle' && ghStatus && !ghStatus.ghInstalled && (
+        <div className="space-y-2">
+          <div className="text-[10px]" style={{ color: 'var(--idle-amber)' }}>
+            GitHub CLI (gh) not installed.
+          </div>
+          <div className="text-[10px] space-y-0.5" style={{ color: 'var(--terminal-text-muted)' }}>
+            <div>
+              Install:{' '}
+              <a href="https://cli.github.com" target="_blank" rel="noopener noreferrer"
+                style={{ color: 'var(--accent)', textDecoration: 'underline' }}>cli.github.com</a>
+            </div>
+            <div style={{ fontFamily: 'var(--pixel-font)' }}>brew install gh && gh auth login</div>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={checkGitHub}
+              className="text-[10px] font-bold px-3 py-1 cursor-pointer"
+              style={{ background: 'var(--accent)', color: '#fff', border: 'none' }}
+            >
+              RETRY
+            </button>
+            <button
+              onClick={() => setState('manual')}
+              className="text-[10px] font-bold px-3 py-1 cursor-pointer"
+              style={{ background: 'var(--terminal-bg)', color: 'var(--terminal-text)', border: '1px solid var(--terminal-border)' }}
+            >
+              ADD URL MANUALLY
+            </button>
+            {delegateBtn}
+          </div>
+        </div>
+      )}
+
+      {state === 'idle' && ghStatus && ghStatus.ghInstalled && !ghStatus.authenticated && (
+        <div className="space-y-2">
+          <div className="text-[10px]" style={{ color: 'var(--idle-amber)' }}>
+            GitHub CLI installed but not logged in.
+          </div>
+          <div className="text-[10px]" style={{ color: 'var(--terminal-text-muted)', fontFamily: 'var(--pixel-font)' }}>
+            Run in terminal: gh auth login
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={checkGitHub}
+              className="text-[10px] font-bold px-3 py-1 cursor-pointer"
+              style={{ background: 'var(--accent)', color: '#fff', border: 'none' }}
+            >
+              RETRY
+            </button>
+            <button
+              onClick={() => setState('manual')}
+              className="text-[10px] font-bold px-3 py-1 cursor-pointer"
+              style={{ background: 'var(--terminal-bg)', color: 'var(--terminal-text)', border: '1px solid var(--terminal-border)' }}
+            >
+              ADD REMOTE URL
+            </button>
+            {delegateBtn}
+          </div>
+        </div>
+      )}
+
+      {state === 'ready' && ghStatus && (
+        <div className="space-y-2">
+          <div className="text-[10px]" style={{ color: 'var(--active-green)' }}>
+            Logged in as {ghStatus.username || 'GitHub user'}
+          </div>
+          <div className="flex gap-2 items-center">
+            <input
+              type="text"
+              value={repoName}
+              onChange={e => setRepoName(e.target.value)}
+              placeholder="repository-name"
+              className="flex-1 px-2 py-1.5 text-[11px] outline-none"
+              style={{ background: 'var(--terminal-bg)', border: '1px solid var(--terminal-border)', color: 'var(--terminal-text)', fontFamily: 'var(--pixel-font)' }}
+            />
+            <select
+              value={visibility}
+              onChange={e => setVisibility(e.target.value as 'private' | 'public')}
+              className="px-2 py-1.5 text-[10px] outline-none cursor-pointer"
+              style={{ background: 'var(--terminal-bg)', border: '1px solid var(--terminal-border)', color: 'var(--terminal-text)', fontFamily: 'var(--pixel-font)' }}
+            >
+              <option value="private">Private</option>
+              <option value="public">Public</option>
+            </select>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={createRepo}
+              disabled={busy || !repoName.trim()}
+              className="text-[10px] font-bold px-3 py-1.5 cursor-pointer disabled:opacity-50"
+              style={{ background: 'var(--accent)', color: '#fff', border: 'none' }}
+            >
+              {busy ? 'CREATING...' : 'CREATE & PUSH'}
+            </button>
+            <button
+              onClick={() => setState('manual')}
+              className="text-[10px] px-2 py-1 cursor-pointer"
+              style={{ background: 'transparent', color: 'var(--terminal-text-muted)', border: '1px solid var(--terminal-border)' }}
+            >
+              USE URL INSTEAD
+            </button>
+          </div>
+        </div>
+      )}
+
+      {state === 'manual' && (
+        <div className="space-y-2">
+          <div className="text-[10px]" style={{ color: 'var(--terminal-text-muted)' }}>
+            <a href="https://github.com/new" target="_blank" rel="noopener noreferrer"
+              style={{ color: 'var(--accent)', textDecoration: 'underline' }}>Create a new repo on GitHub</a>
+            {' '}then paste the URL below:
+          </div>
+          <input
+            type="text"
+            value={manualUrl}
+            onChange={e => setManualUrl(e.target.value)}
+            placeholder="https://github.com/username/repo-name.git"
+            className="w-full px-2 py-1.5 text-[11px] outline-none"
+            style={{ background: 'var(--terminal-bg)', border: '1px solid var(--terminal-border)', color: 'var(--terminal-text)', fontFamily: 'var(--pixel-font)' }}
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={addManualRemote}
+              disabled={busy || !manualUrl.trim()}
+              className="text-[10px] font-bold px-3 py-1.5 cursor-pointer disabled:opacity-50"
+              style={{ background: 'var(--accent)', color: '#fff', border: 'none' }}
+            >
+              {busy ? 'ADDING...' : 'ADD REMOTE & PUSH'}
+            </button>
+            <button
+              onClick={() => { setState('idle'); setGhStatus(null); }}
+              className="text-[10px] px-2 py-1 cursor-pointer"
+              style={{ background: 'transparent', color: 'var(--terminal-text-muted)', border: '1px solid var(--terminal-border)' }}
+            >
+              BACK
+            </button>
+          </div>
+        </div>
+      )}
+
+      {result && (
+        <div className="text-[10px] p-1.5" style={{
+          background: result.ok ? 'rgba(59,185,80,0.1)' : 'rgba(211,47,47,0.1)',
+          border: `1px solid ${result.ok ? 'var(--active-green)' : '#D32F2F'}`,
+          color: result.ok ? 'var(--active-green)' : '#EF5350',
+        }}>
+          {result.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SaveModal({
   status, history, onClose, onSave, onLoadHistory, onRestore, saving,
   onDelegate, delegateRoleName,
-  repo, onRepoChange, syncInfo, onPull, pulling,
+  repo, onRepoChange, syncInfo, onPull, pulling, onRefresh, onInitGit,
 }: Props) {
   const [tab, setTab] = useState<Tab>('save');
   const [message, setMessage] = useState('');
@@ -245,6 +624,20 @@ export default function SaveModal({
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           {tab === 'save' && (
             <>
+              {/* No Git — install or init */}
+              {status?.noGit && (
+                <NoGitSection
+                  onInitGit={async () => {
+                    await onInitGit?.();
+                    onRefresh?.();
+                  }}
+                  onDelegate={onDelegate ? () => {
+                    onDelegate(`Git is not initialized or not installed for this project. Please check if git is installed (run "git --version"). If git is available, initialize the repository with "git init" and make an initial commit. If git is not installed, provide clear instructions for the user's OS to install it.`);
+                  } : undefined}
+                  delegateRoleName={delegateRoleName}
+                />
+              )}
+
               {/* Pull Section */}
               {syncInfo && syncInfo.hasRemote && syncInfo.behind > 0 && (
                 <div className="flex items-center justify-between p-2" style={{ background: 'rgba(255,180,0,0.08)', border: '1px solid var(--idle-amber)' }}>
@@ -381,11 +774,17 @@ export default function SaveModal({
                 </div>
               )}
 
-              {/* No remote hint */}
-              {allFiles.length > 0 && status && !status.hasRemote && (
-                <div className="text-[10px]" style={{ color: 'var(--terminal-text-muted)' }}>
-                  Local save only — add a git remote to enable push
-                </div>
+              {/* No remote — GitHub connect */}
+              {status && !status.hasRemote && !status.noGit && (
+                <GitHubConnect
+                  repo={repo}
+                  onConnected={() => onRefresh?.()}
+                  onDelegate={onDelegate ? () => {
+                    const repoLabel = repo === 'akb' ? 'AKB' : 'Code';
+                    onDelegate(`Set up a GitHub remote for the ${repoLabel} repository and push all commits. If gh CLI is available, use "gh repo create". Otherwise, guide through manual setup. Current repo path can be found in config.`);
+                  } : undefined}
+                  delegateRoleName={delegateRoleName}
+                />
               )}
 
               {/* Result */}

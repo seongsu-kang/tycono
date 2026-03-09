@@ -49,7 +49,7 @@ export function assembleContext(
   task: string,
   sourceRole: string,
   orgTree: OrgTree,
-  options?: { teamStatus?: TeamStatus },
+  options?: { teamStatus?: TeamStatus; targetRoles?: string[] },
 ): AssembledContext {
   const node = orgTree.nodes.get(roleId);
   if (!node) {
@@ -107,7 +107,12 @@ export function assembleContext(
   }
 
   // 10. Task는 별도 필드로 분리
-  const subordinates = getSubordinates(orgTree, roleId);
+  let subordinates = getSubordinates(orgTree, roleId);
+
+  // Filter subordinates by targetRoles (selective dispatch scope)
+  if (options?.targetRoles && options.targetRoles.length > 0) {
+    subordinates = subordinates.filter(id => options.targetRoles!.includes(id));
+  }
 
   // Dispatch 도구 안내 (하위 Role이 있는 경우)
   if (subordinates.length > 0) {

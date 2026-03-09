@@ -26,6 +26,7 @@ export interface AgentConfig {
   model?: string;             // LLM model name for cost tracking
   tokenLedger?: TokenLedger;  // Token usage ledger (optional)
   attachments?: ImageAttachment[];  // Image attachments for vision
+  targetRoles?: string[];          // Selective dispatch scope
   // Callbacks
   onText?: (text: string) => void;
   onToolExec?: (name: string, input: Record<string, unknown>) => void;
@@ -82,7 +83,7 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
   const llm = config.llm ?? new AnthropicProvider();
 
   // 1. Assemble context
-  const context = assembleContext(companyRoot, roleId, task, sourceRole, orgTree, { teamStatus: config.teamStatus });
+  const context = assembleContext(companyRoot, roleId, task, sourceRole, orgTree, { teamStatus: config.teamStatus, targetRoles: config.targetRoles });
 
   // 2. Determine tools
   const subordinates = getSubordinates(orgTree, roleId);

@@ -11,6 +11,7 @@ interface Props {
   existingRoles: { id: string; name: string }[];
   onClose: () => void;
   onHire: (input: CreateRoleInput, appearance: CharacterAppearance) => Promise<void>;
+  onStoreVisit?: () => void;
 }
 
 const LEVEL_OPTIONS: { value: CreateRoleInput['level']; label: string }[] = [
@@ -106,7 +107,7 @@ function parseBulkLine(line: string, existingIds: Set<string>, seenIds: Set<stri
   return { name, id, level, reportsTo, error };
 }
 
-export default function HireRoleModal({ existingRoles, onClose, onHire }: Props) {
+export default function HireRoleModal({ existingRoles, onClose, onHire, onStoreVisit }: Props) {
   const [mode, setMode] = useState<'single' | 'bulk' | 'store'>('single');
 
   /* ─── Store browse state ─── */
@@ -385,7 +386,7 @@ export default function HireRoleModal({ existingRoles, onClose, onHire }: Props)
                 Bulk
               </button>
               <button
-                onClick={() => { setMode('store'); setError(''); }}
+                onClick={() => { setMode('store'); setError(''); onStoreVisit?.(); }}
                 className={`px-3 py-1 text-xs font-semibold rounded-md cursor-pointer transition-colors ${mode === 'store' ? 'bg-white/20 text-white' : 'text-white/50 hover:text-white/70'}`}
               >
                 Store

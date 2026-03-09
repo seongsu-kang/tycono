@@ -194,6 +194,111 @@ export function drawCoffeeMachine(x: number, y: number) {
   px(x + 2, y + 11, 4, 2, '#ECEFF1');
 }
 
+/* ═══════════════════════════════════════════
+   SPECIAL FURNITURE DRAW FUNCTIONS
+   ═══════════════════════════════════════════ */
+
+export function drawAquarium(x: number, y: number) {
+  px(x + 2, y + 18, 28, 3, SH, 0.12);
+  // Tank frame
+  px(x, y, 28, 18, '#37474F'); px(x + 1, y + 1, 26, 15, '#0D47A1');
+  // Water
+  px(x + 2, y + 2, 24, 13, '#1565C0'); px(x + 2, y + 2, 24, 4, '#1976D2', 0.4);
+  // Sand bottom
+  px(x + 2, y + 12, 24, 3, '#F9A825', 0.35);
+  // Plants
+  px(x + 4, y + 8, 2, 5, '#2E7D32'); px(x + 6, y + 9, 2, 4, '#43A047');
+  px(x + 20, y + 7, 2, 6, '#2E7D32'); px(x + 22, y + 8, 2, 5, '#388E3C');
+  // Fish
+  px(x + 9, y + 5, 4, 2, '#FF8A65'); dot(x + 12, y + 5, '#FF5722');
+  px(x + 16, y + 8, 3, 2, '#FFD54F'); dot(x + 15, y + 8, '#FFC107');
+  // Bubbles
+  dot(x + 13, y + 3, '#90CAF9', 0.5); dot(x + 14, y + 4, '#BBDEFB', 0.35);
+  dot(x + 8, y + 3, '#BBDEFB', 0.3);
+  // Stand
+  px(x, y + 16, 28, 2, '#455A64'); px(x + 1, y + 16, 26, 1, highlightOf('#455A64', 0.5), 0.3);
+}
+
+export function drawNeonSign(x: number, y: number) {
+  // Backing plate
+  px(x, y, 24, 10, '#1A1A2E');
+  // Neon glow effect (outer)
+  px(x + 2, y + 1, 20, 8, '#E040FB', 0.15);
+  // "OPEN" text in neon
+  // O
+  px(x + 3, y + 2, 4, 6, '#E040FB', 0.7); px(x + 4, y + 3, 2, 4, '#1A1A2E');
+  // P
+  px(x + 8, y + 2, 1, 6, '#00E5FF', 0.7); px(x + 8, y + 2, 4, 1, '#00E5FF', 0.7);
+  px(x + 8, y + 4, 4, 1, '#00E5FF', 0.7); px(x + 11, y + 2, 1, 3, '#00E5FF', 0.7);
+  // E
+  px(x + 13, y + 2, 1, 6, '#E040FB', 0.7); px(x + 13, y + 2, 4, 1, '#E040FB', 0.7);
+  px(x + 13, y + 4, 3, 1, '#E040FB', 0.7); px(x + 13, y + 7, 4, 1, '#E040FB', 0.7);
+  // N
+  px(x + 18, y + 2, 1, 6, '#00E5FF', 0.7); px(x + 21, y + 2, 1, 6, '#00E5FF', 0.7);
+  px(x + 19, y + 3, 1, 2, '#00E5FF', 0.5); px(x + 20, y + 5, 1, 2, '#00E5FF', 0.5);
+}
+
+export function drawArcade(x: number, y: number) {
+  px(x + 2, y + 28, 16, 3, SH, 0.15);
+  // Cabinet body
+  px(x, y, 16, 28, '#1A237E'); px(x + 1, y + 1, 14, 3, '#283593');
+  // Screen
+  px(x + 2, y + 4, 12, 10, '#0D1117'); px(x + 3, y + 5, 10, 8, '#1B5E20');
+  // Game pixels on screen
+  px(x + 5, y + 6, 2, 2, '#4CAF50'); px(x + 9, y + 8, 2, 2, '#FF5722');
+  px(x + 7, y + 10, 3, 1, '#FFD54F'); dot(x + 6, y + 7, '#81C784');
+  // Controls panel
+  px(x + 1, y + 14, 14, 6, '#1A237E');
+  px(x + 2, y + 15, 4, 4, '#212121'); // joystick area
+  dot(x + 4, y + 16, '#F44336'); // joystick
+  dot(x + 9, y + 16, '#F44336'); dot(x + 11, y + 16, '#2196F3'); // buttons
+  dot(x + 10, y + 18, '#FFEB3B');
+  // Base
+  px(x, y + 20, 16, 8, '#0D47A1'); px(x + 1, y + 21, 14, 6, '#1565C0');
+  // Side art stripe
+  px(x, y + 4, 1, 14, '#FF4081', 0.4); px(x + 15, y + 4, 1, 14, '#FF4081', 0.4);
+}
+
+export function drawJukebox(x: number, y: number) {
+  px(x + 2, y + 24, 20, 3, SH, 0.15);
+  // Body
+  px(x, y, 20, 24, '#4E342E'); px(x + 1, y + 1, 18, 22, '#5D4037');
+  // Top dome
+  px(x + 2, y + 1, 16, 4, '#FF6F00'); px(x + 3, y + 2, 14, 2, '#FF8F00', 0.6);
+  // Display window (records visible)
+  px(x + 2, y + 5, 16, 10, '#1A1A2E'); px(x + 3, y + 6, 14, 8, '#212121');
+  // Record discs
+  px(x + 4, y + 7, 4, 4, '#333'); px(x + 5, y + 8, 2, 2, '#E53935');
+  px(x + 10, y + 7, 4, 4, '#333'); px(x + 11, y + 8, 2, 2, '#1E88E5');
+  // Speaker grille
+  px(x + 3, y + 16, 14, 6, '#3E2723');
+  for (let i = 0; i < 7; i++) px(x + 4 + i * 2, y + 17, 1, 4, '#5D4037', 0.5);
+  // Chrome trim
+  px(x + 1, y + 5, 18, 1, '#FFD54F', 0.5); px(x + 1, y + 15, 18, 1, '#FFD54F', 0.5);
+}
+
+export function drawTrophyCase(x: number, y: number) {
+  px(x + 2, y + 22, 22, 2, SH, 0.12);
+  // Glass case frame
+  px(x, y, 22, 22, DW.deep); px(x + 1, y + 1, 20, 20, '#37474F');
+  // Glass
+  px(x + 2, y + 2, 18, 18, '#546E7A', 0.3);
+  // Shelves
+  px(x + 1, y + 10, 20, 1, DW.base); px(x + 1, y + 10, 20, 1, DW.hi, 0.2);
+  // Trophy 1 (gold cup)
+  px(x + 4, y + 3, 4, 5, '#FFD54F'); px(x + 5, y + 4, 2, 3, '#FFC107');
+  px(x + 4, y + 7, 4, 1, '#FFA000'); dot(x + 5, y + 3, '#FFF176', 0.5);
+  // Trophy 2 (silver star)
+  px(x + 13, y + 4, 4, 4, '#B0BEC5'); px(x + 14, y + 3, 2, 1, '#CFD8DC');
+  dot(x + 14, y + 5, '#ECEFF1', 0.6);
+  // Trophy 3 (bronze medal)
+  px(x + 5, y + 12, 3, 3, '#A1887F'); px(x + 6, y + 11, 1, 1, '#D7CCC8');
+  // Trophy 4 (plaque)
+  px(x + 12, y + 12, 6, 4, '#5D4037'); px(x + 13, y + 13, 4, 2, '#FFD54F', 0.6);
+  // Glass reflection
+  px(x + 2, y + 2, 2, 18, '#fff', 0.08);
+}
+
 export function drawDesk(x: number, y: number) {
   px(x + 2, y + 16, 26, 3, SH, 0.18);
   px(x, y, 26, 10, WD.deep); px(x + 1, y + 1, 24, 8, WD.base);
@@ -247,6 +352,11 @@ const DRAW_MAP: Record<FurnitureType, DrawFn> = {
   'bulletin-board': (x, y) => drawBulletinBoard(x, y),
   'shelf':          (x, y) => drawShelf(x, y),
   'screen':         (x, y) => drawScreen(x, y),
+  'aquarium':       (x, y) => drawAquarium(x, y),
+  'neon-sign':      (x, y) => drawNeonSign(x, y),
+  'arcade':         (x, y) => drawArcade(x, y),
+  'jukebox':        (x, y) => drawJukebox(x, y),
+  'trophy-case':    (x, y) => drawTrophyCase(x, y),
 };
 
 /** Resolve absolute position from room-relative offset */
@@ -338,6 +448,11 @@ const FURNITURE_BOUNDS: Record<FurnitureType, { w: number; h: number }> = {
   'bulletin-board': { w: 22, h: 16 },
   'shelf': { w: 20, h: 8 },
   'screen': { w: 16, h: 12 },
+  'aquarium': { w: 28, h: 18 },
+  'neon-sign': { w: 24, h: 10 },
+  'arcade': { w: 16, h: 28 },
+  'jukebox': { w: 20, h: 24 },
+  'trophy-case': { w: 22, h: 22 },
 };
 
 export function getFurnitureBounds(type: FurnitureType): { w: number; h: number } {

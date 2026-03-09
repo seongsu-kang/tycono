@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { COMPANY_ROOT } from '../services/file-reader.js';
-import { getGitStatus, gitSave, gitHistory, gitRestore, gitInit, gitFetchStatus, gitPull } from '../services/git-save.js';
+import { getGitStatus, gitSave, gitHistory, gitRestore, gitInit, gitFetchStatus, gitPull, githubStatus, githubCreateRepo, gitAddRemote } from '../services/git-save.js';
 import type { RepoType } from '../services/git-save.js';
 
 export const saveRouter = Router();
@@ -92,6 +92,45 @@ saveRouter.post('/pull', (req: Request, res: Response, next: NextFunction) => {
       : result.status === 'no-remote' ? 404
       : 500;
     res.status(statusCode).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/save/github-status?repo=akb|code — check gh CLI + auth + remote
+saveRouter.get('/github-status', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json(githubStatus(COMPANY_ROOT, getRepo(req)));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/save/github-create-repo?repo=akb|code — create GitHub repo + push
+saveRouter.post('/github-create-repo', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { name, visibility } = req.body ?? {};
+    if (!name || typeof name !== 'string') {
+      res.status(400).json({ ok: false, message: 'Repository name is required' });
+      return;
+    }
+    const result = githubCreateRepo(COMPANY_ROOT, name, visibility || 'private', getRepo(req));
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/save/remote?repo=akb|code — manually add git remote
+saveRouter.post('/remote', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { url } = req.body ?? {};
+    if (!url || typeof url !== 'string') {
+      res.status(400).json({ ok: false, message: 'Remote URL is required' });
+      return;
+    }
+    const result = gitAddRemote(COMPANY_ROOT, url, getRepo(req));
+    res.status(result.ok ? 200 : 400).json(result);
   } catch (err) {
     next(err);
   }

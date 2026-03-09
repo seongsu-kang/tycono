@@ -286,7 +286,7 @@ log(f'Check result later: python3 "$CONSULT_CMD" --check {job_id}')
  */
 export class ClaudeCliRunner implements ExecutionRunner {
   execute(config: RunnerConfig, callbacks: RunnerCallbacks): RunnerHandle {
-    const { companyRoot, roleId, task, sourceRole, orgTree, readOnly = false, teamStatus, attachments } = config;
+    const { companyRoot, roleId, task, sourceRole, orgTree, readOnly = false, teamStatus, attachments, targetRoles } = config;
 
     // Note: Claude CLI doesn't support inline image attachments.
     // Images will be ignored with a warning if passed.
@@ -295,7 +295,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
     }
 
     // 1. Context Assembly
-    const context = assembleContext(companyRoot, roleId, task, sourceRole, orgTree, { teamStatus });
+    const context = assembleContext(companyRoot, roleId, task, sourceRole, orgTree, { teamStatus, targetRoles });
 
     // 2. System prompt를 임시 파일로 저장 (CLI arg 길이 제한 대비)
     const tmpDir = path.join(os.tmpdir(), 'tycono-engine');

@@ -29,7 +29,7 @@ import GitStatusPanel from '../components/office/GitStatusPanel';
 import SettingsPanel from '../components/office/SettingsPanel';
 import ThemeDropup from '../components/office/ThemeDropup';
 import { OFFICE_THEMES } from '../types/appearance';
-import type { CharacterAppearance } from '../types/appearance';
+import type { CharacterAppearance, OfficeTheme } from '../types/appearance';
 import { computeRoleLevels, type RoleLevelData } from '../utils/role-level';
 import { computeBadges, type BadgeContext } from '../utils/badges';
 import { getActiveQuest, getDefaultProgress, completeQuest, checkTrigger } from '../utils/quests';
@@ -123,10 +123,15 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   }, [activeExecs]);
   const [toasts, setToasts] = useState<{ id: number; message: string; color: string }[]>([]);
 
+  /* Coins (Virtual Economy) */
+  const [coinBalance, setCoinBalance] = useState(0);
+
   /* Quest Board */
   const [questProgress, setQuestProgress] = useState<QuestProgress>(getDefaultProgress());
   const questLoadedRef = useRef(false);
   const prevProjectCountRef = useRef(-1);
+  const [questSpotlight, setQuestSpotlight] = useState<string | null>(null);
+  const spotlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* Engine type (for chat pipeline auto-detection) */
   const [engineType, setEngineType] = useState<string | undefined>(undefined);
@@ -331,7 +336,17 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     api.getWaves().then(setWaves).catch(() => {});
     api.getDecisions().then(setDecisions).catch(() => {});
     api.getKnowledge().then(setKnowledgeDocs).catch(() => {});
-    api.getQuestProgress().then(p => { setQuestProgress(p); questLoadedRef.current = true; }).catch(() => { questLoadedRef.current = true; });
+    api.getQuestProgress().then(p => {
+      setQuestProgress(p); questLoadedRef.current = true;
+      // Coins: load + auto-migrate for existing users
+      api.getCoins().then(c => {
+        if (c.totalEarned === 0) {
+          api.migrateCoins(p.completedQuests?.length ?? 0).then(m => setCoinBalance(m.balance)).catch(() => {});
+        } else {
+          setCoinBalance(c.balance);
+        }
+      }).catch(() => {});
+    }).catch(() => { questLoadedRef.current = true; });
   }, []);
 
   // Detect new project creation for quest trigger
@@ -429,6 +444,13 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000);
   };
 
+  /** Activate spotlight pulse on a UI element, auto-clear after 8s */
+  const activateSpotlight = (target: string) => {
+    if (spotlightTimerRef.current) clearTimeout(spotlightTimerRef.current);
+    setQuestSpotlight(target);
+    spotlightTimerRef.current = setTimeout(() => setQuestSpotlight(null), 8000);
+  };
+
   /** Fire a quest trigger event and complete matching quest */
   const fireQuestTrigger = (event: QuestTrigger) => {
     if (!questLoadedRef.current) return;
@@ -437,12 +459,38 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
       if (!active || !checkTrigger(active, event)) return prev;
       const { progress: next, quest } = completeQuest(prev, active.id);
       if (quest) {
-        addToast(`📋 Quest complete: ${quest.title}`, '#7C3AED');
+        const coinReward = quest.rewards.coins ?? 0;
+        const coinMsg = coinReward > 0 ? ` 💰 +${coinReward.toLocaleString()}` : '';
+        addToast(`📋 Quest complete: ${quest.title}${coinMsg}`, '#7C3AED');
+        setQuestSpotlight(null);
         api.saveQuestProgress(next).catch(() => {});
+        if (coinReward > 0) {
+          api.earnCoins(coinReward, `quest: ${quest.id}`, quest.id)
+            .then(r => setCoinBalance(r.balance))
+            .catch(() => {});
+        }
       }
       return next;
     });
   };
+
+  /* Apply/remove quest-spotlight CSS class on target element */
+  useEffect(() => {
+    if (!questSpotlight) return;
+    const el = document.querySelector(`[data-quest-target="${questSpotlight}"]`) as HTMLElement | null;
+    if (!el) return;
+    el.classList.add('quest-spotlight');
+    const handleClick = () => {
+      el.classList.remove('quest-spotlight');
+      setQuestSpotlight(null);
+      if (spotlightTimerRef.current) clearTimeout(spotlightTimerRef.current);
+    };
+    el.addEventListener('click', handleClick, { once: true });
+    return () => {
+      el.classList.remove('quest-spotlight');
+      el.removeEventListener('click', handleClick);
+    };
+  }, [questSpotlight]);
 
   /** Update role levels and detect level-ups */
   const updateRoleLevels = (newLevels: RoleLevelData) => {
@@ -598,14 +646,20 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
       });
   };
 
-  const handleWaveDispatch = async (directive: string) => {
+  const handleWaveDispatch = async (directive: string, targetRoles?: string[]) => {
     setShowWaveModal(false);
     try {
-      const resp = await api.startJob({ type: 'wave', directive });
+      const resp = await api.startJob({ type: 'wave', directive, targetRoles });
       fireQuestTrigger({ type: 'wave_dispatched' });
       // Wave returns { jobIds: string[] } — one per C-Level role
       const jobIds: string[] = resp.jobIds ?? (resp.jobId ? [resp.jobId] : []);
-      const cLevels = roles.filter(r => r.level === 'c-level');
+      // Use CEO's direct reports from org tree (not just c-level filter)
+      const ceoDirectReports = orgRootId && orgNodes[orgRootId]
+        ? orgNodes[orgRootId].children.map(id => roles.find(r => r.id === id)).filter((r): r is typeof roles[number] => !!r)
+        : roles.filter(r => r.level === 'c-level');
+      const cLevels = targetRoles
+        ? ceoDirectReports.filter(r => targetRoles.includes(r.id))
+        : ceoDirectReports;
 
       const wj = jobIds.map((jid, i) => ({
         jobId: jid,
@@ -689,7 +743,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     setAppearance(input.id, appearance);
     refreshRoles();
     addToast(`${input.name} hired!`, '#2E7D32');
-    fireQuestTrigger({ type: 'role_hired', condition: { roleId: input.id } });
+    fireQuestTrigger({ type: 'role_hired', condition: { roleId: input.id, roleCount: roles.length + 1 } });
   };
 
   const handleFireRole = async (roleId: string) => {
@@ -1182,18 +1236,13 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
         <div className="flex gap-4 text-[var(--terminal-text-secondary)] text-[11px] items-center">
           {/* Resource bars — hidden on narrow screens */}
           {(() => {
-            const totalTokens = Object.values(roleLevels).reduce((s, r) => s + r.totalTokens, 0);
-            const totalK = totalTokens >= 1_000_000 ? `${(totalTokens / 1_000_000).toFixed(1)}M` : totalTokens >= 1_000 ? `${Math.round(totalTokens / 1_000)}K` : String(totalTokens);
-            const pct = Math.min(100, Math.round(totalTokens / 250_000 * 100)); // 250K = full bar
+            const coinK = coinBalance >= 1_000_000 ? `${(coinBalance / 1_000_000).toFixed(1)}M` : coinBalance >= 1_000 ? `${(coinBalance / 1_000).toFixed(1)}K` : String(coinBalance);
             const activeCount = activeExecs.length;
             const energy = roles.length > 0 ? Math.round((activeCount / roles.length) * 100) : 0;
             return (<>
               <div className="hidden md:flex items-center gap-1">
                 {'\u{1F4B0}'}
-                <div className="w-[50px] h-2 bg-[#111] overflow-hidden" style={{ border: '2px solid var(--pixel-border)' }}>
-                  <div className="h-full" style={{ width: `${pct}%`, background: 'linear-gradient(90deg,#22c55e,#34D399)' }} />
-                </div>
-                <strong className="text-[var(--active-green)]">{totalK}</strong>
+                <strong className="text-[var(--active-green)]">{coinK}</strong>
               </div>
               <div className="hidden md:flex items-center gap-1">
                 {'\u26A1'}
@@ -1326,17 +1375,24 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
               activeExecs={activeExecs}
               onRoleClick={(id) => setPanel({ type: 'role', roleId: id })}
               onProjectClick={(id) => setPanel({ type: 'project', projectId: id })}
-              onBulletinClick={() => setPanel({ type: 'bulletin' })}
+              onBulletinClick={() => { setPanel({ type: 'bulletin' }); fireQuestTrigger({ type: 'bulletin_visited' }); }}
               onDecisionsClick={() => setPanel({ type: 'decisions' })}
-              onKnowledgeClick={() => setPanel({ type: 'knowledge' })}
-              onSettingsClick={() => setShowSettingsPanel(true)}
+              onKnowledgeClick={() => { setPanel({ type: 'knowledge' }); fireQuestTrigger({ type: 'knowledge_visited' }); }}
+              onSettingsClick={() => { setShowSettingsPanel(true); fireQuestTrigger({ type: 'settings_visited' }); }}
               onThemeClick={() => setShowThemeDropup(v => !v)}
-              onStatsClick={() => setShowStatsPanel(true)}
+              onStatsClick={() => { setShowStatsPanel(true); fireQuestTrigger({ type: 'stats_visited' }); }}
               knowledgeDocsCount={knowledgeDocs.length}
               getRoleSpeech={ambient.getSpeech}
               getAppearance={getAppearance}
               onHireClick={() => setShowHireModal(true)}
+              onMascotClick={() => setPanel({ type: 'bulletin' })}
               roleLevels={roleLevels}
+              coinBalance={coinBalance}
+              onCoinsSpent={(b) => setCoinBalance(b)}
+              onFurniturePlaced={(_type, price) => {
+                fireQuestTrigger({ type: 'furniture_placed' });
+                if (price > 0) fireQuestTrigger({ type: 'furniture_purchased' });
+              }}
             />
           ) : (
           <div className={`${terminalOpen ? 'max-w-full' : 'max-w-[1100px]'} mx-auto h-full p-4 flex flex-col gap-3 relative z-[1]`}>
@@ -1524,7 +1580,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
             {showThemeDropup && (
               <ThemeDropup
                 theme={theme}
-                onThemeChange={setTheme}
+                onThemeChange={(t: OfficeTheme) => { setTheme(t); fireQuestTrigger({ type: 'theme_changed' }); }}
                 onClose={() => setShowThemeDropup(false)}
               />
             )}
@@ -1541,7 +1597,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           <button
             onClick={() => {
               if (saveHook.state === 'no-git') {
-                saveHook.initGit();
+                setShowSaveModal(true);
               } else if (saveHook.state === 'dirty') {
                 setShowSaveModal(true);
               } else {
@@ -1621,6 +1677,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           <button
             onClick={() => setShowWaveModal(true)}
             className="wave-btn px-3 py-1 font-black text-white cursor-pointer"
+            data-quest-target="wave-btn"
             style={{ background: '#B71C1C', border: '2px solid #7f1212', fontFamily: 'var(--pixel-font)' }}
           >
             {'\u{1F534}'} CEO WAVE
@@ -1628,6 +1685,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           <button
             onClick={() => terminalOpen ? setTerminalOpen(false) : handleOpenTerminal()}
             className="px-3 py-1 font-black cursor-pointer"
+            data-quest-target="terminal-btn"
             style={{
               background: terminalOpen ? 'var(--terminal-bg)' : 'var(--hud-bg-alt)',
               color: 'var(--terminal-text)',
@@ -1684,6 +1742,20 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           onClose={closePanel}
           terminalWidth={terminalOpen ? terminalWidth : 0}
           questProgress={questProgress}
+          onQuestAction={(questId) => {
+            closePanel();
+            // Map quest → spotlight target
+            const targetMap: Record<string, string> = {
+              'ch1-q1': 'hire-btn', 'ch3-q1': 'hire-btn', 'ch4-q1': 'hire-btn',
+              'ch2-q1': 'meeting-room',
+              'ch2-q2': 'terminal-btn', 'ch3-q2': 'terminal-btn',
+              'ch4-q2': 'wave-btn',
+              'ch5-q1': 'hire-btn',  // store is inside hire modal
+              'ch5-q2': 'hire-btn',
+            };
+            const target = targetMap[questId];
+            if (target) activateSpotlight(target);
+          }}
         />
       )}
       {panel.type === 'knowledge' && (
@@ -1821,11 +1893,13 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
       {/* Phase 2: Wave Modal */}
       {showWaveModal && (
         <WaveModal
-          cLevelRoles={roles.filter(r => r.level === 'c-level')}
+          cLevelRoles={orgRootId && orgNodes[orgRootId]
+            ? orgNodes[orgRootId].children.map(id => roles.find(r => r.id === id)).filter((r): r is typeof roles[number] => !!r)
+            : roles.filter(r => r.level === 'c-level')}
           orgNodes={orgNodes}
           rootId={orgRootId}
           onClose={() => setShowWaveModal(false)}
-          onDispatch={handleWaveDispatch}
+          onDispatch={(d, t) => handleWaveDispatch(d, t)}
         />
       )}
 
@@ -1835,6 +1909,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           existingRoles={roles}
           onClose={() => setShowHireModal(false)}
           onHire={handleHireRole}
+          onStoreVisit={() => fireQuestTrigger({ type: 'store_visited' })}
         />
       )}
 
@@ -1853,11 +1928,11 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
         <CustomizeModal
           role={customizeTarget}
           appearance={getAppearance(customizeTarget.id)}
-          onSave={(ap) => setAppearance(customizeTarget.id, ap)}
+          onSave={(ap) => { setAppearance(customizeTarget.id, ap); fireQuestTrigger({ type: 'accessory_changed' }); }}
           onReset={() => resetAppearance(customizeTarget.id)}
           onClose={() => { setCustomizeTarget(null); setCustomizeInitialTab('character'); }}
           theme={theme}
-          onThemeChange={setTheme}
+          onThemeChange={(t: OfficeTheme) => { setTheme(t); fireQuestTrigger({ type: 'theme_changed' }); }}
           onUpdateName={async (roleId, name) => { await handleUpdateRole(roleId, { name }); }}
           initialTab={'character'}
           characterOnly
@@ -1882,6 +1957,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
             onClose={() => setShowSaveModal(false)}
             onSave={async (msg) => {
               const result = await saveHook.save(msg);
+              if (result?.ok) fireQuestTrigger({ type: 'save_committed' });
               return result;
             }}
             onLoadHistory={saveHook.loadHistory}
@@ -1892,6 +1968,8 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
             syncInfo={saveHook.syncInfo}
             onPull={saveHook.pull}
             pulling={saveHook.pulling}
+            onRefresh={saveHook.refresh}
+            onInitGit={saveHook.initGit}
             delegateRoleName={delegateRole?.name ?? delegateRole?.id}
             onDelegate={delegateRole ? async (filesSummary) => {
               setShowSaveModal(false);

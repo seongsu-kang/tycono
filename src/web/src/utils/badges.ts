@@ -15,6 +15,7 @@ export interface BadgeContext {
   roles: { id: string; level: number; totalTokens: number }[];
   totalTokens: number;
   roleCount: number;
+  completedQuests?: string[];
 }
 
 export const BADGES: Badge[] = [

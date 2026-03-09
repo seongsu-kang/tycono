@@ -133,7 +133,7 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
   const targetRole = (body.targetRole as string) || 'cto';
   const parentJobId = body.parentJobId as string | undefined;
 
-  // Wave shorthand — broadcast to ALL C-level direct reports
+  // Wave shorthand — broadcast to C-level direct reports (optionally filtered)
   if (type === 'wave') {
     if (!directive) {
       jsonResponse(res, 400, { error: 'directive is required for wave jobs' });
@@ -141,12 +141,23 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
     }
 
     const orgTree = buildOrgTree(COMPANY_ROOT);
-    const cLevelRoles = getSubordinates(orgTree, 'ceo');
+    let cLevelRoles = getSubordinates(orgTree, 'ceo');
+
+    // Selective dispatch: filter by targetRoles if provided
+    const targetRoles = body.targetRoles as string[] | undefined;
+    if (targetRoles && Array.isArray(targetRoles) && targetRoles.length > 0) {
+      const allowed = new Set(targetRoles);
+      cLevelRoles = cLevelRoles.filter(r => allowed.has(r));
+    }
 
     if (cLevelRoles.length === 0) {
       jsonResponse(res, 400, { error: 'No C-level roles found to dispatch wave.' });
       return;
     }
+
+    // Resolve full targetRoles scope for re-dispatch filtering
+    // Include both the C-level roles AND any sub-roles from targetRoles
+    const fullTargetScope = targetRoles && targetRoles.length > 0 ? targetRoles : undefined;
 
     const jobIds: string[] = [];
     for (const cRole of cLevelRoles) {
@@ -156,6 +167,7 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
         task: `[CEO Wave] ${directive}`,
         sourceRole: 'ceo',
         parentJobId,
+        targetRoles: fullTargetScope,
       });
       jobIds.push(job.id);
     }
@@ -543,12 +555,22 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
   }
 
   const orgTree = buildOrgTree(COMPANY_ROOT);
-  const cLevelRoles = getSubordinates(orgTree, 'ceo');
+  let cLevelRoles = getSubordinates(orgTree, 'ceo');
+
+  // Selective dispatch: filter by targetRoles if provided
+  const targetRoles = body.targetRoles as string[] | undefined;
+  if (targetRoles && Array.isArray(targetRoles) && targetRoles.length > 0) {
+    const allowed = new Set(targetRoles);
+    cLevelRoles = cLevelRoles.filter(r => allowed.has(r));
+  }
 
   if (cLevelRoles.length === 0) {
     jsonResponse(res, 400, { error: 'No C-level roles found to dispatch wave.' });
     return;
   }
+
+  // Resolve full targetRoles scope for re-dispatch filtering
+  const fullTargetScope = targetRoles && targetRoles.length > 0 ? targetRoles : undefined;
 
   // Start a job for EACH C-level role
   const jobs: Job[] = [];
@@ -558,6 +580,7 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
       roleId: cRole,
       task: `[CEO Wave] ${directive}`,
       sourceRole: 'ceo',
+      targetRoles: fullTargetScope,
     });
     jobs.push(job);
   }

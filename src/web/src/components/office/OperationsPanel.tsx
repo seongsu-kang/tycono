@@ -13,11 +13,12 @@ interface Props {
   onClose: () => void;
   terminalWidth?: number;
   questProgress?: QuestProgress;
+  onQuestAction?: (questId: string) => void;
 }
 
-export default function OperationsPanel({ standups, waves, decisions, mode, onClose, terminalWidth = 0, questProgress }: Props) {
+export default function OperationsPanel({ standups, waves, decisions, mode, onClose, terminalWidth = 0, questProgress, onQuestAction }: Props) {
   const [tab, setTab] = useState<'standups' | 'waves' | 'decisions' | 'quests'>(
-    mode === 'decisions' ? 'decisions' : 'standups'
+    mode === 'decisions' ? 'decisions' : (questProgress ? 'quests' : 'standups')
   );
 
   const { panelRight, panelWidth, isResizing, handleResizeStart } = usePanelResize(terminalWidth);
@@ -62,7 +63,7 @@ export default function OperationsPanel({ standups, waves, decisions, mode, onCl
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-5">
-          {tab === 'quests' && questProgress && <QuestBoard progress={questProgress} />}
+          {tab === 'quests' && questProgress && <QuestBoard progress={questProgress} onQuestAction={onQuestAction} />}
           {tab === 'standups' && standups.map((s, i) => (
             <ContentCard key={i} title={`Standup ${s.date}`} content={s.content} />
           ))}

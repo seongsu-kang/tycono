@@ -82,7 +82,7 @@ export const api = {
     patch_<Session>(`/sessions/${id}`, patch),
 
   // Jobs
-  startJob: (params: { type?: string; roleId?: string; task?: string; directive?: string; sourceRole?: string; readOnly?: boolean; targetRole?: string }) =>
+  startJob: (params: { type?: string; roleId?: string; task?: string; directive?: string; sourceRole?: string; readOnly?: boolean; targetRole?: string; targetRoles?: string[] }) =>
     post<{ jobId: string; jobIds?: string[] }>('/jobs', params),
   getJob: (id: string) => get<JobInfo>(`/jobs/${id}`),
   listJobs: (filter?: { status?: string; roleId?: string }) => {
@@ -180,6 +180,17 @@ export const api = {
     };
   },
 
+  // GitHub Integration
+  getGithubStatus: (repo: 'akb' | 'code' = 'akb') => get<{
+    ghInstalled: boolean; authenticated: boolean; username?: string;
+    hasRemote: boolean; remoteUrl?: string;
+  }>(`/save/github-status?repo=${repo}`),
+  githubCreateRepo: (name: string, visibility: 'private' | 'public' = 'private', repo: 'akb' | 'code' = 'akb') =>
+    post<{ ok: boolean; message: string; repoUrl?: string; remoteUrl?: string }>(
+      `/save/github-create-repo?repo=${repo}`, { name, visibility }),
+  addRemote: (url: string, repo: 'akb' | 'code' = 'akb') =>
+    post<{ ok: boolean; message: string }>(`/save/remote?repo=${repo}`, { url }),
+
   // Code Root
   setCodeRoot: async (codeRoot: string) => {
     const res = await fetch(`${BASE}/setup/code-root`, {
@@ -209,6 +220,15 @@ export const api = {
 
   // Stats (Gamification)
   getCompanyStats: () => get<CompanyStats>('/sync/stats'),
+
+  // Coins
+  getCoins: () => get<{ balance: number; totalEarned: number; totalSpent: number; transactions: Array<{ ts: string; amount: number; reason: string; ref?: string }> }>('/coins'),
+  earnCoins: (amount: number, reason: string, ref?: string) =>
+    post<{ ok: boolean; balance: number; transaction: { ts: string; amount: number; reason: string } }>('/coins/earn', { amount, reason, ref }),
+  spendCoins: (amount: number, reason: string, ref?: string) =>
+    post<{ ok: boolean; balance: number; transaction: { ts: string; amount: number; reason: string } }>('/coins/spend', { amount, reason, ref }),
+  migrateCoins: (completedQuests: number) =>
+    post<{ ok: boolean; balance: number; granted?: number; reason?: string; skipped?: boolean }>('/coins/migrate', { completedQuests }),
 
   // Quests
   getQuestProgress: () => get<{ completedQuests: string[]; activeChapter: number; sideQuestsCompleted: string[]; firstCompletedAt?: string }>('/quests/progress'),

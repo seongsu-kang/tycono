@@ -57,6 +57,9 @@ interface TopDownOfficeViewProps {
   onHireClick?: () => void;
   onMascotClick?: () => void;
   roleLevels?: Record<string, { level: number; totalTokens: number; progress: number }>;
+  coinBalance?: number;
+  onCoinsSpent?: (newBalance: number) => void;
+  onFurniturePlaced?: (type: string, price: number) => void;
 }
 
 /* ─── Canvas constants ──────────────────── */
@@ -114,6 +117,7 @@ function assignDesks(roleIds: string[]): Record<string, DeskDef> {
 let _ctx: CanvasRenderingContext2D;
 let _hoverRole: string | null = null;
 let _hoverFacility: string | null = null;
+// _hoverMascot removed — mascot nametag always visible
 let _editMode = false;
 let _hoverFurniture: string | null = null;
 let _selectedFurniture: string | null = null;   // furniture id or 'desk:roleId'
@@ -798,6 +802,7 @@ export default function TopDownOfficeView({
   roles, projects, roleStatuses, activeExecs,
   onRoleClick, onProjectClick, onBulletinClick, onDecisionsClick, onKnowledgeClick, onSettingsClick, onThemeClick, onStatsClick,
   getRoleSpeech, getAppearance, onHireClick, onMascotClick, roleLevels,
+  coinBalance = 0, onCoinsSpent, onFurniturePlaced,
 }: TopDownOfficeViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -1000,6 +1005,7 @@ export default function TopDownOfficeView({
       const lbl = document.createElement('div');
       lbl.className = 'td-facility-label';
       lbl.dataset.facility = fz.id;
+      if (fz.id === 'meeting') lbl.dataset.questTarget = 'meeting-room';
       lbl.textContent = `${fz.icon} ${fz.label}`;
       lbl.style.borderColor = `${fz.color}44`;
       const handler = facilityHandlers[fz.id];
@@ -1008,7 +1014,19 @@ export default function TopDownOfficeView({
       lbl.addEventListener('mouseleave', () => { _hoverFacility = null; });
       overlay.appendChild(lbl);
     }
-  }, [assignedRoleIds, roles, projects, onProjectClick, onBulletinClick, onDecisionsClick, onKnowledgeClick, onSettingsClick, onThemeClick, onStatsClick, roleLevels]);
+
+    // Mascot "Pupu" nametag
+    const mascotTag = document.createElement('div');
+    mascotTag.className = 'td-nametag td-nametag-mascot';
+    mascotTag.dataset.role = 'mascot';
+    const pawDot = document.createElement('span');
+    pawDot.className = 'td-dot';
+    pawDot.style.background = '#ffd700';
+    mascotTag.appendChild(pawDot);
+    mascotTag.appendChild(document.createTextNode('Pupu'));
+    mascotTag.addEventListener('click', () => onMascotClick?.());
+    overlay.appendChild(mascotTag);
+  }, [assignedRoleIds, roles, projects, onProjectClick, onBulletinClick, onDecisionsClick, onKnowledgeClick, onSettingsClick, onThemeClick, onStatsClick, onMascotClick, roleLevels]);
 
   // Update overlay positions
   const updateOverlay = useCallback(() => {
@@ -1064,6 +1082,17 @@ export default function TopDownOfficeView({
           bub.style.display = 'none';
         }
       }
+    }
+
+    // Mascot nametag
+    const mascotTag = overlay.querySelector('.td-nametag-mascot') as HTMLElement;
+    const mc = mascotRef.current;
+    if (mascotTag && mc) {
+      const isSide = mc.dir === 'left' || mc.dir === 'right';
+      const mcx = Math.round(mc.x) + (isSide ? 6 : 4);
+      const mcy = Math.round(mc.y) + (isSide ? 7 : 10);
+      mascotTag.style.left = (mcx / _layout.canvasW * 100) + '%';
+      mascotTag.style.top = (mcy * z + 2) + 'px';
     }
 
     // Facility labels
@@ -1142,9 +1171,13 @@ export default function TopDownOfficeView({
     saveOverrides({ removedFurniture: newRemoved });
   }, [saveOverrides]);
 
-  // Place new furniture at canvas coords
+  // Place new furniture at canvas coords (with coin deduction)
   const placeFurniture = useCallback((mx: number, my: number) => {
     if (!_placingType || !_placingZone) return;
+    // Check coin cost
+    const catalogEntry = FURNITURE_CATALOG.find(e => e.type === _placingType);
+    const price = catalogEntry?.price ?? 0;
+    if (price > 0 && coinBalance < price) return; // insufficient funds
     // Find which room was clicked
     let targetRoom: string | null = null;
     for (const [id, room] of Object.entries(_layout.rooms)) {
@@ -1173,10 +1206,20 @@ export default function TopDownOfficeView({
     else _layout.furniture.push(newDef);
     _facilityZones = buildFacilityZonesFromFurniture(_layout);
     saveOverrides({ addedFurniture: newAdded });
+    // Notify parent (quest triggers)
+    onFurniturePlaced?.(_placingType, price);
+    // Deduct coins
+    if (price > 0) {
+      import('../../api/client').then(({ api }) => {
+        api.spendCoins(price, `furniture: ${_placingType}`, newDef.id)
+          .then(r => onCoinsSpent?.(r.balance))
+          .catch(() => {});
+      });
+    }
     // Exit placement mode
     setPlacingType(null);
     setPlacingZone(null);
-  }, [saveOverrides]);
+  }, [saveOverrides, coinBalance, onCoinsSpent, onFurniturePlaced]);
 
   // Mouse move — hover detection + drag
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1235,6 +1278,7 @@ export default function TopDownOfficeView({
     const hit = hitTest(e);
     _hoverRole = hit?.type === 'role' ? hit.id : null;
     _hoverFacility = hit?.type === 'facility' ? hit.id : null;
+    // mascot hover detection (nametag always visible)
     _hoverFurniture = null;
     if (canvas) canvas.style.cursor = hit ? 'pointer' : 'default';
   }, [hitTest, canvasCoords]);
@@ -1346,6 +1390,7 @@ export default function TopDownOfficeView({
     }
     _hoverRole = null;
     _hoverFacility = null;
+    // mascot hover cleared on mouse leave
     _hoverFurniture = null;
     if (canvasRef.current) canvasRef.current.style.cursor = 'default';
   }, []);
@@ -1412,23 +1457,32 @@ export default function TopDownOfficeView({
       </button>
       {editMode && (
         <div className="td-palette">
-          {FURNITURE_CATALOG.map(entry => (
-            <button
-              key={entry.type}
-              className={`td-palette__item${placingType === entry.type ? ' td-palette__item--active' : ''}`}
-              onClick={() => {
-                if (placingType === entry.type) { setPlacingType(null); setPlacingZone(null); }
-                else { setPlacingType(entry.type); setPlacingZone(entry.zone); }
-              }}
-              title={entry.label}
-            >
-              <span>{entry.icon}</span>
-            </button>
-          ))}
+          {FURNITURE_CATALOG.map(entry => {
+            const canAfford = entry.price === 0 || coinBalance >= entry.price;
+            const priceLabel = entry.price === 0 ? 'Free' : `${entry.price >= 1000 ? `${(entry.price / 1000).toFixed(entry.price % 1000 === 0 ? 0 : 1)}K` : entry.price}`;
+            return (
+              <button
+                key={entry.type}
+                className={`td-palette__item${placingType === entry.type ? ' td-palette__item--active' : ''}${!canAfford ? ' td-palette__item--locked' : ''}`}
+                onClick={() => {
+                  if (!canAfford) return;
+                  if (placingType === entry.type) { setPlacingType(null); setPlacingZone(null); }
+                  else { setPlacingType(entry.type); setPlacingZone(entry.zone); }
+                }}
+                title={`${entry.label} — ${priceLabel}`}
+                style={!canAfford ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+              >
+                <span>{entry.icon}</span>
+                <span className="td-palette__price" style={{ fontSize: '7px', color: entry.price === 0 ? '#4CAF50' : canAfford ? '#FFD54F' : '#EF5350' }}>
+                  {priceLabel}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
       {onHireClick && (
-        <button className="td-hire-btn" onClick={onHireClick} title="Hire New Role">
+        <button className="td-hire-btn" data-quest-target="hire-btn" onClick={onHireClick} title="Hire New Role">
           <span className="td-hire-btn__icon">+</span>
           <span className="td-hire-btn__label">HIRE</span>
         </button>

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import OrgTreePreview from './OrgTreePreview';
 import type { OrgNode } from '../../types';
 
@@ -7,20 +7,65 @@ interface Props {
   orgNodes: Record<string, OrgNode>;
   rootId: string;
   onClose: () => void;
-  onDispatch: (directive: string) => void;
+  onDispatch: (directive: string, targetRoles?: string[]) => void;
 }
 
 export default function WaveModal({ cLevelRoles, orgNodes, rootId, onClose, onDispatch }: Props) {
   const [directive, setDirective] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  // Initialize activeRoles with all roles (everything ON by default)
+  const [activeRoles, setActiveRoles] = useState<Set<string>>(() => {
+    const all = new Set<string>();
+    const root = orgNodes[rootId];
+    if (root) {
+      for (const cId of root.children) {
+        all.add(cId);
+        const cNode = orgNodes[cId];
+        if (cNode) {
+          for (const subId of cNode.children) {
+            all.add(subId);
+          }
+        }
+      }
+    }
+    return all;
+  });
+
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
+  const handleToggleRole = useCallback((roleId: string, active: boolean) => {
+    setActiveRoles(prev => {
+      const next = new Set(prev);
+      if (active) {
+        next.add(roleId);
+      } else {
+        next.delete(roleId);
+      }
+      return next;
+    });
+  }, []);
+
+  const activeCLevelCount = cLevelRoles.filter(r => activeRoles.has(r.id)).length;
+
   const handleSubmit = () => {
-    if (!directive.trim() || cLevelRoles.length === 0) return;
-    onDispatch(directive.trim());
+    if (!directive.trim() || activeCLevelCount === 0) return;
+    // Count total possible roles
+    const root = orgNodes[rootId];
+    let totalCount = 0;
+    if (root) {
+      for (const cId of root.children) {
+        totalCount++;
+        const cNode = orgNodes[cId];
+        if (cNode) totalCount += cNode.children.length;
+      }
+    }
+    // Only pass targetRoles if not all are selected (backward compat)
+    const allSelected = activeRoles.size >= totalCount;
+    const targetRoles = allSelected ? undefined : Array.from(activeRoles);
+    onDispatch(directive.trim(), targetRoles);
     onClose();
   };
 
@@ -42,14 +87,23 @@ export default function WaveModal({ cLevelRoles, orgNodes, rootId, onClose, onDi
         {/* Header */}
         <div className="p-5 text-white" style={{ background: 'linear-gradient(135deg, #B71C1C, #D32F2F)' }}>
           <div className="text-lg font-bold">CEO Wave</div>
-          <div className="text-sm opacity-80 mt-0.5">Broadcast a directive to all C-Level reports</div>
+          <div className="text-sm opacity-80 mt-0.5">
+            {hasOrgData
+              ? 'Select target roles and broadcast a directive'
+              : 'Broadcast a directive to all C-Level reports'}
+          </div>
         </div>
 
         {/* Body */}
         <div className="p-5 space-y-4">
-          {/* Propagation Preview */}
+          {/* Interactive Org Chart */}
           {hasOrgData && (
-            <OrgTreePreview orgNodes={orgNodes} rootId={rootId} />
+            <OrgTreePreview
+              orgNodes={orgNodes}
+              rootId={rootId}
+              activeRoles={activeRoles}
+              onToggleRole={handleToggleRole}
+            />
           )}
 
           {/* Target Roles (fallback if no org data) */}
@@ -103,11 +157,11 @@ export default function WaveModal({ cLevelRoles, orgNodes, rootId, onClose, onDi
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!directive.trim() || cLevelRoles.length === 0}
+            disabled={!directive.trim() || activeCLevelCount === 0}
             className="px-5 py-2 text-sm text-white rounded-lg font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ background: '#B71C1C' }}
           >
-            Dispatch to {cLevelRoles.length} Role{cLevelRoles.length !== 1 ? 's' : ''}
+            Dispatch to {activeCLevelCount} Role{activeCLevelCount !== 1 ? 's' : ''}
           </button>
         </div>
       </div>

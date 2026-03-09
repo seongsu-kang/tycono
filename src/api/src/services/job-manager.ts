@@ -29,6 +29,8 @@ export interface Job {
   error?: string;
   /** Which role should respond when status is awaiting_input */
   targetRole?: string;
+  /** Selective dispatch scope — only these roles can be dispatched to */
+  targetRoles?: string[];
 }
 
 export interface JobInfo {
@@ -54,6 +56,8 @@ export interface StartJobParams {
   model?: string;
   /** If true, this is a continuation from CEO reply — skip question detection */
   isContinuation?: boolean;
+  /** Selective dispatch: only these roles are allowed as dispatch targets */
+  targetRoles?: string[];
 }
 
 /* ─── Helpers ────────────────────────────── */
@@ -155,6 +159,7 @@ class JobManager {
       parentJobId: params.parentJobId,
       childJobIds: [],
       createdAt: new Date().toISOString(),
+      targetRoles: params.targetRoles,
     };
 
     this.jobs.set(jobId, job);
@@ -213,6 +218,7 @@ class JobManager {
         model,
         jobId,
         teamStatus,
+        targetRoles: params.targetRoles,
       },
       {
         onText: (text) => {
@@ -229,14 +235,26 @@ class JobManager {
           });
         },
         onDispatch: (subRoleId, subTask) => {
+          // 2-layer defense: block dispatch to roles outside targetRoles scope
+          if (params.targetRoles && params.targetRoles.length > 0) {
+            if (!params.targetRoles.includes(subRoleId)) {
+              console.warn(`[JobManager] Dispatch blocked: ${params.roleId} → ${subRoleId} (not in targetRoles)`);
+              stream.emit('stderr', params.roleId, {
+                message: `Dispatch to ${subRoleId} blocked — not in active target scope for this wave.`,
+              });
+              return;
+            }
+          }
           // Create child job — startJob() auto-emits dispatch:start
           // on parent stream when parentJobId is set.
+          // Propagate targetRoles to child jobs for cascading enforcement
           this.startJob({
             type: 'assign',
             roleId: subRoleId,
             task: subTask,
             sourceRole: params.roleId,
             parentJobId: jobId,
+            targetRoles: params.targetRoles,
           });
         },
         onConsult: (subRoleId, question) => {
