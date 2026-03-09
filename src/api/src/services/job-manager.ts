@@ -10,7 +10,7 @@ import { readConfig, getConversationLimits } from './company-config.js';
 
 /* ─── Types ──────────────────────────────── */
 
-export type JobType = 'assign' | 'wave' | 'session-message';
+export type JobType = 'assign' | 'wave' | 'session-message' | 'consult';
 export type JobStatus = 'running' | 'done' | 'error' | 'awaiting_input';
 
 export interface Job {
@@ -216,6 +216,17 @@ class JobManager {
             roleId: subRoleId,
             task: subTask,
             sourceRole: params.roleId,
+            parentJobId: jobId,
+          });
+        },
+        onConsult: (subRoleId, question) => {
+          // Create child job in read-only mode for consultation
+          this.startJob({
+            type: 'consult',
+            roleId: subRoleId,
+            task: `[Consultation from ${params.roleId}] ${question}\n\nAnswer this question based on your role's expertise and knowledge. Be concise and specific.`,
+            sourceRole: params.roleId,
+            readOnly: true,
             parentJobId: jobId,
           });
         },

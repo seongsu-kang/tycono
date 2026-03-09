@@ -8,6 +8,7 @@ import {
   getSubordinates,
   getChainOfCommand,
   formatOrgChart,
+  canConsult,
 } from './org-tree.js';
 
 /* ─── Types ──────────────────────────────────── */
@@ -111,6 +112,12 @@ export function assembleContext(
   // Dispatch 도구 안내 (하위 Role이 있는 경우)
   if (subordinates.length > 0) {
     sections.push(buildDispatchSection(orgTree, roleId, subordinates, options?.teamStatus));
+  }
+
+  // Consult 도구 안내 (상담 가능한 Role이 있는 경우)
+  const consultSection = buildConsultSection(orgTree, roleId);
+  if (consultSection) {
+    sections.push(consultSection);
   }
 
   // Language preference
@@ -513,4 +520,49 @@ Every dispatch MUST include:
   }
 
   return section;
+}
+
+function buildConsultSection(orgTree: OrgTree, roleId: string): string | null {
+  // Build list of roles this agent can consult
+  const consultable: string[] = [];
+  for (const [id] of orgTree.nodes) {
+    if (id !== roleId && canConsult(orgTree, roleId, id)) {
+      consultable.push(id);
+    }
+  }
+
+  if (consultable.length === 0) return null;
+
+  const roleList = consultable.map((id) => {
+    const n = orgTree.nodes.get(id);
+    if (!n) return `- \`${id}\``;
+    const firstLine = n.persona.split('\n')[0] || n.name;
+    return `- **${n.name}** (\`${id}\`): ${firstLine}`;
+  }).join('\n');
+
+  return `# Consult (Ask Colleagues)
+
+You can ask questions to other roles using the \`consult\` tool:
+
+${roleList}
+
+## How to Consult
+
+Use the \`consult\` tool:
+\`\`\`json
+{ "roleId": "designer", "question": "What color scheme are you using for the dashboard?" }
+\`\`\`
+
+The consulted role will answer your question in read-only mode and return the response to you.
+
+## When to Use
+- Need technical decisions or clarifications from your manager
+- Need design/implementation details from a peer
+- Need domain expertise from another team member
+- Unsure about architecture or conventions — ask before guessing
+
+## Rules
+- The consulted role answers in **read-only mode** (no file modifications)
+- Keep questions specific and concise for better answers
+- Don't consult for tasks that should be dispatched (use dispatch for work assignments)`;
 }

@@ -1,11 +1,11 @@
 // Context Engine — public API
-export { buildOrgTree, canDispatchTo, getSubordinates, getDescendants, getChainOfCommand, formatOrgChart, refreshOrgTree } from './org-tree.js';
+export { buildOrgTree, canDispatchTo, canConsult, getSubordinates, getDescendants, getChainOfCommand, formatOrgChart, refreshOrgTree } from './org-tree.js';
 export type { OrgTree, OrgNode, Authority, KnowledgeAccess } from './org-tree.js';
 
 export { assembleContext } from './context-assembler.js';
 export type { AssembledContext } from './context-assembler.js';
 
-export { validateDispatch, validateWrite, validateRead } from './authority-validator.js';
+export { validateDispatch, validateConsult, validateWrite, validateRead } from './authority-validator.js';
 export type { AuthResult } from './authority-validator.js';
 
 export { RoleLifecycleManager } from './role-lifecycle.js';

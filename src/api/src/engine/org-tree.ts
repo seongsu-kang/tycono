@@ -195,6 +195,24 @@ export function canDispatchTo(tree: OrgTree, source: string, target: string): bo
   return descendants.includes(target);
 }
 
+/** Can source consult (ask a question to) target? Peers, direct manager, or subordinates. */
+export function canConsult(tree: OrgTree, source: string, target: string): boolean {
+  if (source === target) return false;
+  const sourceNode = tree.nodes.get(source);
+  const targetNode = tree.nodes.get(target);
+  if (!sourceNode || !targetNode) return false;
+
+  // 1. Peers — same parent
+  if (sourceNode.reportsTo === targetNode.reportsTo) return true;
+
+  // 2. Direct manager
+  if (sourceNode.reportsTo === target) return true;
+
+  // 3. Subordinates (same as dispatch scope)
+  const descendants = getDescendants(tree, source);
+  return descendants.includes(target);
+}
+
 /** Refresh tree (re-read all role.yaml files) */
 export function refreshOrgTree(companyRoot: string): OrgTree {
   return buildOrgTree(companyRoot);

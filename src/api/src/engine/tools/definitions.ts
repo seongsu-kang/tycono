@@ -90,6 +90,22 @@ export const DISPATCH_TOOL: ToolDefinition = {
 };
 
 /**
+ * 상담 도구 — 모든 Role에게 제공 (동료/상관/부하에게 질문)
+ */
+export const CONSULT_TOOL: ToolDefinition = {
+  name: 'consult',
+  description: 'Ask a question to another role (peer, manager, or subordinate) and wait for their answer. The consulted role will respond in read-only mode. Use when you need information, expertise, or a decision from a colleague.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      roleId: { type: 'string', description: 'Target role ID to consult (e.g., "designer", "cto")' },
+      question: { type: 'string', description: 'The question to ask' },
+    },
+    required: ['roleId', 'question'],
+  },
+};
+
+/**
  * Role에 따른 도구 목록 반환
  */
 export function getToolsForRole(hasSubordinates: boolean, readOnly: boolean): ToolDefinition[] {
@@ -97,7 +113,7 @@ export function getToolsForRole(hasSubordinates: boolean, readOnly: boolean): To
     return [...READ_TOOLS];
   }
 
-  const tools = [...READ_TOOLS, ...WRITE_TOOLS];
+  const tools = [...READ_TOOLS, ...WRITE_TOOLS, CONSULT_TOOL];
 
   if (hasSubordinates) {
     tools.push(DISPATCH_TOOL);

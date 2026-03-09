@@ -46,6 +46,7 @@ export interface RunnerCallbacks {
   onThinking?: (text: string) => void;
   onToolUse?: (tool: string, input?: Record<string, unknown>) => void;
   onDispatch?: (roleId: string, task: string) => void;
+  onConsult?: (roleId: string, question: string) => void;
   onTurnComplete?: (turn: number) => void;
   onError?: (error: string) => void;
 }

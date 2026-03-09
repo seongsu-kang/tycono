@@ -44,6 +44,7 @@ export class DirectApiRunner implements ExecutionRunner {
       onText: (text) => callbacks.onText?.(text),
       onToolExec: (name, input) => callbacks.onToolUse?.(name, input),
       onDispatch: (roleId, task) => callbacks.onDispatch?.(roleId, task),
+      onConsult: (roleId, question) => callbacks.onConsult?.(roleId, question),
       onTurnComplete: (turn) => callbacks.onTurnComplete?.(turn),
     }).then((agentResult): RunnerResult => ({
       output: agentResult.output,
