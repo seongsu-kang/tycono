@@ -32,6 +32,8 @@ import { OFFICE_THEMES } from '../types/appearance';
 import type { CharacterAppearance } from '../types/appearance';
 import { computeRoleLevels, type RoleLevelData } from '../utils/role-level';
 import { computeBadges, type BadgeContext } from '../utils/badges';
+import { getActiveQuest, getDefaultProgress, completeQuest, checkTrigger } from '../utils/quests';
+import type { QuestProgress, QuestTrigger } from '../utils/quests';
 
 /* ─── Role metadata ─────────────────────── */
 
@@ -120,6 +122,11 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     return map;
   }, [activeExecs]);
   const [toasts, setToasts] = useState<{ id: number; message: string; color: string }[]>([]);
+
+  /* Quest Board */
+  const [questProgress, setQuestProgress] = useState<QuestProgress>(getDefaultProgress());
+  const questLoadedRef = useRef(false);
+  const prevProjectCountRef = useRef(-1);
 
   /* Engine type (for chat pipeline auto-detection) */
   const [engineType, setEngineType] = useState<string | undefined>(undefined);
@@ -324,7 +331,17 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     api.getWaves().then(setWaves).catch(() => {});
     api.getDecisions().then(setDecisions).catch(() => {});
     api.getKnowledge().then(setKnowledgeDocs).catch(() => {});
+    api.getQuestProgress().then(p => { setQuestProgress(p); questLoadedRef.current = true; }).catch(() => { questLoadedRef.current = true; });
   }, []);
+
+  // Detect new project creation for quest trigger
+  useEffect(() => {
+    if (prevProjectCountRef.current === -1) { prevProjectCountRef.current = projects.length; return; }
+    if (projects.length > prevProjectCountRef.current) {
+      fireQuestTrigger({ type: 'project_created' });
+    }
+    prevProjectCountRef.current = projects.length;
+  }, [projects.length]);
 
   /* Load sessions on mount — restore existing sessions (metadata only) */
   useEffect(() => {
@@ -392,6 +409,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
       const title = `${roleId.toUpperCase()} · ${role?.name ?? roleId}`;
       setJobMinimized(false);
       setJobStack([{ jobId, title, color }]);
+      fireQuestTrigger({ type: 'task_executed', condition: { roleId } });
       // Log to #office
       officeChat.pushMessage({
         ts: Date.now(),
@@ -409,6 +427,21 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     const id = Date.now();
     setToasts((prev) => [...prev, { id, message, color }]);
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000);
+  };
+
+  /** Fire a quest trigger event and complete matching quest */
+  const fireQuestTrigger = (event: QuestTrigger) => {
+    if (!questLoadedRef.current) return;
+    setQuestProgress(prev => {
+      const active = getActiveQuest(prev);
+      if (!active || !checkTrigger(active, event)) return prev;
+      const { progress: next, quest } = completeQuest(prev, active.id);
+      if (quest) {
+        addToast(`📋 Quest complete: ${quest.title}`, '#7C3AED');
+        api.saveQuestProgress(next).catch(() => {});
+      }
+      return next;
+    });
   };
 
   /** Update role levels and detect level-ups */
@@ -569,6 +602,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     setShowWaveModal(false);
     try {
       const resp = await api.startJob({ type: 'wave', directive });
+      fireQuestTrigger({ type: 'wave_dispatched' });
       // Wave returns { jobIds: string[] } — one per C-Level role
       const jobIds: string[] = resp.jobIds ?? (resp.jobId ? [resp.jobId] : []);
       const cLevels = roles.filter(r => r.level === 'c-level');
@@ -655,6 +689,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     setAppearance(input.id, appearance);
     refreshRoles();
     addToast(`${input.name} hired!`, '#2E7D32');
+    fireQuestTrigger({ type: 'role_hired', condition: { roleId: input.id } });
   };
 
   const handleFireRole = async (roleId: string) => {
@@ -854,6 +889,12 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
         ? { ...s, messages: [...s.messages, ceoMsg, roleMsg], updatedAt: new Date().toISOString() }
         : s,
     ));
+
+    // Quest trigger: task executed via terminal
+    const session = sessions.find(s => s.id === sessionId);
+    if (session && mode === 'do') {
+      fireQuestTrigger({ type: 'task_executed', condition: { roleId: session.roleId } });
+    }
 
     setStreamingSessionId(sessionId);
 
@@ -1642,6 +1683,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           mode={panel.type === 'bulletin' ? 'bulletin' : 'decisions'}
           onClose={closePanel}
           terminalWidth={terminalOpen ? terminalWidth : 0}
+          questProgress={questProgress}
         />
       )}
       {panel.type === 'knowledge' && (

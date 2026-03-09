@@ -55,6 +55,7 @@ interface TopDownOfficeViewProps {
   getAppearance?: (roleId: string) => CharacterAppearance;
   onCustomize?: (roleId: string) => void;
   onHireClick?: () => void;
+  onMascotClick?: () => void;
   roleLevels?: Record<string, { level: number; totalTokens: number; progress: number }>;
 }
 
@@ -796,7 +797,7 @@ function drawScene(
 export default function TopDownOfficeView({
   roles, projects, roleStatuses, activeExecs,
   onRoleClick, onProjectClick, onBulletinClick, onDecisionsClick, onKnowledgeClick, onSettingsClick, onThemeClick, onStatsClick,
-  getRoleSpeech, getAppearance, onHireClick, roleLevels,
+  getRoleSpeech, getAppearance, onHireClick, onMascotClick, roleLevels,
 }: TopDownOfficeViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -1099,6 +1100,14 @@ export default function TopDownOfficeView({
           return { type: 'role' as const, id };
       }
     }
+    // Check mascot
+    const m = mascotRef.current;
+    if (m) {
+      const isSide = m.dir === 'left' || m.dir === 'right';
+      const mw = isSide ? 13 : 9, mh = isSide ? 7 : 10;
+      if (mx >= m.x && mx <= m.x + mw && my >= m.y && my <= m.y + mh)
+        return { type: 'mascot' as const, id: 'mascot' };
+    }
     // Check facilities
     for (const fz of _facilityZones) {
       const hb = facilityHitBox(fz);
@@ -1347,6 +1356,7 @@ export default function TopDownOfficeView({
     const hit = hitTest(e);
     if (!hit) return;
     if (hit.type === 'role') { onRoleClick(hit.id); return; }
+    if (hit.type === 'mascot') { onMascotClick?.(); return; }
     // Facility clicks
     switch (hit.id) {
       case 'meeting': {

@@ -1,6 +1,7 @@
 import { COMPANY_ROOT } from './file-reader.js';
 import { ActivityStream, type ActivityEvent } from './activity-stream.js';
 import { buildOrgTree } from '../engine/org-tree.js';
+import { validateDispatch, validateConsult } from '../engine/authority-validator.js';
 import { createRunner } from '../engine/runners/index.js';
 import type { ExecutionRunner } from '../engine/runners/types.js';
 import { setActivity, updateActivity, completeActivity } from './activity-tracker.js';
@@ -117,10 +118,29 @@ class JobManager {
     return () => { this.jobCreatedListeners.delete(listener); };
   }
 
-  /** Start a new execution job. Returns the Job immediately (fire-and-forget). */
+  /** Start a new execution job. Returns the Job immediately (fire-and-forget).
+   *  Throws if sourceRole lacks authority to dispatch/consult the target role. */
   startJob(params: StartJobParams): Job {
     const jobId = `job-${Date.now()}-${this.nextId++}`;
     const orgTree = buildOrgTree(COMPANY_ROOT);
+
+    // Authority gate: validate dispatch/consult authority at job creation
+    if (params.sourceRole && params.sourceRole !== 'ceo') {
+      if (params.type === 'consult') {
+        const auth = validateConsult(orgTree, params.sourceRole, params.roleId);
+        if (!auth.allowed) {
+          console.warn(`[JobManager] Authority denied: ${params.sourceRole} → ${params.roleId} (consult): ${auth.reason}`);
+          throw new Error(`Authority denied: ${auth.reason}`);
+        }
+      } else if (params.type === 'assign' && params.parentJobId) {
+        // Only validate dispatch authority for child jobs (not CEO waves)
+        const auth = validateDispatch(orgTree, params.sourceRole, params.roleId);
+        if (!auth.allowed) {
+          console.warn(`[JobManager] Authority denied: ${params.sourceRole} → ${params.roleId} (dispatch): ${auth.reason}`);
+          throw new Error(`Authority denied: ${auth.reason}`);
+        }
+      }
+    }
 
     const stream = new ActivityStream(jobId, params.roleId, params.parentJobId);
 

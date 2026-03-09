@@ -214,18 +214,48 @@ function buildCompanyContext(): string {
     }
   } catch { /* no org */ }
 
-  // 3. Active projects
+  // 3. Active projects + current phase from tasks.md
   try {
     const projectsContent = readFile('projects/projects.md');
     const rows = parseMarkdownTable(projectsContent);
     const activeProjects = rows
       .filter(r => (r.status ?? r.상태 ?? '').toLowerCase() !== 'archived')
-      .map(r => `- ${r.name ?? r.project ?? r.프로젝트 ?? ''} (${r.status ?? r.상태 ?? ''})`)
+      .map(r => {
+        const name = r.name ?? r.project ?? r.프로젝트 ?? '';
+        const status = r.status ?? r.상태 ?? '';
+        const folder = r.folder ?? r.path ?? r.경로 ?? '';
+        // Try to read tasks.md for current phase info
+        let phaseInfo = '';
+        if (folder) {
+          try {
+            const tasksPath = `${folder.replace(/^\//, '')}/tasks.md`;
+            const tasksContent = readFile(tasksPath);
+            // Extract current phase (look for "Current" or latest non-done phase)
+            const phaseMatch = tasksContent.match(/##\s+(Phase\s+\S+[^\n]*)/gi);
+            if (phaseMatch) phaseInfo = ` — ${phaseMatch[0].replace(/^##\s+/, '').slice(0, 60)}`;
+          } catch { /* no tasks.md */ }
+        }
+        return `- ${name} (${status}${phaseInfo})`;
+      })
       .slice(0, 5);
     if (activeProjects.length > 0) {
       parts.push(`Active Projects:\n${activeProjects.join('\n')}`);
     }
   } catch { /* no projects */ }
+
+  // 3b. Tech stack reality check (prevent hallucination about wrong tech)
+  try {
+    const config = readConfig(COMPANY_ROOT);
+    if (config.codeRoot) {
+      const pkgPath = path.join(config.codeRoot, 'package.json');
+      if (fs.existsSync(pkgPath)) {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+        const name = pkg.name ?? '';
+        const version = pkg.version ?? '';
+        parts.push(`Tech Stack: ${name}@${version} — TypeScript + React + Node.js (Express). NO Python in codebase. NO ongoing language migration.`);
+      }
+    }
+  } catch { /* no package.json */ }
 
   // 4. Knowledge highlights (hub TL;DRs, max 3)
   try {
@@ -352,6 +382,26 @@ function buildRoleContext(roleId: string): string {
       }
     }
   } catch { /* no decisions */ }
+
+  // 5. If sparse context, add architecture/tech-debt highlights as fallback
+  if (parts.length < 2) {
+    try {
+      const techDebtPath = path.join(COMPANY_ROOT, 'architecture', 'tech-debt.md');
+      if (fs.existsSync(techDebtPath)) {
+        const tdContent = fs.readFileSync(techDebtPath, 'utf-8');
+        // Extract active (non-fixed) items
+        const rows = parseMarkdownTable(tdContent);
+        const active = rows
+          .filter(r => !(r.status ?? '').toLowerCase().includes('fixed') && !(r.status ?? '').toLowerCase().includes('done'))
+          .slice(0, 3)
+          .map(r => `- ${r.id ?? ''}: ${r.title ?? r.issue ?? ''} (${r.status ?? ''})`)
+          .filter(s => s.length > 10);
+        if (active.length > 0) {
+          parts.push(`[Active Tech Debt]\n${active.join('\n')}`);
+        }
+      }
+    } catch { /* no tech-debt */ }
+  }
 
   return parts.length > 0
     ? `\n\nYOUR KNOWLEDGE (real AKB context — reference this in conversation):\n${parts.join('\n\n')}`
@@ -578,10 +628,11 @@ ${relContext}
 ${roleStyle}
 
 GROUNDING (CRITICAL):
-You have been given real company knowledge above under "YOUR KNOWLEDGE". This is from your journal, recent CEO waves, standups, and decisions.
+You have been given real company knowledge above under "COMPANY CONTEXT" and "YOUR KNOWLEDGE". This is from AKB files, journal, CEO waves, standups, and decisions.
 You MUST reference this real context in your conversations — mention specific projects, decisions, tasks, or events by name.
 Do NOT generate generic workplace chatter. Every message should show you're aware of what's actually happening in the company.
 If your knowledge section mentions a specific decision or wave, reference it naturally (e.g. "after the test minimization decision..." or "CEO's wave about side panel...").
+NEVER invent or assume technologies, tools, migrations, or projects NOT mentioned in the context above. If the Tech Stack says "TypeScript + React + Node.js", do NOT talk about Python, tc.py, or any language migration. Only discuss what is explicitly in your provided context.
 
 CONVERSATION RULES:
 1. Stay deeply in character — your expertise, vocabulary, and concerns should be DISTINCT from other roles.

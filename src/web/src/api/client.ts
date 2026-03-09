@@ -210,6 +210,11 @@ export const api = {
   // Stats (Gamification)
   getCompanyStats: () => get<CompanyStats>('/sync/stats'),
 
+  // Quests
+  getQuestProgress: () => get<{ completedQuests: string[]; activeChapter: number; sideQuestsCompleted: string[]; firstCompletedAt?: string }>('/quests/progress'),
+  saveQuestProgress: (data: { completedQuests: string[]; activeChapter: number; sideQuestsCompleted: string[]; firstCompletedAt?: string }) =>
+    fetch(`${BASE}/quests/progress`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(r => r.json()),
+
   // Git Status
   getGitStatus: () => get<GitStatus>('/git/status'),
   deleteWorktree: (path: string) => del<{ ok: boolean }>(`/git/worktrees/${encodeURIComponent(path)}`),

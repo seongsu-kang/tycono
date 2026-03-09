@@ -112,6 +112,17 @@ export function assembleContext(
   // Dispatch 도구 안내 (하위 Role이 있는 경우)
   if (subordinates.length > 0) {
     sections.push(buildDispatchSection(orgTree, roleId, subordinates, options?.teamStatus));
+  } else if (node.level === 'c-level') {
+    // C-level with no subordinates — clarify authority boundaries
+    sections.push(`# Team Structure
+
+⚠️ **You have no direct reports.** You are an individual contributor at the C-level.
+
+- You CANNOT dispatch tasks to other roles (no subordinates)
+- You CAN consult other roles for information (see Consult section below)
+- You MUST do the work yourself — research, analyze, write, decide
+- If implementation requires another role (e.g., engineering work), recommend it to CEO
+- Make decisions within your authority autonomously — do NOT ask CEO for decisions you can make yourself`);
   }
 
   // Consult 도구 안내 (상담 가능한 Role이 있는 경우)

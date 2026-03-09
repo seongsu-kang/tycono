@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type { Standup, Wave, Decision } from '../../types';
+import type { QuestProgress } from '../../utils/quests';
 import OfficeMarkdown from './OfficeMarkdown';
+import QuestBoard from './QuestBoard';
 import { usePanelResize } from './KnowledgePanel';
 
 interface Props {
@@ -10,10 +12,11 @@ interface Props {
   mode: 'bulletin' | 'decisions';
   onClose: () => void;
   terminalWidth?: number;
+  questProgress?: QuestProgress;
 }
 
-export default function OperationsPanel({ standups, waves, decisions, mode, onClose, terminalWidth = 0 }: Props) {
-  const [tab, setTab] = useState<'standups' | 'waves' | 'decisions'>(
+export default function OperationsPanel({ standups, waves, decisions, mode, onClose, terminalWidth = 0, questProgress }: Props) {
+  const [tab, setTab] = useState<'standups' | 'waves' | 'decisions' | 'quests'>(
     mode === 'decisions' ? 'decisions' : 'standups'
   );
 
@@ -48,6 +51,7 @@ export default function OperationsPanel({ standups, waves, decisions, mode, onCl
         <div className="flex" style={{ borderBottom: '1px solid var(--terminal-border)' }}>
           {mode === 'bulletin' ? (
             <>
+              <TabBtn label="📋 Quests" active={tab === 'quests'} onClick={() => setTab('quests')} />
               <TabBtn label={`Standups (${standups.length})`} active={tab === 'standups'} onClick={() => setTab('standups')} />
               <TabBtn label={`Waves (${waves.length})`} active={tab === 'waves'} onClick={() => setTab('waves')} />
             </>
@@ -58,6 +62,7 @@ export default function OperationsPanel({ standups, waves, decisions, mode, onCl
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-5">
+          {tab === 'quests' && questProgress && <QuestBoard progress={questProgress} />}
           {tab === 'standups' && standups.map((s, i) => (
             <ContentCard key={i} title={`Standup ${s.date}`} content={s.content} />
           ))}
