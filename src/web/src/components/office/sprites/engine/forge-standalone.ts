@@ -187,16 +187,169 @@ function renderToDataURL(appearance: StandaloneAppearance, opts?: RenderOpts): s
   return canvas.toDataURL('image/png');
 }
 
+/* ── Blueprint Types (for Creator Program) ── */
+
+interface BlueprintPixel {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  c: string;   // ColorToken or hex
+  a?: number;  // alpha 0-1
+}
+
+interface Blueprint {
+  id: string;
+  name: string;
+  type: 'hair' | 'outfit' | 'accessory' | 'furniture';
+  version: string;
+  author?: { id: string; name: string };
+  canvas: { w: number; h: number };
+  pixels: BlueprintPixel[];
+  tags?: string[];
+  license?: string;
+}
+
+/* ── Blueprint Validation ── */
+
+function validateBlueprint(bp: any): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  if (!bp || typeof bp !== 'object') return { valid: false, errors: ['Blueprint must be an object'] };
+  if (typeof bp.id !== 'string' || !bp.id) errors.push('id is required');
+  if (typeof bp.name !== 'string' || !bp.name) errors.push('name is required');
+  if (!['hair', 'outfit', 'accessory', 'furniture'].includes(bp.type)) errors.push('type must be hair|outfit|accessory|furniture');
+  if (!bp.canvas || bp.canvas.w !== 12 || bp.canvas.h !== 22) errors.push('canvas must be { w: 12, h: 22 }');
+  if (!Array.isArray(bp.pixels) || bp.pixels.length === 0) errors.push('pixels array is required and non-empty');
+  if (Array.isArray(bp.pixels)) {
+    for (let i = 0; i < bp.pixels.length; i++) {
+      const p = bp.pixels[i];
+      if (typeof p.x !== 'number' || typeof p.y !== 'number') errors.push(`pixel[${i}]: x,y required`);
+      if (typeof p.w !== 'number' || typeof p.h !== 'number') errors.push(`pixel[${i}]: w,h required`);
+      if (typeof p.c !== 'string' || !p.c) errors.push(`pixel[${i}]: c (color) required`);
+    }
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+/* ── Blueprint Registry (runtime custom assets) ── */
+
+const customBlueprints = new Map<string, Blueprint>();
+
+function loadBlueprint(json: Blueprint | string): { ok: boolean; error?: string } {
+  const bp: Blueprint = typeof json === 'string' ? JSON.parse(json) : json;
+  const { valid, errors } = validateBlueprint(bp);
+  if (!valid) return { ok: false, error: errors.join('; ') };
+  customBlueprints.set(`${bp.type}:${bp.id}`, bp);
+  return { ok: true };
+}
+
+function getCustomBlueprint(type: string, id: string): Blueprint | undefined {
+  return customBlueprints.get(`${type}:${id}`);
+}
+
+function listCustomBlueprints(type?: string): Blueprint[] {
+  const all = Array.from(customBlueprints.values());
+  return type ? all.filter(b => b.type === type) : all;
+}
+
+function clearCustomBlueprints(): void {
+  customBlueprints.clear();
+}
+
+/* ── Render with custom assets ── */
+
+function renderWithCustom(
+  appearance: StandaloneAppearance,
+  customAssets: { hair?: string; outfit?: string; accessory?: string },
+  opts?: RenderOpts,
+): HTMLCanvasElement {
+  const scale = opts?.scale ?? 3;
+  const padX = opts?.padX ?? 2;
+  const padTop = opts?.padY ?? 4;
+  const padBottom = 1;
+  const logW = 12 + padX * 2;
+  const logH = 22 + padTop + padBottom;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = logW * scale;
+  canvas.height = logH * scale;
+  canvas.style.imageRendering = 'pixelated';
+  const ctx = canvas.getContext('2d')!;
+
+  const ox = padX;
+  const oy = padTop;
+
+  // Lower body
+  renderPixels(ctx, BASE_LOWER, scale, ox, oy, appearance);
+
+  // Outfit: custom or built-in
+  const customOutfit = customAssets.outfit ? getCustomBlueprint('outfit', customAssets.outfit) : undefined;
+  if (customOutfit) {
+    renderPixels(ctx, customOutfit.pixels as Pixel[], scale, ox, oy, appearance);
+  } else {
+    renderPixels(ctx, getOutfitPixels(appearance.outfitStyle || 'tshirt'), scale, ox, oy, appearance);
+  }
+
+  // Head
+  renderPixels(ctx, BASE_HEAD, scale, ox, oy, appearance);
+
+  // Hair: custom or built-in
+  const customHair = customAssets.hair ? getCustomBlueprint('hair', customAssets.hair) : undefined;
+  if (customHair) {
+    renderPixels(ctx, customHair.pixels as Pixel[], scale, ox, oy, appearance);
+  } else {
+    renderPixels(ctx, getHairPixels(appearance.hairStyle || 'short'), scale, ox, oy, appearance);
+  }
+
+  // Accessory: custom or built-in
+  const customAcc = customAssets.accessory ? getCustomBlueprint('accessory', customAssets.accessory) : undefined;
+  if (customAcc) {
+    renderPixels(ctx, customAcc.pixels as Pixel[], scale, ox, oy, appearance);
+  } else {
+    renderPixels(ctx, getAccessoryPixels(appearance.accessory || 'none'), scale, ox, oy, appearance);
+  }
+
+  return canvas;
+}
+
+/* ── Export Blueprint from pixel data ── */
+
+function exportBlueprint(
+  params: { id: string; name: string; type: 'hair' | 'outfit' | 'accessory' | 'furniture'; pixels: BlueprintPixel[]; tags?: string[]; author?: { id: string; name: string } },
+): Blueprint {
+  return {
+    id: params.id,
+    name: params.name,
+    type: params.type,
+    version: '1.0.0',
+    author: params.author,
+    canvas: { w: 12, h: 22 },
+    pixels: params.pixels,
+    tags: params.tags || [],
+    license: 'cc-by-4.0',
+  };
+}
+
 /* ── Exported Module (becomes TyconoForge global via IIFE) ── */
 
 export {
   render,
   renderTo,
   renderToDataURL,
+  renderWithCustom,
   darken,
   lighten,
   resolveColor,
+  loadBlueprint,
+  getCustomBlueprint,
+  listCustomBlueprints,
+  clearCustomBlueprints,
+  validateBlueprint,
+  exportBlueprint,
 };
+
+// Re-export Blueprint type interface for external use
+export type { Blueprint, BlueprintPixel };
 
 /** Available hair style IDs */
 export const HAIRSTYLES = getAllHairStyles().map(h => h.id);
