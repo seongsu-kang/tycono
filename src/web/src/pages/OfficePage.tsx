@@ -512,6 +512,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
       roles: Object.entries(roleLevels).map(([id, d]) => ({ id, level: d.level, totalTokens: d.totalTokens })),
       totalTokens: Object.values(roleLevels).reduce((s, r) => s + r.totalTokens, 0),
       roleCount: roles.length,
+      completedQuests: questProgress.completedQuests,
     };
     const earned = computeBadges(badgeCtx);
     const prevIds = prevBadgeIdsRef.current;
@@ -524,7 +525,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
       }
     }
     prevBadgeIdsRef.current = new Set(earned.map(b => b.id));
-  }, [roleLevels, roles.length]);
+  }, [roleLevels, roles.length, questProgress.completedQuests]);
 
   const handleExecutionDone = () => {
     const current = jobStack[jobStack.length - 1];

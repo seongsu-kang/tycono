@@ -89,6 +89,42 @@ export const BADGES: Badge[] = [
     description: 'All roles Lv.5+',
     check: (ctx) => ctx.roleCount >= 3 && ctx.roles.every(r => r.level >= 5),
   },
+  // ─── Quest Badges ───
+  {
+    id: 'first-launch',
+    name: 'First Launch',
+    icon: '🚀',
+    description: 'Completed Chapter 2 — gave your first order',
+    check: (ctx) => ctx.completedQuests?.includes('ch2-q2') ?? false,
+  },
+  {
+    id: 'team-builder',
+    name: 'Team Builder',
+    icon: '🏗️',
+    description: 'Completed Chapter 4 — dispatched your first wave',
+    check: (ctx) => ctx.completedQuests?.includes('ch4-q2') ?? false,
+  },
+  {
+    id: 'explorer',
+    name: 'Explorer',
+    icon: '🔍',
+    description: 'Completed Chapter 5 — customized a character',
+    check: (ctx) => ctx.completedQuests?.includes('ch5-q2') ?? false,
+  },
+  {
+    id: 'interior-designer',
+    name: 'Interior Designer',
+    icon: '🎨',
+    description: 'Completed Chapter 7 — bought premium furniture',
+    check: (ctx) => ctx.completedQuests?.includes('ch7-q2') ?? false,
+  },
+  {
+    id: 'tycoon-master',
+    name: 'Tycoon Master',
+    icon: '🎯',
+    description: 'Completed all 10 chapters',
+    check: (ctx) => ctx.completedQuests?.includes('ch10-q3') ?? false,
+  },
 ];
 
 /** Compute earned badges from context */
