@@ -460,7 +460,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   };
 
   /** Connect SSE stream for a wave job → update virtual terminal session */
-  const connectWaveStream = (jobId: string, roleId: string) => {
+  const connectWaveStream = (jobId: string, _roleId: string) => {
     const sessionId = `wave-${jobId}`;
     const controller = new AbortController();
     waveStreamsRef.current.set(jobId, controller);
