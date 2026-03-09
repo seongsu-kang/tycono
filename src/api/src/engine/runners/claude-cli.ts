@@ -355,7 +355,12 @@ export class ClaudeCliRunner implements ExecutionRunner {
     ];
 
     // Disallow Agent and Task tools to force use of dispatch bridge
-    args.push('--disallowed-tools', 'Agent', 'Task');
+    // For roles with subordinates (C-Level), also disallow Edit/Write to enforce delegation
+    const disallowed = ['Agent', 'Task'];
+    if (subordinates.length > 0 && !readOnly) {
+      disallowed.push('Edit', 'Write', 'NotebookEdit');
+    }
+    args.push('--disallowed-tools', ...disallowed);
 
     // 7. 프로세스 생성 — 중첩 세션 방지를 위해 CLAUDECODE 환경변수 제거
     const cleanEnv = { ...process.env };
