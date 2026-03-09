@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api/client';
+import { cloudApi } from '../../api/cloud';
 import type { CompanyStats, RoleLevelInfo } from '../../types';
 
 interface CompanyStatsPanelProps {
@@ -10,10 +11,28 @@ export default function CompanyStatsPanel({ onClose }: CompanyStatsPanelProps) {
   const [stats, setStats] = useState<CompanyStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [, setSynced] = useState(false);
 
   useEffect(() => {
-    api.getCompanyStats()
-      .then(setStats)
+    Promise.all([api.getCompanyStats(), api.getPreferences()])
+      .then(async ([s, p]) => {
+        setStats(s);
+        // Auto-sync stats to Cloud (fire-and-forget)
+        const prefs = p as { instanceId?: string };
+        if (prefs.instanceId) {
+          try {
+            const { name } = await cloudApi.getMyName(prefs.instanceId);
+            await cloudApi.syncStats({
+              instanceId: prefs.instanceId,
+              displayName: name ?? undefined,
+              roleCount: s.company.roleCount,
+              totalTokens: s.company.totalTokens,
+              rolesData: s.roles.map(r => ({ roleId: r.roleId, name: r.name, tokens: r.totalTokens })),
+            });
+            setSynced(true);
+          } catch { /* silent — Cloud unavailable is fine */ }
+        }
+      })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, []);

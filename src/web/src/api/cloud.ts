@@ -63,6 +63,10 @@ export type StoreSortOption = 'name' | 'popular' | 'installs' | 'newest';
 export const cloudApi = {
   health: () => cloudGet<{ status: string; version: string }>('/api/health'),
 
+  // Auth
+  getMyName: (instanceId: string) =>
+    cloudGet<{ name: string | null }>(`/api/auth/my-name?instance_id=${encodeURIComponent(instanceId)}`),
+
   // Store
   getCharacters: (opts?: { sort?: StoreSortOption; instanceId?: string }) => {
     const params = new URLSearchParams();
@@ -104,4 +108,13 @@ export const cloudApi = {
     totalCostUsd: number;
     rolesSummary?: Array<{ roleId: string; level: number; tokens: number }>;
   }) => cloudPost<{ ok: boolean }>('/api/telemetry', data),
+
+  // Stats — sync company stats to Cloud for public profile
+  syncStats: (data: {
+    instanceId: string;
+    displayName?: string;
+    roleCount: number;
+    totalTokens: number;
+    rolesData: Array<{ roleId: string; name: string; tokens: number }>;
+  }) => cloudPost<{ ok: boolean }>('/api/stats/sync', data),
 };

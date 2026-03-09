@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api/client';
+import { cloudApi } from '../../api/cloud';
 import type { SpeechSettings } from '../../types/speech';
 
 interface Props {
@@ -18,13 +19,24 @@ export default function SettingsPanel({
   language, onLanguageChange, onOpenSync, onOpenGitStatus, onOpenStats,
 }: Props) {
   const [instanceId, setInstanceId] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [regenConfirm, setRegenConfirm] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
 
   useEffect(() => {
     api.getPreferences()
-      .then(p => setInstanceId((p as { instanceId?: string }).instanceId ?? null))
+      .then(async (p) => {
+        const prefs = p as { instanceId?: string };
+        setInstanceId(prefs.instanceId ?? null);
+        // Fetch display name from Cloud
+        if (prefs.instanceId) {
+          try {
+            const { name } = await cloudApi.getMyName(prefs.instanceId);
+            setDisplayName(name);
+          } catch { /* Cloud unavailable */ }
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -247,6 +259,21 @@ export default function SettingsPanel({
                 🌐 WEB STORE
               </button>
             </div>
+            {/* Profile Link */}
+            {displayName && (
+              <div style={{ textAlign: 'center', marginTop: -8 }}>
+                <a
+                  href={`https://tycono.ai/profile.html?u=${encodeURIComponent(displayName)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ fontSize: 10, color: 'var(--terminal-text-muted)', textDecoration: 'none' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--terminal-text-muted)')}
+                >
+                  View public profile →
+                </a>
+              </div>
+            )}
           </div>
         </div>
       </div>
