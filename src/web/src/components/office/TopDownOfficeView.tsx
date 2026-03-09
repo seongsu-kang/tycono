@@ -8,6 +8,8 @@ import { applyStyles } from './TopDownCharCanvas';
 import './sprites/data'; // trigger blueprint registration
 import { WALK_FRAMES } from './sprites/data/walk-frames-mini';
 import type { WalkDirection } from './sprites/data/walk-frames-mini';
+import { MASCOT_FRAMES, MASCOT_IDLE_TONGUE, MASCOT_SHADOW, MASCOT_SHADOW_SIDE } from './sprites/data/mascot-bichon';
+import type { MascotDirection } from './sprites/data/mascot-bichon';
 import { generateFloorLayout, selectPreset, applyFurnitureOverrides, applyDeskOverrides, applyFurnitureRemovals, applyAddedFurniture } from './floor-template';
 import type { FloorLayout, DeskDef, RoomDef } from './floor-template';
 import {
@@ -348,6 +350,108 @@ interface CharState {
   stateTimer: number;
 }
 
+/* ── Mascot (office pet) ── */
+interface MascotState {
+  x: number; y: number;
+  dir: MascotDirection;
+  walkFrame: number; walkTimer: number;
+  path: { x: number; y: number }[];
+  room: string;
+  state: 'walking' | 'idle';
+  stateTimer: number;
+  tongueTimer: number;  // tongue animation while idle
+}
+
+function createMascot(): MascotState {
+  const rooms = Object.keys(_layout.rooms);
+  const startRoom = rooms[Math.floor(Math.random() * rooms.length)];
+  const rm = _layout.rooms[startRoom];
+  return {
+    x: rm.fx + rm.fw / 2,
+    y: rm.fy + rm.fh / 2,
+    dir: 'down', walkFrame: 0, walkTimer: 0,
+    path: [], room: startRoom,
+    state: 'walking',
+    stateTimer: 0,
+    tongueTimer: 0,
+  };
+}
+
+function updateMascot(m: MascotState) {
+  m.stateTimer--;
+
+  if (m.state === 'idle') {
+    m.tongueTimer++;
+    if (m.stateTimer <= 0) {
+      m.state = 'walking';
+      m.tongueTimer = 0;
+      // pick a random destination
+      const allRooms = Object.keys(_layout.rooms);
+      if (Math.random() < 0.35 && allRooms.length > 1) {
+        // cross-room walk
+        const rooms = allRooms.filter(r => r !== m.room);
+        const targetRoom = rooms[Math.floor(Math.random() * rooms.length)];
+        const crossPath = buildCrossRoomPath(m as any, targetRoom);
+        const tWp = _layout.waypoints[targetRoom];
+        if (tWp && tWp.length > 0) {
+          const twp = tWp[Math.floor(Math.random() * tWp.length)];
+          const last = crossPath[crossPath.length - 1] ?? { x: m.x, y: m.y };
+          const inRoom = buildPathInRoom(last.x, last.y, twp.x, twp.y, targetRoom);
+          m.path = [...crossPath, ...inRoom];
+        } else {
+          m.path = crossPath;
+        }
+      } else {
+        const pts = _layout.waypoints[m.room];
+        if (pts && pts.length > 0) {
+          const wp = pts[Math.floor(Math.random() * pts.length)];
+          m.path = buildPathInRoom(m.x, m.y, wp.x, wp.y, m.room);
+        }
+      }
+      m.walkTimer = 0;
+    }
+  } else if (m.state === 'walking') {
+    if (m.path.length === 0) {
+      m.state = 'idle'; m.dir = 'down';
+      m.stateTimer = 120 + Math.floor(Math.random() * 240);
+      return;
+    }
+    const tgt = m.path[0];
+    const dx = tgt.x - m.x, dy = tgt.y - m.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 1.5) {
+      m.x = tgt.x; m.y = tgt.y; m.path.shift();
+      for (const [rn, rm] of Object.entries(_layout.rooms)) {
+        if (m.x >= rm.fx && m.x <= rm.fx + rm.fw && m.y >= rm.fy && m.y <= rm.fy + rm.fh) {
+          m.room = rn; break;
+        }
+      }
+    } else {
+      const spd = 0.15;  // slightly slower than employees
+      m.x += dx / dist * spd; m.y += dy / dist * spd;
+      if (Math.abs(dx) > Math.abs(dy)) m.dir = dx > 0 ? 'right' : 'left';
+      else m.dir = dy > 0 ? 'down' : 'up';
+      m.walkTimer++;
+      m.walkFrame = Math.floor(m.walkTimer / 15) % 2;  // 2 frames for mascot
+    }
+  }
+}
+
+function drawMascot(m: MascotState) {
+  const frame = m.state === 'walking' ? m.walkFrame : 0;
+  const pixels = MASCOT_FRAMES[m.dir][frame];
+  const mx = Math.round(m.x), my = Math.round(m.y);
+  const isSide = m.dir === 'left' || m.dir === 'right';
+  // shadow (wider for side views)
+  renderPixelsAt(_ctx, isSide ? MASCOT_SHADOW_SIDE : MASCOT_SHADOW, mx, my);
+  // dog sprite
+  renderPixelsAt(_ctx, pixels, mx, my);
+  // tongue when idle facing down
+  if (m.state === 'idle' && m.dir === 'down' && (m.tongueTimer % 80) < 50) {
+    renderPixelsAt(_ctx, MASCOT_IDLE_TONGUE, mx, my);
+  }
+}
+
 function createChars(roleIds: string[]): Record<string, CharState> {
   const chars: Record<string, CharState> = {};
   let idx = 0;
@@ -524,6 +628,7 @@ function drawScene(
   chars: Record<string, CharState>,
   getAp: (roleId: string) => CharacterAppearance,
   roleStatuses: Record<string, string>,
+  mascot?: MascotState | null,
 ) {
   const { canvasW: AW, canvasH: AH, rooms } = _layout;
   _ctx.clearRect(0, 0, AW, AH);
@@ -612,6 +717,14 @@ function drawScene(
     }
   }
 
+  // Office mascot (bichon dog)
+  if (mascot) {
+    entities.push({
+      y: mascot.y + 10,  // offset for Y-sort (mascot is smaller)
+      draw: () => drawMascot(mascot),
+    });
+  }
+
   entities.sort((a, b) => a.y - b.y);
   for (const e of entities) e.draw();
 
@@ -689,6 +802,7 @@ export default function TopDownOfficeView({
   const wrapRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const charsRef = useRef<Record<string, CharState>>({});
+  const mascotRef = useRef<MascotState | null>(null);
   const frameRef = useRef(0);
   const zoomRef = useRef(DEFAULT_ZOOM);
   const [editMode, setEditMode] = useState(false);
@@ -759,6 +873,7 @@ export default function TopDownOfficeView({
     if (Object.keys(deskOverridesRef.current).length > 0) applyDeskOverrides(DESKS, deskOverridesRef.current);
     _facilityZones = buildFacilityZonesFromFurniture(newLayout);
     charsRef.current = createChars(assignedRoleIds);
+    mascotRef.current = createMascot();
 
     // Update canvas dimensions
     const canvas = canvasRef.current;
@@ -814,7 +929,8 @@ export default function TopDownOfficeView({
     const tick = () => {
       frameRef.current++;
       updateChars(charsRef.current, frameRef.current);
-      drawScene(charsRef.current, getAp, propsRef.current.roleStatuses);
+      if (mascotRef.current) updateMascot(mascotRef.current);
+      drawScene(charsRef.current, getAp, propsRef.current.roleStatuses, mascotRef.current);
       updateOverlay();
       raf = requestAnimationFrame(tick);
     };
