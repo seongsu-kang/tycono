@@ -12,6 +12,7 @@ export interface ToolExecutorOptions {
   roleId: string;
   orgTree: OrgTree;
   onDispatch?: (roleId: string, task: string) => Promise<string>;
+  onConsult?: (roleId: string, question: string) => Promise<string>;
   onToolExec?: (name: string, input: Record<string, unknown>) => void;
 }
 
@@ -21,7 +22,7 @@ export async function executeTool(
   toolCall: ToolCall,
   options: ToolExecutorOptions,
 ): Promise<ToolResult> {
-  const { companyRoot, roleId, orgTree, onDispatch, onToolExec } = options;
+  const { companyRoot, roleId, orgTree, onDispatch, onConsult, onToolExec } = options;
   const { id, name, input } = toolCall;
 
   onToolExec?.(name, input);
@@ -40,6 +41,8 @@ export async function executeTool(
         return editFile(id, input, companyRoot, roleId, orgTree);
       case 'dispatch':
         return await dispatchTask(id, input, onDispatch);
+      case 'consult':
+        return await consultTask(id, input, onConsult);
       default:
         return { tool_use_id: id, content: `Unknown tool: ${name}`, is_error: true };
     }
@@ -284,5 +287,25 @@ async function dispatchTask(
   }
 
   const result = await onDispatch(roleId, task);
+  return { tool_use_id: id, content: result };
+}
+
+async function consultTask(
+  id: string,
+  input: Record<string, unknown>,
+  onConsult?: (roleId: string, question: string) => Promise<string>,
+): Promise<ToolResult> {
+  const roleId = String(input.roleId ?? '');
+  const question = String(input.question ?? '');
+
+  if (!roleId || !question) {
+    return { tool_use_id: id, content: 'Error: roleId and question are required', is_error: true };
+  }
+
+  if (!onConsult) {
+    return { tool_use_id: id, content: 'Error: consult not available in this context', is_error: true };
+  }
+
+  const result = await onConsult(roleId, question);
   return { tool_use_id: id, content: result };
 }

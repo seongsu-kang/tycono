@@ -292,7 +292,9 @@ function handleReplyToJob(jobId: string, body: Record<string, unknown>, res: Ser
     return;
   }
 
-  const newJob = jobManager.replyToJob(jobId, message);
+  const responderRole = body.responderRole as string | undefined;
+
+  const newJob = jobManager.replyToJob(jobId, message, responderRole);
   if (!newJob) {
     jsonResponse(res, 400, { error: 'Job not found or not awaiting input' });
     return;

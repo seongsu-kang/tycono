@@ -1,7 +1,7 @@
 import { AnthropicProvider, type LLMProvider, type LLMMessage, type ToolResult, type MessageContent } from './llm-adapter.js';
 import { type OrgTree, getSubordinates } from './org-tree.js';
 import { assembleContext, type TeamStatus } from './context-assembler.js';
-import { validateDispatch } from './authority-validator.js';
+import { validateDispatch, validateConsult } from './authority-validator.js';
 import { getToolsForRole } from './tools/definitions.js';
 import { executeTool, type ToolExecutorOptions } from './tools/executor.js';
 import { type TokenLedger } from '../services/token-ledger.js';
@@ -30,6 +30,7 @@ export interface AgentConfig {
   onText?: (text: string) => void;
   onToolExec?: (name: string, input: Record<string, unknown>) => void;
   onDispatch?: (roleId: string, task: string) => void;
+  onConsult?: (roleId: string, question: string) => void;
   onTurnComplete?: (turn: number) => void;
 }
 
@@ -56,6 +57,7 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
     onText,
     onToolExec,
     onDispatch: onDispatchCallback,
+    onConsult: onConsultCallback,
     onTurnComplete,
   } = config;
 
@@ -127,6 +129,47 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
       });
 
       // Aggregate sub-agent tokens into parent totals
+      totalInput += subResult.totalTokens.input;
+      totalOutput += subResult.totalTokens.output;
+
+      return subResult.output;
+    },
+    onConsult: async (targetRoleId: string, question: string) => {
+      // Authority check
+      const authResult = validateConsult(orgTree, roleId, targetRoleId);
+      if (!authResult.allowed) {
+        return `Consult rejected: ${authResult.reason}`;
+      }
+
+      // Circular consult detection
+      if (visitedRoles.has(targetRoleId)) {
+        return `[CONSULT BLOCKED] Circular consult detected: ${roleId} → ${targetRoleId}. Chain: ${[...visitedRoles].join(' → ')}`;
+      }
+
+      onConsultCallback?.(targetRoleId, question);
+
+      // Run sub-agent in read-only mode for the consulted role
+      const consultTask = `[Consultation from ${roleId}] ${question}\n\nAnswer this question based on your role's expertise and knowledge. Be concise and specific.`;
+      const subResult = await runAgentLoop({
+        companyRoot,
+        roleId: targetRoleId,
+        task: consultTask,
+        sourceRole: roleId,
+        orgTree,
+        readOnly: true, // Consult is always read-only
+        maxTurns: Math.min(maxTurns, 10), // Limit consult turns
+        llm,
+        depth: depth + 1,
+        visitedRoles: new Set(visitedRoles),
+        abortSignal,
+        jobId: config.jobId,
+        model: config.model,
+        tokenLedger: config.tokenLedger,
+        onText: (text) => onText?.(`[consult:${targetRoleId}] ${text}`),
+        onToolExec,
+      });
+
+      // Aggregate sub-agent tokens
       totalInput += subResult.totalTokens.input;
       totalOutput += subResult.totalTokens.output;
 

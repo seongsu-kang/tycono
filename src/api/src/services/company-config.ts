@@ -7,17 +7,38 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+export interface ConversationLimits {
+  /** Harness 레벨 경고 턴 수 (기본 50). 도달 시 turn:warning 이벤트 발생. */
+  softLimit: number;
+  /** Harness 레벨 강제 종료 턴 수 (기본 200). 도달 시 Runner abort. */
+  hardLimit: number;
+}
+
 export interface CompanyConfig {
   engine: 'claude-cli' | 'direct-api';
   model?: string;
   apiKey?: string;
   codeRoot?: string;  // 코드 프로젝트 경로 (AKB와 분리된 코드 repo)
+  conversationLimits?: Partial<ConversationLimits>;
 }
 
 export const TYCONO_DIR = '.tycono';
 const CONFIG_DIR = TYCONO_DIR;
 const CONFIG_FILE = 'config.json';
+const DEFAULT_CONVERSATION_LIMITS: ConversationLimits = {
+  softLimit: 50,
+  hardLimit: 200,
+};
+
 const DEFAULT_CONFIG: CompanyConfig = { engine: 'claude-cli' };
+
+/** Resolve conversation limits with defaults. */
+export function getConversationLimits(config: CompanyConfig): ConversationLimits {
+  return {
+    ...DEFAULT_CONVERSATION_LIMITS,
+    ...config.conversationLimits,
+  };
+}
 
 function configPath(companyRoot: string): string {
   return path.join(companyRoot, CONFIG_DIR, CONFIG_FILE);
