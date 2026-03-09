@@ -12,7 +12,7 @@ export interface CompanyConfig {
   model?: string;
   apiKey?: string;
   codeRoot?: string;  // 코드 프로젝트 경로 (AKB와 분리된 코드 repo)
-  maxTurns?: number;  // CLI max-turns 제한 (기본 50)
+  maxTurns?: number;  // CLI max-turns 제한 (기본 200)
 }
 
 export const TYCONO_DIR = '.tycono';

@@ -179,7 +179,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
     });
 
     // 6. CLI args 구성
-    const maxTurns = config.maxTurns ?? 50;
+    const maxTurns = config.maxTurns ?? 200;
     const args = [
       '-p',
       '--system-prompt', fs.readFileSync(promptFile, 'utf-8'),
@@ -234,6 +234,28 @@ export class ClaudeCliRunner implements ExecutionRunner {
       let exitCode: number | null = null;
       let exitSignal: string | null = null;
 
+      // Inactivity watchdog: kill if no stdout data for 10 minutes
+      const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
+      let inactivityTimer = setTimeout(() => {
+        if (!resolved) {
+          console.warn(`[Runner] Inactivity watchdog: no output for 10 min. Killing process.`);
+          proc.kill('SIGTERM');
+          setTimeout(() => { if (!resolved) proc.kill('SIGKILL'); }, 5000);
+        }
+      }, INACTIVITY_TIMEOUT_MS);
+      const resetInactivityTimer = () => {
+        clearTimeout(inactivityTimer);
+        if (!resolved) {
+          inactivityTimer = setTimeout(() => {
+            if (!resolved) {
+              console.warn(`[Runner] Inactivity watchdog: no output for 10 min. Killing process.`);
+              proc.kill('SIGTERM');
+              setTimeout(() => { if (!resolved) proc.kill('SIGKILL'); }, 5000);
+            }
+          }, INACTIVITY_TIMEOUT_MS);
+        }
+      };
+
       // Safety net: if 'exit' fires but 'close' doesn't follow within 5s,
       // force resolve. This handles grandchild processes keeping stdout pipe open.
       proc.on('exit', (code, signal) => {
@@ -258,6 +280,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
       });
 
       proc.stdout.on('data', (data: Buffer) => {
+        resetInactivityTimer();
         buffer += data.toString();
 
         // stream-json: 줄 단위 JSON 파싱
@@ -303,6 +326,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
       });
 
       proc.on('close', (code, signal) => {
+        clearTimeout(inactivityTimer);
         if (resolved) {
           console.log(`[Runner] 'close' fired after safety-net resolve (code=${code}, signal=${signal})`);
           return;
@@ -352,6 +376,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
       });
 
       proc.on('error', (err) => {
+        clearTimeout(inactivityTimer);
         if (resolved) return;
         resolved = true;
         try { fs.unlinkSync(promptFile); } catch { /* ignore */ }

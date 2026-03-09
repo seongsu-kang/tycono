@@ -153,7 +153,7 @@ class JobManager {
     }
 
     const companyConfig = readConfig(COMPANY_ROOT);
-    const maxTurns = companyConfig.maxTurns ?? 50;
+    const maxTurns = companyConfig.maxTurns ?? 200;
 
     const handle = this.runner.execute(
       {
@@ -232,9 +232,22 @@ class JobManager {
           dispatches: result.dispatches.map((d) => ({ roleId: d.roleId, task: d.task })),
         };
 
+        // Check if hit turn limit → awaiting_input with continue option
+        const hitTurnLimit = result.turns >= maxTurns ||
+          result.output.includes('Reached max turns') ||
+          result.output.includes('max_turns_reached');
+
+        if (hitTurnLimit) {
+          job.status = 'awaiting_input';
+          stream.emit('job:awaiting_input', params.roleId, {
+            ...doneData,
+            question: `[Turn limit reached (${result.turns} turns)] 작업이 턴 제한에 도달했습니다. "계속" 또는 추가 지시를 입력하세요.`,
+            awaitingInput: true,
+            reason: 'turn_limit',
+          });
         // Check if output ends with a question → awaiting_input
         // Skip for continuation jobs (CEO already replied once — avoid infinite loop)
-        if (!params.isContinuation && hasQuestion(result.output)) {
+        } else if (!params.isContinuation && hasQuestion(result.output)) {
           job.status = 'awaiting_input';
           stream.emit('job:awaiting_input', params.roleId, {
             ...doneData,

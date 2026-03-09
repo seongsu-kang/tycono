@@ -868,7 +868,7 @@ function handleSessionMessage(
   }
 
   const companyConfig = readConfig(COMPANY_ROOT);
-  const maxTurns = companyConfig.maxTurns ?? 50;
+  const maxTurns = companyConfig.maxTurns ?? 200;
 
   const handle = getRunner().execute(
     { companyRoot: COMPANY_ROOT, roleId, task: fullTask, sourceRole: 'ceo', orgTree, readOnly, model: orgTree.nodes.get(roleId)?.model, attachments, teamStatus, maxTurns },
