@@ -179,7 +179,8 @@ export class ClaudeCliRunner implements ExecutionRunner {
     });
 
     // 6. CLI args 구성
-    const maxTurns = config.maxTurns ?? 200;
+    // Claude Code 기본: --max-turns 미지정 시 무제한 (context window가 자연 한계)
+    // config.maxTurns가 설정된 경우에만 제한 적용 (안전장치용)
     const args = [
       '-p',
       '--system-prompt', fs.readFileSync(promptFile, 'utf-8'),
@@ -187,7 +188,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
       '--verbose',
       '--dangerously-skip-permissions',
       '--model', config.model ?? 'claude-sonnet-4-5',
-      '--max-turns', String(maxTurns),
+      ...(config.maxTurns ? ['--max-turns', String(config.maxTurns)] : []),
       '--mcp-config', mcpConfig,
       '--strict-mcp-config',
       taskPrompt,
@@ -212,7 +213,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
     // Use codeRoot as cwd if configured, otherwise fall back to companyRoot
     const companyConfig = readConfig(companyRoot);
     const cwd = companyConfig.codeRoot || companyRoot;
-    console.log(`[Runner] Spawning claude -p: role=${roleId}, model=${modelName}, maxTurns=${maxTurns}, jobId=${config.jobId ?? 'none'}, cwd=${cwd}, subordinates=[${subordinates.join(',')}]`);
+    console.log(`[Runner] Spawning claude -p: role=${roleId}, model=${modelName}, maxTurns=${config.maxTurns ?? 'unlimited'}, jobId=${config.jobId ?? 'none'}, cwd=${cwd}, subordinates=[${subordinates.join(',')}]`);
 
     const proc = spawn('claude', args, {
       cwd,

@@ -153,7 +153,6 @@ class JobManager {
     }
 
     const companyConfig = readConfig(COMPANY_ROOT);
-    const maxTurns = companyConfig.maxTurns ?? 200;
 
     const handle = this.runner.execute(
       {
@@ -166,7 +165,7 @@ class JobManager {
         model,
         jobId,
         teamStatus,
-        maxTurns,
+        ...(companyConfig.maxTurns ? { maxTurns: companyConfig.maxTurns } : {}),
       },
       {
         onText: (text) => {
@@ -232,10 +231,12 @@ class JobManager {
           dispatches: result.dispatches.map((d) => ({ roleId: d.roleId, task: d.task })),
         };
 
-        // Check if hit turn limit → awaiting_input with continue option
-        const hitTurnLimit = result.turns >= maxTurns ||
+        // Check if hit turn limit or error_max_turns → awaiting_input with continue option
+        const hitTurnLimit =
           result.output.includes('Reached max turns') ||
-          result.output.includes('max_turns_reached');
+          result.output.includes('max_turns_reached') ||
+          result.output.includes('error_max_turns') ||
+          (companyConfig.maxTurns && result.turns >= companyConfig.maxTurns);
 
         if (hitTurnLimit) {
           job.status = 'awaiting_input';

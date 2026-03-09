@@ -868,10 +868,9 @@ function handleSessionMessage(
   }
 
   const companyConfig = readConfig(COMPANY_ROOT);
-  const maxTurns = companyConfig.maxTurns ?? 200;
 
   const handle = getRunner().execute(
-    { companyRoot: COMPANY_ROOT, roleId, task: fullTask, sourceRole: 'ceo', orgTree, readOnly, model: orgTree.nodes.get(roleId)?.model, attachments, teamStatus, maxTurns },
+    { companyRoot: COMPANY_ROOT, roleId, task: fullTask, sourceRole: 'ceo', orgTree, readOnly, model: orgTree.nodes.get(roleId)?.model, attachments, teamStatus, ...(companyConfig.maxTurns ? { maxTurns: companyConfig.maxTurns } : {}) },
     {
       onText: (text) => {
         roleMsg.content += text;
@@ -911,6 +910,30 @@ function handleSessionMessage(
     .then((result: RunnerResult) => {
       cleanupSSELifecycle();
       cleanupChildSubscriptions();
+
+      // Detect turn limit hit (error_max_turns from Claude CLI)
+      const hitTurnLimit =
+        result.output.includes('Reached max turns') ||
+        result.output.includes('max_turns_reached') ||
+        result.output.includes('error_max_turns') ||
+        (companyConfig.maxTurns && result.turns >= companyConfig.maxTurns);
+
+      if (hitTurnLimit) {
+        // Don't mark as done — notify client that turn limit was reached
+        updateMessage(sessionId, roleMsg.id, { content: roleMsg.content, status: 'done' });
+        roleStatus.set(roleId, 'idle');
+        completeActivity(roleId);
+        sendSSE(res, 'turn_limit', {
+          roleMessageId: roleMsg.id,
+          output: roleMsg.content.slice(-500),
+          turns: result.turns,
+          tokens: result.totalTokens,
+          message: `턴 제한에 도달했습니다 (${result.turns} turns). 이어서 진행하려면 메시지를 보내세요.`,
+        });
+        if (!res.writableEnded) res.end();
+        return;
+      }
+
       updateMessage(sessionId, roleMsg.id, { content: roleMsg.content, status: 'done' });
       roleStatus.set(roleId, 'idle');
       completeActivity(roleId);
