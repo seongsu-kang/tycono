@@ -171,9 +171,9 @@ export const api = {
   },
 
   // Preferences
-  getPreferences: () => get<{ appearances: Record<string, unknown>; theme: string; speech?: SpeechSettings; language?: string }>('/preferences'),
+  getPreferences: () => get<{ appearances: Record<string, unknown>; theme: string; speech?: SpeechSettings; language?: string; purchasedItems?: string[] }>('/preferences'),
   updatePreferences: (data: Record<string, unknown>) =>
-    patch_<{ ok: boolean; appearances: Record<string, unknown>; theme: string; speech?: SpeechSettings; language?: string }>('/preferences', data),
+    patch_<{ ok: boolean; appearances: Record<string, unknown>; theme: string; speech?: SpeechSettings; language?: string; purchasedItems?: string[] }>('/preferences', data),
 
   // Chat (LLM-powered channel conversation)
   chatInChannel: (data: {

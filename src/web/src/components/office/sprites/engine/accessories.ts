@@ -16,6 +16,7 @@ export interface AccessoryMeta {
   layer: CharacterLayer;            // down direction (backward compat)
   directions?: DirectionalLayers;   // all directions (when defined)
   requiredLevel?: number;           // gamification level needed to unlock
+  cost?: number;                    // coin cost to purchase
 }
 
 const registry = new Map<string, AccessoryMeta>();
@@ -902,6 +903,24 @@ export function getAccessoryRequiredLevel(id: string): number {
 /** Check if an accessory is unlocked at the given level */
 export function isAccessoryUnlocked(id: string, level: number): boolean {
   return level >= getAccessoryRequiredLevel(id);
+}
+
+export const ACCESSORY_COSTS: Record<string, number> = {
+  'none': 0,
+  'glasses': 0, 'beret': 0, 'cap': 0, 'badge': 0, 'blush': 0, 'lapels': 0,
+  'round-glasses': 500, 'headphones': 800,
+  'scarf': 1500, 'tie': 1500, 'bowtie': 1500,
+  'sunglasses': 3000, 'bandana': 3000, 'eyepatch': 3000,
+  'crown': 8000, 'halo': 8000, 'horns': 5000, 'mask': 5000,
+  'cat-ears': 8000, 'bear-ears': 8000, 'bunny-ears': 8000, 'dog-nose': 5000, 'fox-mask': 8000,
+  'cat-face': 15000, 'bear-face': 15000, 'panda-face': 15000,
+  'frog-face': 25000, 'rabbit-face': 25000, 'dog-face': 25000,
+  'star-glasses': 50000,
+};
+
+/** Get the coin cost for an accessory (default 0) */
+export function getAccessoryCost(id: string): number {
+  return ACCESSORY_COSTS[id] ?? 0;
 }
 
 // Star Glasses — fun star-shaped shades (4-direction)

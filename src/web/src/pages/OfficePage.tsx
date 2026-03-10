@@ -135,7 +135,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   }, []);
 
   /* Customization */
-  const { getAppearance, setAppearance, resetAppearance, theme, setTheme, speechSettings, setSpeechSettings, language, setLanguage } = useCustomization();
+  const { getAppearance, setAppearance, resetAppearance, theme, setTheme, speechSettings, setSpeechSettings, language, setLanguage, purchasedItems: purchasedItemsFromHook, addPurchasedItem } = useCustomization();
   const [customizeTarget, setCustomizeTarget] = useState<Role | null>(null);
   const [, setCustomizeInitialTab] = useState<'character' | 'office' | 'settings'>('character');
 
@@ -447,6 +447,10 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     setShowWaveCenter(false);
   };
   const openWaveCenter = () => {
+    // Switch to pro view with wave channel
+    prevViewModeRef.current = 'iso';
+    setProChannel({ type: 'wave' });
+    setViewMode('pro');
     setShowWaveCenter(true);
     setTerminalOpen(false);
     setPanel({ type: 'none' });
@@ -799,10 +803,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
       }));
 
       setSessions((prev) => [...sessionsWithRoleMsg, ...prev]);
-      if (sessionsWithRoleMsg.length > 0) {
-        setActiveSessionId(sessionsWithRoleMsg[0].id);
-        openTerminal();
-      }
+      // Don't open terminal — WaveCenter is already open via openWaveCenter() above
 
       // Connect each wave session to its SSE activity stream for live chat updates
       for (const ws of sessionsWithRoleMsg) {
@@ -2223,6 +2224,14 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           language={language}
           onLanguageChange={setLanguage}
           roleLevel={roleLevels[customizeTarget.id]?.level}
+          coinBalance={coinBalance}
+          purchased={purchasedItemsFromHook}
+          onPurchase={(itemId, cost) => {
+            api.spendCoins(cost, `Purchased ${itemId}`, itemId).then(r => {
+              setCoinBalance(r.balance);
+              addPurchasedItem(itemId);
+            }).catch(() => {});
+          }}
         />
       )}
 

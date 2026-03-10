@@ -64,6 +64,7 @@ export function useCustomization() {
   const [language, setLanguageState] = useState<string>(() => {
     try { return localStorage.getItem(STORAGE_KEY_LANGUAGE) ?? 'auto'; } catch { return 'auto'; }
   });
+  const [purchasedItems, setPurchasedItems] = useState<Set<string>>(new Set());
   const seeded = useRef(false);
 
   // On mount: fetch from server, seed if server has no data
@@ -80,6 +81,9 @@ export function useCustomization() {
       if (prefs.language) {
         setLanguageState(prefs.language);
         localStorage.setItem(STORAGE_KEY_LANGUAGE, prefs.language);
+      }
+      if (prefs.purchasedItems) {
+        setPurchasedItems(new Set(prefs.purchasedItems));
       }
       if (serverHasData) {
         // Server is source of truth
@@ -152,5 +156,14 @@ export function useCustomization() {
     api.updatePreferences({ language: lang }).catch(() => {});
   }, []);
 
-  return { appearances, getAppearance, setAppearance, resetAppearance, theme, setTheme, speechSettings, setSpeechSettings, language, setLanguage };
+  const addPurchasedItem = useCallback((itemId: string) => {
+    setPurchasedItems(prev => {
+      const next = new Set(prev);
+      next.add(itemId);
+      api.updatePreferences({ purchasedItems: Array.from(next) }).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  return { appearances, getAppearance, setAppearance, resetAppearance, theme, setTheme, speechSettings, setSpeechSettings, language, setLanguage, purchasedItems, addPurchasedItem };
 }

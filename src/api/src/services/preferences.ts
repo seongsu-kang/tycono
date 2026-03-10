@@ -63,6 +63,7 @@ export interface Preferences {
   removedFurniture?: string[]; // FurnitureDef.id list
   addedFurniture?: AddedFurniture[];
   officeExpansion?: OfficeExpansion;
+  purchasedItems?: string[]; // item IDs purchased with coins (hair, outfit, accessory)
 }
 
 const CONFIG_DIR = '.tycono';
@@ -93,6 +94,7 @@ export function readPreferences(companyRoot: string): Preferences {
     removedFurniture: (data.removedFurniture as string[]) ?? undefined,
     addedFurniture: (data.addedFurniture as AddedFurniture[]) ?? undefined,
     officeExpansion: (data.officeExpansion as OfficeExpansion) ?? undefined,
+    purchasedItems: (data.purchasedItems as string[]) ?? undefined,
   };
 
   // Auto-generate instanceId on first access
@@ -139,6 +141,9 @@ export function mergePreferences(companyRoot: string, partial: Partial<Preferenc
     officeExpansion: partial.officeExpansion !== undefined
       ? partial.officeExpansion
       : current.officeExpansion,
+    purchasedItems: partial.purchasedItems !== undefined
+      ? partial.purchasedItems
+      : current.purchasedItems,
   };
   writePreferences(companyRoot, merged);
   return merged;

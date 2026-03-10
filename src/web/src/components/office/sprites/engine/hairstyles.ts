@@ -18,6 +18,8 @@ export interface HairStyleMeta {
   name: string;
   layer: CharacterLayer;
   directions?: DirectionalLayers;
+  requiredLevel?: number;
+  cost?: number;
 }
 
 const registry = new Map<string, HairStyleMeta>();
@@ -257,3 +259,34 @@ registerHairStyle('curly', 'Curly', {
     { x: 3, y: 2, w: 2, h: 1, c: 'lighten($hair, 15)', a: 0.3 },
   ]},
 });
+
+/* ── Hair Style Unlock Levels & Costs ──────── */
+
+export const HAIR_UNLOCK_LEVELS: Record<string, number> = {
+  'short': 1, 'messy': 1,
+  'bun': 2, 'long': 2,
+  'mohawk': 3, 'slicked': 3,
+  'bob': 4, 'curly': 4,
+};
+
+export const HAIR_COSTS: Record<string, number> = {
+  'short': 0, 'messy': 0,
+  'bun': 500, 'long': 500,
+  'mohawk': 2000, 'slicked': 2000,
+  'bob': 5000, 'curly': 5000,
+};
+
+/** Get the required level to unlock a hair style (default 1) */
+export function getHairRequiredLevel(id: string): number {
+  return HAIR_UNLOCK_LEVELS[id] ?? 1;
+}
+
+/** Check if a hair style is unlocked at the given level */
+export function isHairUnlocked(id: string, level: number): boolean {
+  return level >= getHairRequiredLevel(id);
+}
+
+/** Get the coin cost for a hair style (default 0) */
+export function getHairCost(id: string): number {
+  return HAIR_COSTS[id] ?? 0;
+}

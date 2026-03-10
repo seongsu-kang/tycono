@@ -15,6 +15,8 @@ export interface OutfitStyleMeta {
   name: string;
   layer: CharacterLayer;
   directions?: DirectionalLayers;
+  requiredLevel?: number;
+  cost?: number;
 }
 
 const registry = new Map<string, OutfitStyleMeta>();
@@ -420,3 +422,36 @@ registerOutfitStyle('robe', 'Robe', {
     { x: -1, y: 15, w: 2, h: 1, c: '$skin' },
   ]},
 });
+
+/* ── Outfit Unlock Levels & Costs ──────── */
+
+export const OUTFIT_UNLOCK_LEVELS: Record<string, number> = {
+  'tshirt': 1, 'polo': 1,
+  'hoodie': 2, 'vest': 2,
+  'suit': 3, 'tank': 3,
+  'overalls': 4, 'turtleneck': 4,
+  'labcoat': 5, 'robe': 5,
+};
+
+export const OUTFIT_COSTS: Record<string, number> = {
+  'tshirt': 0, 'polo': 0,
+  'hoodie': 500, 'vest': 500,
+  'suit': 3000, 'tank': 1000,
+  'overalls': 5000, 'turtleneck': 5000,
+  'labcoat': 10000, 'robe': 10000,
+};
+
+/** Get the required level to unlock an outfit (default 1) */
+export function getOutfitRequiredLevel(id: string): number {
+  return OUTFIT_UNLOCK_LEVELS[id] ?? 1;
+}
+
+/** Check if an outfit is unlocked at the given level */
+export function isOutfitUnlocked(id: string, level: number): boolean {
+  return level >= getOutfitRequiredLevel(id);
+}
+
+/** Get the coin cost for an outfit (default 0) */
+export function getOutfitCost(id: string): number {
+  return OUTFIT_COSTS[id] ?? 0;
+}

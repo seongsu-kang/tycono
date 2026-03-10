@@ -566,7 +566,7 @@ export default function SaveModal({
         {/* Header */}
         <div className="px-5 py-3 flex items-center justify-between shrink-0" style={{ borderBottom: '2px solid var(--pixel-border)' }}>
           <div className="flex items-center gap-3">
-            <span className="text-lg font-black tracking-tight">SAVE GAME</span>
+            <span className="text-lg font-black tracking-tight">SAVE COMPANY</span>
             <span className="text-[10px]" style={{ color: 'var(--terminal-text-secondary)' }}>
               {status?.branch ?? ''}
             </span>

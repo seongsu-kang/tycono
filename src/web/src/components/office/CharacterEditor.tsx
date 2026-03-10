@@ -5,7 +5,9 @@ import {
   SKIN_PRESETS, HAIR_PRESETS, SHIRT_PRESETS, PANTS_PRESETS, SHOE_PRESETS,
 } from '../../types/appearance';
 import { getAllHairStyles, getAllOutfitStyles, getAllAccessories, extractAppearance } from './sprites/engine';
-import { getAccessoryRequiredLevel, isAccessoryUnlocked } from './sprites/engine/accessories';
+import { getAccessoryRequiredLevel, isAccessoryUnlocked, getAccessoryCost } from './sprites/engine/accessories';
+import { getHairRequiredLevel, isHairUnlocked, getHairCost } from './sprites/engine/hairstyles';
+import { getOutfitRequiredLevel, isOutfitUnlocked, getOutfitCost } from './sprites/engine/outfits';
 import './sprites/engine/hairstyles'; // ensure registration
 import './sprites/engine/outfits';
 import './sprites/engine/accessories';
@@ -55,6 +57,10 @@ function ColorRow({ label, presets, value, onChange }: {
 interface LockInfo {
   roleLevel: number;
   getLockLevel: (id: string) => number;
+  getCost?: (id: string) => number;
+  purchased?: Set<string>;
+  onPurchase?: (id: string, cost: number) => void;
+  coinBalance?: number;
 }
 
 function StyleRow({ label, items, value, onChange, lockInfo }: {
@@ -72,8 +78,12 @@ function StyleRow({ label, items, value, onChange, lockInfo }: {
       <div className="customize-swatches" style={{ gap: 4 }}>
         {items.map(s => {
           const reqLevel = lockInfo ? lockInfo.getLockLevel(s.id) : 1;
+          const cost = lockInfo?.getCost ? lockInfo.getCost(s.id) : 0;
           const isCurrentlyEquipped = s.id === value;
-          const locked = lockInfo ? reqLevel > lockInfo.roleLevel && !isCurrentlyEquipped : false;
+          const levelLocked = lockInfo ? reqLevel > lockInfo.roleLevel && !isCurrentlyEquipped : false;
+          const needsPurchase = cost > 0 && lockInfo?.purchased && !lockInfo.purchased.has(s.id) && !isCurrentlyEquipped;
+          const canAfford = lockInfo?.coinBalance !== undefined ? lockInfo.coinBalance >= cost : true;
+          const locked = levelLocked || false;
           const equippedButLocked = lockInfo ? isCurrentlyEquipped && reqLevel > lockInfo.roleLevel : false;
 
           return (
@@ -81,30 +91,42 @@ function StyleRow({ label, items, value, onChange, lockInfo }: {
               key={s.id}
               onClick={() => {
                 if (locked) return;
+                if (needsPurchase && !levelLocked) {
+                  if (canAfford && lockInfo?.onPurchase) {
+                    lockInfo.onPurchase(s.id, cost);
+                  }
+                  return;
+                }
                 onChange(s.id === value ? undefined : s.id);
               }}
               className="customize-swatch"
               style={{
                 width: 'auto',
                 height: 'auto',
-                padding: locked ? '2px 6px 10px 6px' : '2px 6px',
+                padding: (locked || needsPurchase) ? '2px 6px 12px 6px' : '2px 6px',
                 fontSize: 9,
                 fontFamily: 'var(--font-pixel, monospace)',
                 background: isCurrentlyEquipped
                   ? 'rgba(255,255,255,0.15)'
                   : locked
                     ? 'rgba(255,255,255,0.02)'
-                    : 'rgba(255,255,255,0.04)',
+                    : needsPurchase
+                      ? 'rgba(255,200,0,0.04)'
+                      : 'rgba(255,255,255,0.04)',
                 outline: isCurrentlyEquipped
                   ? equippedButLocked
                     ? '2px solid #F59E0B'
                     : '2px solid #fff'
-                  : '2px solid transparent',
+                  : needsPurchase && !locked
+                    ? '2px solid rgba(255,200,0,0.3)'
+                    : '2px solid transparent',
                 color: locked
                   ? 'rgba(255,255,255,0.25)'
-                  : isCurrentlyEquipped ? '#fff' : 'rgba(255,255,255,0.5)',
+                  : needsPurchase
+                    ? 'rgba(255,255,255,0.45)'
+                    : isCurrentlyEquipped ? '#fff' : 'rgba(255,255,255,0.5)',
                 borderRadius: 4,
-                cursor: locked ? 'not-allowed' : 'pointer',
+                cursor: locked ? 'not-allowed' : needsPurchase ? (canAfford ? 'pointer' : 'not-allowed') : 'pointer',
                 opacity: locked ? 0.35 : 1,
                 position: 'relative' as const,
               }}
@@ -121,6 +143,19 @@ function StyleRow({ label, items, value, onChange, lockInfo }: {
                   whiteSpace: 'nowrap',
                 }}>
                   {'\uD83D\uDD12'} Lv.{reqLevel}
+                </span>
+              )}
+              {!locked && needsPurchase && (
+                <span style={{
+                  position: 'absolute',
+                  bottom: 1,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  fontSize: 8,
+                  color: canAfford ? '#FFD700' : '#F87171',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {'\uD83E\uDE99'} {cost}
                 </span>
               )}
               {equippedButLocked && (
@@ -177,8 +212,12 @@ export function pick<T>(arr: T[]): T {
 }
 
 export function randomAppearance(level?: number): CharacterAppearance {
-  const hairStyles = getAllHairStyles();
-  const outfitStyles = getAllOutfitStyles();
+  const hairStyles = getAllHairStyles().filter(h =>
+    !level || isHairUnlocked(h.id, level)
+  );
+  const outfitStyles = getAllOutfitStyles().filter(o =>
+    !level || isOutfitUnlocked(o.id, level)
+  );
   const accessories = getAllAccessories().filter(a =>
     !level || isAccessoryUnlocked(a.id, level)
   );
@@ -202,12 +241,16 @@ interface CharacterEditorProps {
   onReset: () => void;
   label?: ReactNode;
   roleLevel?: number;
+  coinBalance?: number;
+  purchased?: Set<string>;
+  onPurchase?: (itemId: string, cost: number) => void;
 }
 
 type EditorTab = 'look' | 'outfit' | 'accessory';
 
 export default function CharacterEditor({
   roleId, appearance, onChange, onRandomize, onReset, label, roleLevel,
+  coinBalance, purchased, onPurchase,
 }: CharacterEditorProps) {
   const [tab, setTab] = useState<EditorTab>('look');
 
@@ -239,9 +282,18 @@ export default function CharacterEditor({
   const outfitStyles = getAllOutfitStyles();
   const accessories = getAllAccessories();
 
+  const unlockedHairCount = roleLevel !== undefined
+    ? hairStyles.filter(h => isHairUnlocked(h.id, roleLevel)).length
+    : hairStyles.length;
+  const unlockedOutfitCount = roleLevel !== undefined
+    ? outfitStyles.filter(o => isOutfitUnlocked(o.id, roleLevel)).length
+    : outfitStyles.length;
   const unlockedCount = roleLevel !== undefined
     ? accessories.filter(a => isAccessoryUnlocked(a.id, roleLevel)).length
     : accessories.length;
+
+  const makeLockInfo = (getLockLevel: (id: string) => number, getCost: (id: string) => number): LockInfo | undefined =>
+    roleLevel !== undefined ? { roleLevel, getLockLevel, getCost, purchased, onPurchase, coinBalance } : undefined;
 
   return (
     <>
@@ -281,12 +333,48 @@ export default function CharacterEditor({
           <>
             <ColorRow label="SKIN" presets={SKIN_PRESETS} value={appearance.skinColor} onChange={v => update('skinColor', v)} />
             <ColorRow label="HAIR COLOR" presets={HAIR_PRESETS} value={appearance.hairColor} onChange={v => update('hairColor', v)} />
-            <StyleRow label="HAIR STYLE" items={hairStyles} value={appearance.hairStyle} onChange={v => update('hairStyle', v)} />
+            {roleLevel !== undefined && (
+              <div style={{
+                padding: '4px 8px',
+                marginBottom: 4,
+                background: 'rgba(255,255,255,0.04)',
+                borderRadius: 4,
+                fontSize: 9,
+                fontFamily: 'var(--font-pixel, monospace)',
+                color: 'rgba(255,255,255,0.5)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}>
+                <span>Lv.{roleLevel}</span>
+                <span>{unlockedHairCount}/{hairStyles.length} unlocked</span>
+              </div>
+            )}
+            <StyleRow label="HAIR STYLE" items={hairStyles} value={appearance.hairStyle} onChange={v => update('hairStyle', v)}
+              lockInfo={makeLockInfo(getHairRequiredLevel, getHairCost)} />
           </>
         )}
         {tab === 'outfit' && (
           <>
-            <StyleRow label="STYLE" items={outfitStyles} value={appearance.outfitStyle} onChange={v => update('outfitStyle', v)} />
+            {roleLevel !== undefined && (
+              <div style={{
+                padding: '4px 8px',
+                marginBottom: 4,
+                background: 'rgba(255,255,255,0.04)',
+                borderRadius: 4,
+                fontSize: 9,
+                fontFamily: 'var(--font-pixel, monospace)',
+                color: 'rgba(255,255,255,0.5)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}>
+                <span>Lv.{roleLevel}</span>
+                <span>{unlockedOutfitCount}/{outfitStyles.length} unlocked</span>
+              </div>
+            )}
+            <StyleRow label="STYLE" items={outfitStyles} value={appearance.outfitStyle} onChange={v => update('outfitStyle', v)}
+              lockInfo={makeLockInfo(getOutfitRequiredLevel, getOutfitCost)} />
             <ColorRow label="TOP" presets={SHIRT_PRESETS} value={appearance.shirtColor} onChange={v => update('shirtColor', v)} />
             <ColorRow label="PANTS" presets={PANTS_PRESETS} value={appearance.pantsColor} onChange={v => update('pantsColor', v)} />
             <ColorRow label="SHOES" presets={SHOE_PRESETS} value={appearance.shoeColor} onChange={v => update('shoeColor', v)} />
@@ -316,7 +404,7 @@ export default function CharacterEditor({
               items={accessories}
               value={appearance.accessory}
               onChange={v => update('accessory', v)}
-              lockInfo={roleLevel !== undefined ? { roleLevel, getLockLevel: getAccessoryRequiredLevel } : undefined}
+              lockInfo={makeLockInfo(getAccessoryRequiredLevel, getAccessoryCost)}
             />
             <div style={{
               marginTop: 12,

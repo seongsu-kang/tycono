@@ -44,7 +44,7 @@ interface Props {
   onMaximize?: () => void;
   /** When true, renders inline (no dimmer/fixed positioning) for Pro view */
   inline?: boolean;
-  /** Open the SAVE GAME modal (reuses Office's SaveModal) */
+  /** Open the SAVE COMPANY modal (reuses Office's SaveModal) */
   onOpenSaveModal?: () => void;
 }
 

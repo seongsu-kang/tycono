@@ -23,6 +23,9 @@ interface CustomizeModalProps {
   language?: string;
   onLanguageChange?: (lang: string) => void;
   roleLevel?: number;
+  coinBalance?: number;
+  purchased?: Set<string>;
+  onPurchase?: (itemId: string, cost: number) => void;
 }
 
 export default function CustomizeModal({
@@ -31,6 +34,7 @@ export default function CustomizeModal({
   characterOnly,
   speechSettings, onSpeechSettingsChange,
   language, onLanguageChange, roleLevel,
+  coinBalance, purchased, onPurchase,
 }: CustomizeModalProps) {
   const [tab, setTab] = useState<'character' | 'office' | 'settings'>(initialTab ?? 'character');
   const [draft, setDraft] = useState<CharacterAppearance>({ ...appearance });
@@ -124,6 +128,9 @@ export default function CustomizeModal({
               onReset={handleReset}
               label={nameLabel}
               roleLevel={roleLevel}
+              coinBalance={coinBalance}
+              purchased={purchased}
+              onPurchase={onPurchase}
             />
           </div>
         ) : tab === 'office' ? (

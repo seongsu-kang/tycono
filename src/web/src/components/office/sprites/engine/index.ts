@@ -39,6 +39,9 @@ export {
   getHairStyle,
   getHairForDirection,
   getAllHairStyles,
+  getHairRequiredLevel,
+  isHairUnlocked,
+  getHairCost,
 } from './hairstyles';
 
 export type { OutfitStyleMeta } from './outfits';
@@ -48,6 +51,9 @@ export {
   getOutfitStyle,
   getOutfitForDirection,
   getAllOutfitStyles,
+  getOutfitRequiredLevel,
+  isOutfitUnlocked,
+  getOutfitCost,
 } from './outfits';
 
 export type { AccessoryMeta } from './accessories';
@@ -57,6 +63,7 @@ export {
   getAccessory,
   getAccessoryForDirection,
   getAllAccessories,
+  getAccessoryCost,
 } from './accessories';
 
 export { extractAppearance } from './color-extract';
