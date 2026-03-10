@@ -874,27 +874,38 @@ export default function OnboardingWizard({ onComplete }: Props) {
 
 function HelpTip({ text }: { text: string }) {
   const [show, setShow] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const ref = useRef<HTMLSpanElement>(null);
+
+  const handleShow = () => {
+    if (ref.current) {
+      const rect = ref.current.getBoundingClientRect();
+      setPos({ top: rect.bottom + 6, left: rect.left });
+    }
+    setShow(true);
+  };
+
   return (
-    <span className="relative inline-flex">
+    <span className="inline-flex" ref={ref}>
       <span
         className="w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center cursor-help shrink-0 select-none"
         style={{ background: 'var(--terminal-surface)', color: 'var(--terminal-text-muted)', border: '1px solid var(--terminal-border)' }}
-        onMouseEnter={() => setShow(true)}
+        onMouseEnter={handleShow}
         onMouseLeave={() => setShow(false)}
-        onClick={(e) => { e.stopPropagation(); setShow(!show); }}
+        onClick={(e) => { e.stopPropagation(); show ? setShow(false) : handleShow(); }}
       >
         ?
       </span>
       {show && (
         <div
-          className="absolute z-50 bottom-full left-0 mb-2 px-3 py-2 rounded-lg text-[11px] leading-relaxed whitespace-pre-line w-60 shadow-lg pointer-events-none"
-          style={{ background: 'var(--terminal-bg)', color: 'var(--terminal-text-secondary)', border: '1px solid var(--terminal-border)' }}
+          className="fixed z-[9999] px-3 py-2 rounded-lg text-[11px] leading-relaxed whitespace-pre-line w-60 shadow-lg pointer-events-none"
+          style={{ top: pos.top, left: Math.min(pos.left, window.innerWidth - 260), background: 'var(--terminal-bg)', color: 'var(--terminal-text-secondary)', border: '1px solid var(--terminal-border)' }}
         >
-          {text}
           <div
-            className="absolute top-full left-2 w-0 h-0"
-            style={{ borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: '5px solid var(--terminal-border)' }}
+            className="absolute bottom-full w-0 h-0"
+            style={{ left: 8, borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderBottom: '5px solid var(--terminal-border)' }}
           />
+          {text}
         </div>
       )}
     </span>
@@ -926,7 +937,7 @@ function CollapsibleSection({ icon, title, hint, help, tag, open, onToggle, chil
 }) {
   return (
     <div
-      className="rounded-lg overflow-hidden"
+      className="rounded-lg"
       style={{ background: 'var(--hud-bg-alt)', border: '1px solid var(--terminal-border)' }}
     >
       <div
