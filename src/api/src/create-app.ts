@@ -25,6 +25,9 @@ export function createApp() {
   app.use(cors({ origin: corsOrigin }));
   app.use(express.json());
 
+  // Suppress favicon 404
+  app.get('/favicon.ico', (_req, res) => res.status(204).end());
+
   // Setup / onboarding (always available)
   app.use('/api/setup', setupRouter);
 
