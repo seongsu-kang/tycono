@@ -31,6 +31,7 @@ interface Props {
   appearance?: CharacterAppearance;
   relationships?: Array<{ roleA: string; roleB: string; familiarity: number; dispatches: number; wavesTogether: number; conversations: number }>;
   roleLevel?: number;
+  onMaximize?: () => void;
 }
 
 const ROLE_ICONS: Record<string, string> = {
@@ -61,7 +62,7 @@ const fmtElapsed = (seconds: number) => `${Math.floor(seconds / 60)}:${String(se
 export default function SidePanel({
   role, allRoles, recentActivity, onClose, onFireRole, terminalWidth = 0,
   activeJobId, activeTask, isWorking, jobStartedAt, onStopJob,
-  sessions, streamingSessionId, onCreateSessionSilent, onSendMessage, onFocusTerminal, onCustomize, onUpdateRole, appearance, relationships, roleLevel,
+  sessions, streamingSessionId, onCreateSessionSilent, onSendMessage, onFocusTerminal, onCustomize, onUpdateRole, appearance, relationships, roleLevel, onMaximize,
 }: Props) {
   const [panelW, setPanelW] = useState(DEFAULT_WIDTH);
   const [isResizing, setIsResizing] = useState(false);
@@ -113,11 +114,7 @@ export default function SidePanel({
     startWidthRef.current = panelWidth;
     setIsResizing(true);
 
-    const onMove = (ev: MouseEvent) => {
-      const delta = startXRef.current - ev.clientX;
-      const newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startWidthRef.current + delta));
-      setPanelW(newWidth);
-    };
+    const maximizeRef = onMaximize;
 
     const onUp = () => {
       setIsResizing(false);
@@ -125,9 +122,21 @@ export default function SidePanel({
       document.removeEventListener('mouseup', onUp);
     };
 
+    const onMove = (ev: MouseEvent) => {
+      const delta = startXRef.current - ev.clientX;
+      const rawWidth = startWidthRef.current + delta;
+      if (rawWidth >= window.innerWidth * 0.6 && maximizeRef) {
+        onUp();
+        maximizeRef();
+        return;
+      }
+      const newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, rawWidth));
+      setPanelW(newWidth);
+    };
+
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
-  }, [panelWidth]);
+  }, [panelWidth, onMaximize]);
 
   // Track pending message to send after session creation
   const pendingMessageRef = useRef<{ content: string; mode: 'talk' | 'do' } | null>(null);
@@ -244,6 +253,15 @@ export default function SidePanel({
                 title="Customize"
               >
                 {'\u{1F3A8}'}
+              </button>
+            )}
+            {onMaximize && (
+              <button
+                onClick={onMaximize}
+                className="w-7 h-7 rounded-full bg-black/20 text-white flex items-center justify-center text-sm hover:bg-black/30 cursor-pointer backdrop-blur-sm"
+                title="Maximize (Pro View)"
+              >
+                {'\u2922'}
               </button>
             )}
             <button

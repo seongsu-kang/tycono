@@ -31,7 +31,7 @@ import GitStatusPanel from '../components/office/GitStatusPanel';
 import SessionPanel from '../components/office/SessionPanel';
 import SettingsPanel from '../components/office/SettingsPanel';
 import ThemeDropup from '../components/office/ThemeDropup';
-import ProView, { ProDashboard, type ProChannel } from '../components/pro/ProView';
+import ProView, { ProDashboard, ProRoleChat, ProRoleChatEmpty, type ProChannel } from '../components/pro/ProView';
 import { OFFICE_THEMES } from '../types/appearance';
 import type { CharacterAppearance, OfficeTheme } from '../types/appearance';
 import { computeRoleLevels, type RoleLevelData } from '../utils/role-level';
@@ -1638,6 +1638,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
               onSendMessage={handleSendMessage}
               onModeChange={handleModeChange}
               onCloseTerminal={() => setTerminalOpen(false)}
+              onMaximize={() => { prevViewModeRef.current = viewMode === 'pro' ? 'iso' : viewMode as 'card' | 'iso'; setProChannel({ type: 'terminal' }); setViewMode('pro'); }}
               chatChannels={officeChat.channels}
               activeChatChannelId={officeChat.activeChannelId}
               onSwitchChatChannel={officeChat.setActiveChannelId}
@@ -1853,6 +1854,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           appearance={getAppearance(selectedRole.id)}
           relationships={ambient.relationships}
           roleLevel={roleLevels[selectedRole.id]?.level}
+          onMaximize={() => { prevViewModeRef.current = viewMode as 'card' | 'iso'; setProChannel({ type: 'role', roleId: selectedRole.id }); setViewMode('pro'); }}
         />
         );
       })()}
@@ -1868,6 +1870,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           onClose={closePanel}
           onOpenWaveCenter={() => openWaveCenter()}
           terminalWidth={terminalOpen ? terminalWidth : 0}
+          onMaximize={() => { prevViewModeRef.current = viewMode as 'card' | 'iso'; setProChannel({ type: 'operations' }); setViewMode('pro'); }}
         />
       )}
       {viewMode !== 'pro' && panel.type === 'quest' && (
@@ -1889,6 +1892,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           onRefresh={() => api.getKnowledge().then(setKnowledgeDocs).catch(() => {})}
           terminalWidth={terminalOpen ? terminalWidth : 0}
           initialDocId={panel.docId}
+          onMaximize={() => { prevViewModeRef.current = viewMode as 'card' | 'iso'; setProChannel({ type: 'knowledge' }); setViewMode('pro'); }}
         />
       )}
 
@@ -1905,6 +1909,37 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           companyName={companyName}
           getAppearance={getAppearance}
           waveCenterWaves={waveCenterWaves}
+          profileContent={proChannel.type === 'role' && selectedRole ? (() => {
+            const roleExec = activeExecsByRole[selectedRole.id];
+            return (
+              <SidePanel
+                role={selectedRole}
+                allRoles={roles}
+                recentActivity={getRoleSpeechFull(selectedRole.id)}
+                onClose={() => {/* handled by ProView toggle */}}
+                onFireRole={(id, name) => { setFireTarget({ roleId: id, roleName: name }); }}
+                terminalWidth={0}
+                activeJobId={roleExec?.id}
+                activeTask={roleExec?.task}
+                isWorking={effectiveRoleStatuses[selectedRole.id] === 'working'}
+                jobStartedAt={roleExec?.startedAt}
+                onStopJob={(jobId) => api.abortJob(jobId)}
+                sessions={sessions}
+                streamingSessionId={streamingSessionId}
+                onCreateSessionSilent={handleCreateSessionSilent}
+                onSendMessage={handleSendMessage}
+                onFocusTerminal={() => {/* already viewing chat */}}
+                onCustomize={(roleId) => {
+                  const r = roles.find(x => x.id === roleId);
+                  if (r) { setCustomizeInitialTab('character'); setCustomizeTarget(r); }
+                }}
+                onUpdateRole={handleUpdateRole}
+                appearance={getAppearance(selectedRole.id)}
+                relationships={ambient.relationships}
+                roleLevel={roleLevels[selectedRole.id]?.level}
+              />
+            );
+          })() : undefined}
           channel={proChannel}
           onChannelChange={(ch) => {
             setProChannel(ch);
@@ -2034,35 +2069,37 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
             />
           )}
 
-          {/* Role Detail (full-width) */}
-          {proChannel.type === 'role' && selectedRole && (() => {
-            const roleExec = activeExecsByRole[selectedRole.id];
+          {/* Role Chat (DM-style) */}
+          {proChannel.type === 'role' && (() => {
+            const roleId = proChannel.roleId;
+            const role = roles.find(r => r.id === roleId);
+            if (!role) return null;
+            const roleSession = sessions.find(s => s.roleId === roleId);
+            if (roleSession) {
+              return (
+                <ProRoleChat
+                  role={role}
+                  messages={roleSession.messages}
+                  isStreaming={streamingSessionId === roleSession.id}
+                  mode={roleSession.mode}
+                  onModeChange={(mode) => handleModeChange(roleSession.id, mode)}
+                  onSend={(content, mode, attachments) => handleSendMessage(roleSession.id, content, mode, attachments)}
+                  isWave={roleSession.source === 'wave'}
+                />
+              );
+            }
             return (
-              <SidePanel
-                role={selectedRole}
-                allRoles={roles}
-                recentActivity={getRoleSpeechFull(selectedRole.id)}
-                onClose={() => setProChannel({ type: 'dashboard' })}
-                onFireRole={(id, name) => { setFireTarget({ roleId: id, roleName: name }); setProChannel({ type: 'dashboard' }); }}
-                terminalWidth={0}
-                activeJobId={roleExec?.id}
-                activeTask={roleExec?.task}
-                isWorking={effectiveRoleStatuses[selectedRole.id] === 'working'}
-                jobStartedAt={roleExec?.startedAt}
-                onStopJob={(jobId) => api.abortJob(jobId)}
-                sessions={sessions}
-                streamingSessionId={streamingSessionId}
-                onCreateSessionSilent={handleCreateSessionSilent}
-                onSendMessage={handleSendMessage}
-                onFocusTerminal={() => setProChannel({ type: 'terminal' })}
-                onCustomize={(roleId) => {
-                  const r = roles.find(x => x.id === roleId);
-                  if (r) { setCustomizeInitialTab('character'); setCustomizeTarget(r); }
+              <ProRoleChatEmpty
+                role={role}
+                getAppearance={getAppearance}
+                onSend={(content, mode) => {
+                  handleCreateSessionSilent(roleId);
+                  // Message will be sent after session is created via effect
+                  setTimeout(() => {
+                    const newSession = sessions.find(s => s.roleId === roleId);
+                    if (newSession) handleSendMessage(newSession.id, content, mode);
+                  }, 100);
                 }}
-                onUpdateRole={handleUpdateRole}
-                appearance={getAppearance(selectedRole.id)}
-                relationships={ambient.relationships}
-                roleLevel={roleLevels[selectedRole.id]?.level}
               />
             );
           })()}
@@ -2130,6 +2167,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           activeWaves={waveCenterWaves}
           onDispatch={(d, t) => handleWaveDispatch(d, t)}
           onClose={() => setShowWaveCenter(false)}
+          onMaximize={() => { prevViewModeRef.current = viewMode as 'card' | 'iso'; setProChannel({ type: 'wave' }); setViewMode('pro'); }}
           onDone={() => {
             handleJobDone();
             setWaveDone(true);

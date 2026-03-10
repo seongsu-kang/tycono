@@ -118,6 +118,31 @@
 
 ---
 
+## TC-PRO: Pro View (Slack-style)
+
+| ID | 테스트 | 검증 항목 | 상태 |
+|----|--------|----------|------|
+| TC-PRO01 | PRO 뷰 진입 | 하단바 PRO 버튼 클릭 -> 전체화면 오버레이 (사이드바 240px + 메인 영역) | PASS |
+| TC-PRO02 | Dashboard 기본 | Dashboard 타이틀 + Quick Actions (New Wave, Knowledge) + Team 카드 + Recent Waves + Knowledge Base | PASS |
+| TC-PRO03 | 사이드바 CHANNELS | general, wave-log, decisions, knowledge 4개 채널 표시 | PASS |
+| TC-PRO04 | 사이드바 TEAM | 전체 Role 목록 (아바타 + 이름 + Lv + 상태 dot) 표시 | PASS |
+| TC-PRO05 | 팀원 클릭 → DM 채팅 | 사이드바 팀원 클릭 -> 메인 영역에 DM 채팅 뷰 (MessageList + Talk/Do + InputBar) | PASS |
+| TC-PRO06 | DM 빈 상태 | 세션 없는 Role 클릭 -> 캐릭터 아바타 + "Start a conversation" + InputBar | PASS |
+| TC-PRO07 | DM 헤더 | 아바타 + Role Name + Level 정보 + Profile 버튼 + Dashboard 버튼 | PASS |
+| TC-PRO08 | Profile 패널 열기 | 헤더 Profile 버튼 클릭 -> 오른쪽 340px 프로필 패널 표시 | PASS |
+| TC-PRO09 | Profile 패널 내용 | 큰 아바타 + Role ID + Name + Lv/상태/level/reportsTo 스탯바 + About + Authority + Direct Reports + Relationships + Journal | PASS |
+| TC-PRO10 | Profile 패널 닫기 | × 버튼 또는 Profile 버튼 재클릭 -> 패널 닫힘, 채팅 유지 | PASS |
+| TC-PRO11 | 팀원 전환 | 다른 팀원 클릭 -> 채팅 + 프로필 모두 해당 Role로 전환 | PASS |
+| TC-PRO12 | 채널 전환 (general) | general 클릭 -> TerminalPanel 렌더링 | - |
+| TC-PRO13 | 채널 전환 (wave-log) | wave-log 클릭 -> WaveCenter 렌더링 | - |
+| TC-PRO14 | 채널 전환 (decisions) | decisions 클릭 -> OperationsPanel 렌더링 | - |
+| TC-PRO15 | 채널 전환 (knowledge) | knowledge 클릭 -> KnowledgePanel 렌더링 | - |
+| TC-PRO16 | Office 복귀 | 하단 Office 버튼 클릭 -> 이전 뷰 모드(CARD/ISO)로 복귀 | PASS |
+| TC-PRO17 | 패널 최대화 → PRO | Office 사이드 패널 ⤢ 버튼 클릭 -> PRO 뷰로 전환 + 해당 채널 활성화 | - |
+| TC-PRO18 | 드래그 최대화 → PRO | Office 사이드 패널을 뷰포트 60% 이상 드래그 -> PRO 뷰 자동 전환 | - |
+
+---
+
 ## TC-S: Save / Persistence
 
 | ID | 테스트 | 검증 항목 | 상태 |
@@ -138,8 +163,9 @@
 | Role Panel (TC-R) | 9 | 6 | 3 |
 | Terminal (TC-T) | 3 | 3 | 0 |
 | Floor Template (TC-F) | 7 | 7 | 0 |
+| Pro View (TC-PRO) | 18 | 11 | 7 |
 | Save (TC-S) | 2 | 1 | 1 |
-| **합계** | **63** | **55** | **8** |
+| **합계** | **81** | **66** | **15** |
 
 ---
 

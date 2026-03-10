@@ -96,30 +96,23 @@ interface Props {
 }
 
 type EngineChoice = 'claude-cli' | 'direct-api' | 'none';
-type ProjectMode = 'fresh' | 'existing';
-type KnowledgeMode = 'skip' | 'import' | 'existing-akb';
+type WorkspaceMode = 'new' | 'existing-akb';
 
-type StepId = 'engine' | 'company' | 'project' | 'knowledge' | 'team' | 'create';
+type StepId = 'engine' | 'company' | 'workspace' | 'team' | 'create';
 
 const STEP_LABELS: Record<StepId, string> = {
   engine: 'AI Engine',
-  company: 'Company Info',
-  project: 'Project',
-  knowledge: 'Knowledge',
-  team: 'Team Template',
+  company: 'Company',
+  workspace: 'Workspace',
+  team: 'Team',
   create: 'Create',
 };
 
-function getStepsForKnowledgeMode(knowledgeMode: KnowledgeMode): StepId[] {
-  switch (knowledgeMode) {
-    case 'skip':
-      return ['engine', 'company', 'project', 'knowledge', 'team', 'create'];
-    case 'import':
-      return ['engine', 'company', 'project', 'knowledge', 'team', 'create'];
-    case 'existing-akb':
-      // AKB already has structure — skip company, project, team
-      return ['engine', 'knowledge', 'create'];
+function getSteps(workspaceMode: WorkspaceMode): StepId[] {
+  if (workspaceMode === 'existing-akb') {
+    return ['engine', 'workspace', 'create'];
   }
+  return ['engine', 'company', 'workspace', 'team', 'create'];
 }
 
 export default function OnboardingWizard({ onComplete }: Props) {
@@ -135,30 +128,25 @@ export default function OnboardingWizard({ onComplete }: Props) {
   const [companyName, setCompanyName] = useState('');
   const [description, setDescription] = useState('');
   const [language, setLanguage] = useState('auto');
+  const nameRef = useRef<HTMLInputElement>(null);
+
+  // Step: Workspace
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('new');
+  // Location (company_root)
   const [location, setLocation] = useState('');
   const [locationBase, setLocationBase] = useState('');
   const [locationEdited, setLocationEdited] = useState(false);
   const [showLocationBrowser, setShowLocationBrowser] = useState(false);
-  const nameRef = useRef<HTMLInputElement>(null);
-
-  // Step: Project (code repo)
-  const [projectMode, setProjectMode] = useState<ProjectMode>('fresh');
-  const [existingPath, setExistingPath] = useState('');
-  const [pathValid, setPathValid] = useState<boolean | null>(null);
-  const [pathValidating, setPathValidating] = useState(false);
-  const [showProjectBrowser, setShowProjectBrowser] = useState(false);
-  // codeRoot (separate code repository)
+  // Code repo (optional)
+  const [showCodeRepo, setShowCodeRepo] = useState(false);
   const [codeRootPath, setCodeRootPath] = useState('');
-  const [codeRootValid, setCodeRootValid] = useState<boolean | null>(null);
-  const [codeRootValidating, setCodeRootValidating] = useState(false);
   const [showCodeRootBrowser, setShowCodeRootBrowser] = useState(false);
-
-  // Step: Knowledge (3 modes)
-  const [knowledgeMode, setKnowledgeMode] = useState<KnowledgeMode>('skip');
+  // Knowledge import (optional)
+  const [showKnowledge, setShowKnowledge] = useState(false);
   const [knowledgePaths, setKnowledgePaths] = useState<string[]>([]);
   const [knowledgeInput, setKnowledgeInput] = useState('');
   const [showKnowledgeBrowser, setShowKnowledgeBrowser] = useState(false);
-  // existing-akb sub-state
+  // Existing AKB
   const [akbPath, setAkbPath] = useState('');
   const [akbPathValid, setAkbPathValid] = useState<boolean | null>(null);
   const [akbPathValidating, setAkbPathValidating] = useState(false);
@@ -180,8 +168,8 @@ export default function OnboardingWizard({ onComplete }: Props) {
   const [installingTools, setInstallingTools] = useState(false);
   const [toolLogs, setToolLogs] = useState<Array<{ event: string; tool: string; detail?: string }>>([]);
 
-  // Dynamic steps based on knowledge mode
-  const steps = useMemo(() => getStepsForKnowledgeMode(knowledgeMode), [knowledgeMode]);
+  // Dynamic steps
+  const steps = useMemo(() => getSteps(workspaceMode), [workspaceMode]);
   const currentStep = steps[stepIndex] ?? 'engine';
 
   // Detect engine + fetch CWD on mount
@@ -203,7 +191,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
     if (currentStep === 'company') nameRef.current?.focus();
   }, [currentStep]);
 
-  // Auto-generate location path from company name (unless user manually edited)
+  // Auto-generate location from company name
   useEffect(() => {
     if (locationEdited || !locationBase) return;
     const slug = companyName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -214,11 +202,9 @@ export default function OnboardingWizard({ onComplete }: Props) {
     switch (currentStep) {
       case 'engine': return engineChoice !== 'none' || apiKey.length > 10;
       case 'company': return companyName.trim().length > 0;
-      case 'project': return projectMode === 'fresh' || (projectMode === 'existing' && pathValid === true);
-      case 'knowledge': {
-        if (knowledgeMode === 'existing-akb') return akbPathValid === true;
-        if (knowledgeMode === 'import') return knowledgePaths.length > 0;
-        return true; // skip
+      case 'workspace': {
+        if (workspaceMode === 'existing-akb') return akbPathValid === true;
+        return true; // location auto-fills; code repo & knowledge are optional
       }
       case 'team': return true;
       case 'create': return !scaffoldDone;
@@ -231,7 +217,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
       setStepIndex(stepIndex + 1);
     }
     if (currentStep === 'create' && !scaffolding && !connectingAkb) {
-      if (knowledgeMode === 'existing-akb') {
+      if (workspaceMode === 'existing-akb') {
         handleConnectAkb();
       } else {
         handleScaffold();
@@ -243,39 +229,17 @@ export default function OnboardingWizard({ onComplete }: Props) {
     if (stepIndex > 0) setStepIndex(stepIndex - 1);
   };
 
-  // When knowledgeMode changes, clamp stepIndex to valid range
+  // When workspace mode changes (not on mount), navigate to workspace step
+  const workspaceModeRef = useRef(workspaceMode);
   useEffect(() => {
-    const newSteps = getStepsForKnowledgeMode(knowledgeMode);
-    if (stepIndex >= newSteps.length) {
-      setStepIndex(newSteps.length - 1);
+    if (workspaceModeRef.current === workspaceMode) return; // skip mount
+    workspaceModeRef.current = workspaceMode;
+    const newSteps = getSteps(workspaceMode);
+    const wsIdx = newSteps.indexOf('workspace');
+    if (wsIdx >= 0) {
+      setStepIndex(wsIdx);
     }
-  }, [knowledgeMode, stepIndex]);
-
-  const validatePath = async () => {
-    if (!existingPath.trim()) return;
-    setPathValidating(true);
-    try {
-      const result = await api.validatePath(existingPath.trim());
-      setPathValid(result.valid);
-    } catch {
-      setPathValid(false);
-    } finally {
-      setPathValidating(false);
-    }
-  };
-
-  const validateCodeRoot = async () => {
-    if (!codeRootPath.trim()) return;
-    setCodeRootValidating(true);
-    try {
-      const result = await api.validatePath(codeRootPath.trim());
-      setCodeRootValid(result.valid);
-    } catch {
-      setCodeRootValid(false);
-    } finally {
-      setCodeRootValidating(false);
-    }
-  };
+  }, [workspaceMode]);
 
   const validateAkbPath = async () => {
     if (!akbPath.trim()) return;
@@ -302,7 +266,6 @@ export default function OnboardingWizard({ onComplete }: Props) {
     setInstallingTools(true);
     setToolLogs([]);
     try {
-      // Check if there are any tools to install
       const { tools } = await api.getRequiredTools(team);
       const pending = tools.filter(t => !t.installed);
       if (pending.length === 0) {
@@ -322,8 +285,6 @@ export default function OnboardingWizard({ onComplete }: Props) {
           setToolLogs(prev => [...prev, { event, tool, detail: (data.reason as string) || 'skipped' }]);
         } else if (event === 'error') {
           setToolLogs(prev => [...prev, { event, tool, detail: (data.error as string) || 'failed' }]);
-        } else if (event === 'done') {
-          // done
         }
       });
     } catch {
@@ -341,8 +302,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
         companyName: companyName.trim(),
         description: description.trim() || 'An AI-powered organization',
         team: selectedTeam as ScaffoldInput['team'],
-        existingProjectPath: projectMode === 'existing' ? existingPath.trim() : undefined,
-        knowledgePaths: knowledgeMode === 'import' && knowledgePaths.length > 0 ? knowledgePaths : undefined,
+        knowledgePaths: knowledgePaths.length > 0 ? knowledgePaths : undefined,
         language: language !== 'auto' ? language : undefined,
         location: location.trim() || undefined,
         codeRoot: codeRootPath.trim() || undefined,
@@ -356,7 +316,6 @@ export default function OnboardingWizard({ onComplete }: Props) {
       setScaffoldDone(true);
       setScaffolding(false);
 
-      // Auto-install tools after scaffold (non-blocking)
       if (selectedTeam !== 'custom') {
         handleInstallTools(selectedTeam);
       }
@@ -385,7 +344,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
   };
 
   const handleEnterOffice = () => {
-    if (knowledgeMode === 'import' && knowledgePaths.length > 0) {
+    if (knowledgePaths.length > 0) {
       onComplete({ paths: knowledgePaths, companyRoot: '' });
     } else {
       onComplete();
@@ -452,7 +411,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
         </div>
 
         {/* Body */}
-        <div className="px-6 py-5 min-h-[280px]">
+        <div className="px-6 py-5 min-h-[280px] max-h-[480px] overflow-y-auto">
 
           {/* ── Step: AI Engine ── */}
           {currentStep === 'engine' && (
@@ -508,10 +467,10 @@ export default function OnboardingWizard({ onComplete }: Props) {
             </div>
           )}
 
-          {/* ── Step: Company Info ── */}
+          {/* ── Step: Company ── */}
           {currentStep === 'company' && (
             <div className="space-y-4">
-              <h2 className="text-base font-semibold" style={{ color: 'var(--terminal-text)' }}>Company Info</h2>
+              <h2 className="text-base font-semibold" style={{ color: 'var(--terminal-text)' }}>Company</h2>
               <div>
                 <label className="text-xs font-medium block mb-1" style={{ color: 'var(--terminal-text-secondary)' }}>Company Name *</label>
                 <input ref={nameRef} className={inputClass} placeholder="e.g. Acme Corp" value={companyName} onChange={e => setCompanyName(e.target.value)} />
@@ -519,34 +478,6 @@ export default function OnboardingWizard({ onComplete }: Props) {
               <div>
                 <label className="text-xs font-medium block mb-1" style={{ color: 'var(--terminal-text-secondary)' }}>Description</label>
                 <textarea className={`${inputClass} resize-none`} rows={3} placeholder="What does your AI company do?" value={description} onChange={e => setDescription(e.target.value)} />
-              </div>
-              <div>
-                <label className="text-xs font-medium block mb-1" style={{ color: 'var(--terminal-text-secondary)' }}>Location</label>
-                <div className="flex gap-2">
-                  <input
-                    className={`${inputClass} flex-1`}
-                    placeholder="/path/to/your-company"
-                    value={location}
-                    onChange={e => { setLocation(e.target.value); setLocationEdited(true); }}
-                  />
-                  <button
-                    onClick={() => setShowLocationBrowser(!showLocationBrowser)}
-                    className="px-3 py-2 rounded text-xs font-medium transition-colors shrink-0"
-                    style={{ background: 'var(--hud-bg-alt)', color: 'var(--terminal-text)', border: '1px solid var(--terminal-border)' }}
-                    title="Browse folders"
-                  >
-                    {'\uD83D\uDCC1'}
-                  </button>
-                </div>
-                <div className="text-[10px] mt-1" style={{ color: 'var(--terminal-text-muted)' }}>
-                  Where your AI company files will be created.
-                </div>
-                {showLocationBrowser && (
-                  <FolderBrowser
-                    onSelect={(p) => { setLocation(p); setLocationEdited(true); setShowLocationBrowser(false); }}
-                    onClose={() => setShowLocationBrowser(false)}
-                  />
-                )}
               </div>
               <div>
                 <label className="text-xs font-medium block mb-1" style={{ color: 'var(--terminal-text-secondary)' }}>AI Response Language</label>
@@ -560,130 +491,111 @@ export default function OnboardingWizard({ onComplete }: Props) {
             </div>
           )}
 
-          {/* ── Step: Project (code repo) ── */}
-          {currentStep === 'project' && (
+          {/* ── Step: Workspace ── */}
+          {currentStep === 'workspace' && (
             <div className="space-y-4">
-              <h2 className="text-base font-semibold" style={{ color: 'var(--terminal-text)' }}>Project Setup</h2>
-              <div className={cardClass(projectMode === 'fresh')} onClick={() => { setProjectMode('fresh'); setPathValid(null); }}>
-                <div className="font-medium text-sm">{'\uD83C\uDF31'} Start Fresh</div>
-                <div className="text-xs opacity-70 mt-1">Create a new AI company from scratch with clean directory structure.</div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-semibold" style={{ color: 'var(--terminal-text)' }}>Workspace</h2>
+                <HelpTip text={'"New Company" creates a fresh workspace with roles, knowledge base, and project structure.\n\n"Connect Existing" links to an existing Tycono workspace you\'ve set up before.'} />
               </div>
-              <div className={cardClass(projectMode === 'existing')} onClick={() => setProjectMode('existing')}>
-                <div className="font-medium text-sm">{'\uD83D\uDCC2'} Connect Existing Project</div>
-                <div className="text-xs opacity-70 mt-1">Add AI company structure to an existing codebase or knowledge base.</div>
-                {projectMode === 'existing' && (
-                  <div className="mt-3" onClick={e => e.stopPropagation()}>
+
+              {/* Mode toggle */}
+              <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--terminal-border)' }}>
+                <button
+                  className="flex-1 px-3 py-2 text-xs font-medium transition-colors"
+                  style={{
+                    background: workspaceMode === 'new' ? 'var(--accent)' : 'var(--hud-bg-alt)',
+                    color: workspaceMode === 'new' ? '#fff' : 'var(--terminal-text-muted)',
+                  }}
+                  onClick={() => setWorkspaceMode('new')}
+                >
+                  New Company
+                </button>
+                <button
+                  className="flex-1 px-3 py-2 text-xs font-medium transition-colors"
+                  style={{
+                    background: workspaceMode === 'existing-akb' ? 'var(--accent)' : 'var(--hud-bg-alt)',
+                    color: workspaceMode === 'existing-akb' ? '#fff' : 'var(--terminal-text-muted)',
+                    borderLeft: '1px solid var(--terminal-border)',
+                  }}
+                  onClick={() => setWorkspaceMode('existing-akb')}
+                >
+                  Connect Existing
+                </button>
+              </div>
+
+              {workspaceMode === 'new' ? (
+                <div className="space-y-3">
+                  {/* Section 1: Company Location (required) */}
+                  <WorkspaceSection icon={'\uD83D\uDCC1'} title="Company Location" hint="Where your AI company files will be created." help="Roles, knowledge, decisions, and project files are stored here. This is your AI company's home directory. Auto-generated from your company name — change it if needed.">
                     <div className="flex gap-2">
                       <input
                         className={`${inputClass} flex-1`}
-                        placeholder="/path/to/your/project"
-                        value={existingPath}
-                        onChange={e => { setExistingPath(e.target.value); setPathValid(null); }}
-                        autoFocus
+                        placeholder="/path/to/your-company"
+                        value={location}
+                        onChange={e => { setLocation(e.target.value); setLocationEdited(true); }}
                       />
                       <button
-                        onClick={() => setShowProjectBrowser(!showProjectBrowser)}
-                        className="px-3 py-2 rounded text-xs font-medium transition-colors"
-                        style={{ background: 'var(--hud-bg-alt)', color: 'var(--terminal-text)' }}
+                        onClick={() => setShowLocationBrowser(!showLocationBrowser)}
+                        className="px-3 py-2 rounded text-xs font-medium transition-colors shrink-0"
+                        style={{ background: 'var(--hud-bg-alt)', color: 'var(--terminal-text)', border: '1px solid var(--terminal-border)' }}
                         title="Browse folders"
                       >
                         {'\uD83D\uDCC1'}
                       </button>
-                      <button
-                        onClick={validatePath}
-                        disabled={pathValidating || !existingPath.trim()}
-                        className="px-3 py-2 rounded text-xs font-medium transition-colors"
-                        style={{ background: 'var(--accent)', color: '#fff', opacity: pathValidating || !existingPath.trim() ? 0.5 : 1 }}
-                      >
-                        {pathValidating ? '...' : 'Verify'}
-                      </button>
                     </div>
-                    {pathValid === true && (
-                      <div className="text-xs mt-2" style={{ color: 'var(--active-green)' }}>{'\u2705'} Path verified: {existingPath}</div>
-                    )}
-                    {pathValid === false && (
-                      <div className="text-xs mt-2" style={{ color: '#EF4444' }}>{'\u274C'} Invalid path</div>
-                    )}
-                    {showProjectBrowser && (
+                    {showLocationBrowser && (
                       <FolderBrowser
-                        onSelect={(p) => { setExistingPath(p); setPathValid(true); setShowProjectBrowser(false); }}
-                        onClose={() => setShowProjectBrowser(false)}
+                        onSelect={(p) => { setLocation(p); setLocationEdited(true); setShowLocationBrowser(false); }}
+                        onClose={() => setShowLocationBrowser(false)}
                       />
                     )}
-                  </div>
-                )}
-              </div>
+                  </WorkspaceSection>
 
-              {/* Code Repository (optional) */}
-              <div style={{ borderTop: '1px solid var(--terminal-border)', paddingTop: 16 }}>
-                <label className="text-xs font-medium block mb-1" style={{ color: 'var(--terminal-text-secondary)' }}>
-                  Code Repository (optional)
-                </label>
-                <div className="text-[10px] mb-2" style={{ color: 'var(--terminal-text-muted)' }}>
-                  Connect a separate code repo. AKB and code will be managed independently.
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    className={`${inputClass} flex-1`}
-                    placeholder="/path/to/code/repo"
-                    value={codeRootPath}
-                    onChange={e => { setCodeRootPath(e.target.value); setCodeRootValid(null); }}
-                  />
-                  <button
-                    onClick={() => setShowCodeRootBrowser(!showCodeRootBrowser)}
-                    className="px-3 py-2 rounded text-xs font-medium transition-colors"
-                    style={{ background: 'var(--hud-bg-alt)', color: 'var(--terminal-text)' }}
-                    title="Browse folders"
+                  {/* Section 2: Code Repository (optional, collapsible) */}
+                  <CollapsibleSection
+                    icon={'\uD83D\uDCBB'}
+                    title="Code Repository"
+                    hint="Connect a separate code repo."
+                    help={"Link your existing code repo so AI roles can read and write code there.\n\nSkip this if you don't have a codebase yet — you can connect one later from Settings."}
+                    tag="optional"
+                    open={showCodeRepo}
+                    onToggle={() => setShowCodeRepo(!showCodeRepo)}
                   >
-                    {'\uD83D\uDCC1'}
-                  </button>
-                  {codeRootPath.trim() && (
-                    <button
-                      onClick={validateCodeRoot}
-                      disabled={codeRootValidating}
-                      className="px-3 py-2 rounded text-xs font-medium transition-colors"
-                      style={{ background: 'var(--accent)', color: '#fff', opacity: codeRootValidating ? 0.5 : 1 }}
-                    >
-                      {codeRootValidating ? '...' : 'Verify'}
-                    </button>
-                  )}
-                </div>
-                {codeRootValid === true && (
-                  <div className="text-xs mt-2" style={{ color: 'var(--active-green)' }}>{'\u2705'} Path verified: {codeRootPath}</div>
-                )}
-                {codeRootValid === false && (
-                  <div className="text-xs mt-2" style={{ color: '#EF4444' }}>{'\u274C'} Invalid path</div>
-                )}
-                {showCodeRootBrowser && (
-                  <FolderBrowser
-                    onSelect={(p) => { setCodeRootPath(p); setCodeRootValid(true); setShowCodeRootBrowser(false); }}
-                    onClose={() => setShowCodeRootBrowser(false)}
-                  />
-                )}
-              </div>
-            </div>
-          )}
+                    <div className="flex gap-2">
+                      <input
+                        className={`${inputClass} flex-1`}
+                        placeholder="/path/to/code/repo"
+                        value={codeRootPath}
+                        onChange={e => setCodeRootPath(e.target.value)}
+                      />
+                      <button
+                        onClick={() => setShowCodeRootBrowser(!showCodeRootBrowser)}
+                        className="px-3 py-2 rounded text-xs font-medium transition-colors shrink-0"
+                        style={{ background: 'var(--hud-bg-alt)', color: 'var(--terminal-text)', border: '1px solid var(--terminal-border)' }}
+                        title="Browse folders"
+                      >
+                        {'\uD83D\uDCC1'}
+                      </button>
+                    </div>
+                    {showCodeRootBrowser && (
+                      <FolderBrowser
+                        onSelect={(p) => { setCodeRootPath(p); setShowCodeRootBrowser(false); }}
+                        onClose={() => setShowCodeRootBrowser(false)}
+                      />
+                    )}
+                  </CollapsibleSection>
 
-          {/* ── Step: Knowledge (3 modes) ── */}
-          {currentStep === 'knowledge' && (
-            <div className="space-y-3">
-              <h2 className="text-base font-semibold" style={{ color: 'var(--terminal-text)' }}>Knowledge Strategy</h2>
-              <p className="text-xs" style={{ color: 'var(--terminal-text-secondary)' }}>
-                How should AI handle your knowledge base?
-              </p>
-
-              {/* Option 1: Skip */}
-              <div className={cardClass(knowledgeMode === 'skip')} onClick={() => setKnowledgeMode('skip')}>
-                <div className="font-medium text-sm">{'\uD83C\uDF31'} Start Fresh</div>
-                <div className="text-xs opacity-70 mt-1">Empty knowledge base. Add documents later from the office.</div>
-              </div>
-
-              {/* Option 2: Import & Build */}
-              <div className={cardClass(knowledgeMode === 'import')} onClick={() => setKnowledgeMode('import')}>
-                <div className="font-medium text-sm">{'\uD83D\uDCDA'} Import & Build</div>
-                <div className="text-xs opacity-70 mt-1">Select folders with documents — AI reads, summarizes, and organizes them.</div>
-                {knowledgeMode === 'import' && (
-                  <div className="mt-3 space-y-2" onClick={e => e.stopPropagation()}>
+                  {/* Section 3: Knowledge Import (optional, collapsible) */}
+                  <CollapsibleSection
+                    icon={'\uD83D\uDCDA'}
+                    title="Knowledge Import"
+                    hint="Import existing documents into knowledge base."
+                    help={"Point to folders with docs (.md, .txt, etc.) — AI will read, summarize, and organize them into a searchable knowledge base.\n\nSkip this to start with an empty knowledge base. You can import documents anytime from the office."}
+                    tag="optional"
+                    open={showKnowledge}
+                    onToggle={() => setShowKnowledge(!showKnowledge)}
+                  >
                     <div className="flex gap-2">
                       <input
                         className={`${inputClass} flex-1`}
@@ -691,12 +603,11 @@ export default function OnboardingWizard({ onComplete }: Props) {
                         value={knowledgeInput}
                         onChange={e => setKnowledgeInput(e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addKnowledgePath(); } }}
-                        autoFocus
                       />
                       <button
                         onClick={() => setShowKnowledgeBrowser(!showKnowledgeBrowser)}
-                        className="px-3 py-2 rounded text-xs font-medium transition-colors"
-                        style={{ background: 'var(--hud-bg-alt)', color: 'var(--terminal-text)' }}
+                        className="px-3 py-2 rounded text-xs font-medium transition-colors shrink-0"
+                        style={{ background: 'var(--hud-bg-alt)', color: 'var(--terminal-text)', border: '1px solid var(--terminal-border)' }}
                         title="Browse folders"
                       >
                         {'\uD83D\uDCC1'}
@@ -704,7 +615,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
                       <button
                         onClick={addKnowledgePath}
                         disabled={!knowledgeInput.trim()}
-                        className="px-3 py-2 rounded text-xs font-medium"
+                        className="px-3 py-2 rounded text-xs font-medium shrink-0"
                         style={{ background: 'var(--accent)', color: '#fff', opacity: !knowledgeInput.trim() ? 0.5 : 1 }}
                       >
                         Add
@@ -720,7 +631,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
                       />
                     )}
                     {knowledgePaths.length > 0 && (
-                      <div className="space-y-1">
+                      <div className="space-y-1 mt-2">
                         {knowledgePaths.map((p, i) => (
                           <div
                             key={i}
@@ -733,21 +644,12 @@ export default function OnboardingWizard({ onComplete }: Props) {
                         ))}
                       </div>
                     )}
-                    {knowledgePaths.length === 0 && (
-                      <div className="text-[10px] text-center py-2" style={{ color: 'var(--terminal-text-muted)' }}>
-                        Add at least one folder to import.
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Option 3: Connect Existing AKB */}
-              <div className={cardClass(knowledgeMode === 'existing-akb')} onClick={() => setKnowledgeMode('existing-akb')}>
-                <div className="font-medium text-sm">{'\uD83D\uDD17'} Connect Existing AKB</div>
-                <div className="text-xs opacity-70 mt-1">Connect a directory that already has CLAUDE.md and AKB structure.</div>
-                {knowledgeMode === 'existing-akb' && (
-                  <div className="mt-3" onClick={e => e.stopPropagation()}>
+                  </CollapsibleSection>
+                </div>
+              ) : (
+                /* Existing AKB mode */
+                <div className="space-y-3">
+                  <WorkspaceSection icon={'\uD83D\uDD17'} title="AKB Path" hint="Directory with existing CLAUDE.md and AKB structure." help="Connect to a directory that was previously set up with Tycono. It must contain a CLAUDE.md file. All existing roles, knowledge, and settings will be loaded.">
                     <div className="flex gap-2">
                       <input
                         className={`${inputClass} flex-1`}
@@ -758,8 +660,8 @@ export default function OnboardingWizard({ onComplete }: Props) {
                       />
                       <button
                         onClick={() => setShowAkbBrowser(!showAkbBrowser)}
-                        className="px-3 py-2 rounded text-xs font-medium transition-colors"
-                        style={{ background: 'var(--hud-bg-alt)', color: 'var(--terminal-text)' }}
+                        className="px-3 py-2 rounded text-xs font-medium transition-colors shrink-0"
+                        style={{ background: 'var(--hud-bg-alt)', color: 'var(--terminal-text)', border: '1px solid var(--terminal-border)' }}
                         title="Browse folders"
                       >
                         {'\uD83D\uDCC1'}
@@ -767,14 +669,14 @@ export default function OnboardingWizard({ onComplete }: Props) {
                       <button
                         onClick={validateAkbPath}
                         disabled={akbPathValidating || !akbPath.trim()}
-                        className="px-3 py-2 rounded text-xs font-medium transition-colors"
+                        className="px-3 py-2 rounded text-xs font-medium transition-colors shrink-0"
                         style={{ background: 'var(--accent)', color: '#fff', opacity: akbPathValidating || !akbPath.trim() ? 0.5 : 1 }}
                       >
                         {akbPathValidating ? '...' : 'Verify'}
                       </button>
                     </div>
                     {akbPathValid === true && (
-                      <div className="text-xs mt-2" style={{ color: 'var(--active-green)' }}>{'\u2705'} Valid AKB found: {akbPath}</div>
+                      <div className="text-xs mt-2" style={{ color: 'var(--active-green)' }}>{'\u2705'} Valid AKB found</div>
                     )}
                     {akbPathValid === false && (
                       <div className="text-xs mt-2" style={{ color: '#EF4444' }}>{'\u274C'} No valid AKB (CLAUDE.md required)</div>
@@ -785,9 +687,9 @@ export default function OnboardingWizard({ onComplete }: Props) {
                         onClose={() => setShowAkbBrowser(false)}
                       />
                     )}
-                  </div>
-                )}
-              </div>
+                  </WorkspaceSection>
+                </div>
+              )}
             </div>
           )}
 
@@ -822,7 +724,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
             <div className="space-y-4">
               <h2 className="text-base font-semibold" style={{ color: 'var(--terminal-text)' }}>
                 {scaffoldDone
-                  ? (knowledgeMode === 'existing-akb' ? 'AKB Connected!' : 'Company Created!')
+                  ? (workspaceMode === 'existing-akb' ? 'AKB Connected!' : 'Company Created!')
                   : 'Review & Create'}
               </h2>
               {!scaffoldDone && !scaffolding && !connectingAkb && (
@@ -831,7 +733,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
                     className="rounded-lg p-4 space-y-2 text-xs"
                     style={{ background: 'var(--terminal-bg)', color: 'var(--terminal-text)', border: '1px solid var(--terminal-border)', fontFamily: 'var(--pixel-font)' }}
                   >
-                    {knowledgeMode === 'existing-akb' ? (
+                    {workspaceMode === 'existing-akb' ? (
                       <>
                         <div><span className="opacity-50">Mode:</span> Connect Existing AKB</div>
                         <div><span className="opacity-50">Path:</span> {akbPath}</div>
@@ -842,10 +744,10 @@ export default function OnboardingWizard({ onComplete }: Props) {
                         <div><span className="opacity-50">Company:</span> {companyName}</div>
                         <div><span className="opacity-50">Location:</span> {location || '(default)'}</div>
                         <div><span className="opacity-50">Engine:</span> {engineChoice === 'claude-cli' ? 'Claude Code CLI' : 'Direct API'}</div>
-                        <div><span className="opacity-50">Project:</span> {projectMode === 'fresh' ? 'Start Fresh' : `Existing (${existingPath})`}</div>
-                        <div><span className="opacity-50">Knowledge:</span> {knowledgeMode === 'skip' ? 'Fresh (empty)' : `Import ${knowledgePaths.length} source(s)`}</div>
+                        {codeRootPath.trim() && <div><span className="opacity-50">Code Repo:</span> {codeRootPath}</div>}
+                        <div><span className="opacity-50">Knowledge:</span> {knowledgePaths.length > 0 ? `Import ${knowledgePaths.length} source(s)` : 'Fresh (empty)'}</div>
                         <div><span className="opacity-50">Team:</span> {selectedTeam}</div>
-                        {knowledgeMode === 'import' && knowledgePaths.length > 0 && (
+                        {knowledgePaths.length > 0 && (
                           <div className="text-[10px] mt-1" style={{ color: 'var(--idle-amber)' }}>
                             Knowledge import will run in the background after entering the office.
                           </div>
@@ -887,7 +789,6 @@ export default function OnboardingWizard({ onComplete }: Props) {
                       </div>
                     ))}
                   </div>
-                  {/* Tool Installation Progress */}
                   {(installingTools || toolLogs.length > 0) && (
                     <div
                       className="rounded-lg p-4 text-xs space-y-1"
@@ -913,7 +814,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
                       )}
                     </div>
                   )}
-                  {knowledgeMode === 'import' && knowledgePaths.length > 0 && (
+                  {knowledgePaths.length > 0 && (
                     <div className="text-xs p-3 rounded" style={{ background: 'var(--accent)', color: '#fff', opacity: 0.9 }}>
                       Knowledge import will start in the background after entering the office.
                     </div>
@@ -958,13 +859,100 @@ export default function OnboardingWizard({ onComplete }: Props) {
                 {currentStep === 'create'
                   ? (scaffolding || connectingAkb
                     ? (connectingAkb ? 'Connecting...' : 'Creating...')
-                    : (knowledgeMode === 'existing-akb' ? 'Connect AKB' : 'Create Company'))
+                    : (workspaceMode === 'existing-akb' ? 'Connect AKB' : 'Create Company'))
                   : 'Next'}
               </button>
             )}
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ─── Helper Components ────────────────── */
+
+function HelpTip({ text }: { text: string }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span className="relative inline-flex">
+      <span
+        className="w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center cursor-help shrink-0 select-none"
+        style={{ background: 'var(--terminal-surface)', color: 'var(--terminal-text-muted)', border: '1px solid var(--terminal-border)' }}
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        onClick={(e) => { e.stopPropagation(); setShow(!show); }}
+      >
+        ?
+      </span>
+      {show && (
+        <div
+          className="absolute z-50 bottom-full left-0 mb-2 px-3 py-2 rounded-lg text-[11px] leading-relaxed whitespace-pre-line w-60 shadow-lg pointer-events-none"
+          style={{ background: 'var(--terminal-bg)', color: 'var(--terminal-text-secondary)', border: '1px solid var(--terminal-border)' }}
+        >
+          {text}
+          <div
+            className="absolute top-full left-2 w-0 h-0"
+            style={{ borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: '5px solid var(--terminal-border)' }}
+          />
+        </div>
+      )}
+    </span>
+  );
+}
+
+function WorkspaceSection({ icon, title, hint, help, children }: { icon: string; title: string; hint: string; help?: string; children: React.ReactNode }) {
+  return (
+    <div
+      className="rounded-lg p-3 space-y-2"
+      style={{ background: 'var(--hud-bg-alt)', border: '1px solid var(--terminal-border)' }}
+    >
+      <div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm">{icon}</span>
+          <span className="text-xs font-medium" style={{ color: 'var(--terminal-text)' }}>{title}</span>
+          {help && <HelpTip text={help} />}
+        </div>
+        <div className="text-[10px] mt-0.5 ml-6" style={{ color: 'var(--terminal-text-muted)' }}>{hint}</div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function CollapsibleSection({ icon, title, hint, help, tag, open, onToggle, children }: {
+  icon: string; title: string; hint: string; help?: string; tag?: string;
+  open: boolean; onToggle: () => void; children: React.ReactNode;
+}) {
+  return (
+    <div
+      className="rounded-lg overflow-hidden"
+      style={{ background: 'var(--hud-bg-alt)', border: '1px solid var(--terminal-border)' }}
+    >
+      <div
+        className="p-3 cursor-pointer flex items-center gap-2 hover:bg-[var(--terminal-surface-light)] transition-colors"
+        onClick={onToggle}
+      >
+        <span className="text-sm">{icon}</span>
+        <span className="text-xs font-medium flex-1" style={{ color: 'var(--terminal-text)' }}>{title}</span>
+        {help && <HelpTip text={help} />}
+        {tag && (
+          <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: 'var(--terminal-surface)', color: 'var(--terminal-text-muted)' }}>
+            {tag}
+          </span>
+        )}
+        <span className="text-[10px]" style={{ color: 'var(--terminal-text-muted)' }}>{open ? '\u25B2' : '\u25BC'}</span>
+      </div>
+      {!open && (
+        <div className="px-3 pb-2 -mt-1">
+          <div className="text-[10px] ml-6" style={{ color: 'var(--terminal-text-muted)' }}>{hint}</div>
+        </div>
+      )}
+      {open && (
+        <div className="px-3 pb-3 space-y-2">
+          {children}
+        </div>
+      )}
     </div>
   );
 }
