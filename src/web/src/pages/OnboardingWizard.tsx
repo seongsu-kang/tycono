@@ -757,7 +757,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
                   <div className="flex flex-wrap gap-1.5 mt-2">
                     {team.roles.map(r => (
                       <span key={r.id} className="px-2 py-0.5 rounded text-[10px]" style={{ background: 'var(--terminal-bg)', color: 'var(--terminal-text)', border: '1px solid var(--terminal-border)' }}>
-                        {r.name}
+                        {r.id.toUpperCase()}
                       </span>
                     ))}
                   </div>
