@@ -121,9 +121,17 @@ export interface Message {
   thinking?: string;
   streamEvents?: StreamEvent[];
   type: 'conversation' | 'directive' | 'system';
-  status?: 'streaming' | 'done' | 'error';
+  status?: 'streaming' | 'done' | 'error' | 'awaiting_input';
   timestamp: string;
   attachments?: ImageAttachment[];
+
+  /* D-014: Session-Centric extensions */
+  events?: ActivityEvent[];
+  dispatches?: Array<{ sessionId: string; roleId: string }>;
+  jobId?: string;
+  readOnly?: boolean;
+  turns?: number;
+  tokens?: { input: number; output: number };
 }
 
 export interface RoleSource {
@@ -243,8 +251,10 @@ export interface Session {
   status: 'active' | 'closed';
   createdAt: string;
   updatedAt: string;
-  source?: 'chat' | 'wave';
+  source?: 'chat' | 'wave' | 'dispatch';
   jobId?: string;
+  parentSessionId?: string;
+  waveId?: string;
 }
 
 /* ─── Onboarding / Setup Types ──────────── */
