@@ -7,6 +7,10 @@ import type { EngineDetection, TeamTemplate, ScaffoldInput, BrowseResult, Import
 function FolderBrowser({ onSelect, onClose }: { onSelect: (path: string) => void; onClose: () => void }) {
   const [data, setData] = useState<BrowseResult | null>(null);
   const [loading, setLoading] = useState(true);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [showNewFolder, setShowNewFolder] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const newFolderRef = useRef<HTMLInputElement>(null);
 
   const browse = useCallback(async (targetPath?: string) => {
     setLoading(true);
@@ -18,6 +22,24 @@ function FolderBrowser({ onSelect, onClose }: { onSelect: (path: string) => void
   }, []);
 
   useEffect(() => { browse(); }, [browse]);
+
+  useEffect(() => {
+    if (showNewFolder) newFolderRef.current?.focus();
+  }, [showNewFolder]);
+
+  const handleCreateFolder = async () => {
+    if (!data || !newFolderName.trim()) return;
+    setCreating(true);
+    try {
+      const result = await api.mkdir(data.current, newFolderName.trim());
+      if (result.ok) {
+        setNewFolderName('');
+        setShowNewFolder(false);
+        await browse(result.path);
+      }
+    } catch { /* ignore */ }
+    finally { setCreating(false); }
+  };
 
   if (loading && !data) {
     return (
@@ -32,30 +54,60 @@ function FolderBrowser({ onSelect, onClose }: { onSelect: (path: string) => void
   return (
     <div
       className="mt-3 rounded-lg overflow-hidden text-xs"
-      style={{ background: 'var(--terminal-bg)', border: '1px solid var(--terminal-border)', maxHeight: 220, overflowY: 'auto' }}
+      style={{ background: 'var(--terminal-bg)', border: '1px solid var(--terminal-border)', maxHeight: 260, overflowY: 'auto' }}
     >
       <div
-        className="px-3 py-2 flex items-center gap-2 sticky top-0"
+        className="px-3 py-2 flex items-center gap-2 sticky top-0 z-10"
         style={{ background: 'var(--terminal-surface)', borderBottom: '1px solid var(--terminal-border)' }}
       >
         <span style={{ color: 'var(--terminal-text-secondary)', fontFamily: 'var(--pixel-font)' }} className="truncate flex-1">
           {data.current}
         </span>
         <button
+          onClick={() => { setShowNewFolder(!showNewFolder); setNewFolderName(''); }}
+          className="px-2 py-1 rounded text-[10px] font-medium shrink-0 cursor-pointer"
+          style={{ background: 'var(--terminal-bg)', color: 'var(--terminal-text-muted)', border: '1px solid var(--terminal-border)' }}
+          title="New folder"
+        >
+          + Folder
+        </button>
+        <button
           onClick={() => onSelect(data.current)}
-          className="px-2 py-1 rounded text-[10px] font-medium shrink-0"
+          className="px-2 py-1 rounded text-[10px] font-medium shrink-0 cursor-pointer"
           style={{ background: 'var(--active-green)', color: '#fff' }}
         >
           Select
         </button>
         <button
           onClick={onClose}
-          className="opacity-50 hover:opacity-100 shrink-0"
+          className="opacity-50 hover:opacity-100 shrink-0 cursor-pointer"
           style={{ color: 'var(--terminal-text)' }}
         >
           {'\u2715'}
         </button>
       </div>
+
+      {showNewFolder && (
+        <div className="px-3 py-2 flex items-center gap-2" style={{ borderBottom: '1px solid var(--terminal-border)', background: 'var(--hud-bg-alt)' }}>
+          <input
+            ref={newFolderRef}
+            className="flex-1 px-2 py-1 rounded text-xs"
+            style={{ background: 'var(--terminal-bg)', color: 'var(--terminal-text)', border: '1px solid var(--terminal-border)', outline: 'none' }}
+            placeholder="folder name"
+            value={newFolderName}
+            onChange={e => setNewFolderName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleCreateFolder(); if (e.key === 'Escape') setShowNewFolder(false); }}
+          />
+          <button
+            onClick={handleCreateFolder}
+            disabled={creating || !newFolderName.trim()}
+            className="px-2 py-1 rounded text-[10px] font-medium shrink-0 cursor-pointer"
+            style={{ background: 'var(--accent)', color: '#fff', opacity: creating || !newFolderName.trim() ? 0.5 : 1 }}
+          >
+            {creating ? '...' : 'Create'}
+          </button>
+        </div>
+      )}
 
       {data.parent && (
         <div
@@ -80,7 +132,7 @@ function FolderBrowser({ onSelect, onClose }: { onSelect: (path: string) => void
         </div>
       ))}
 
-      {data.dirs.length === 0 && (
+      {data.dirs.length === 0 && !showNewFolder && (
         <div className="px-3 py-3 text-center" style={{ color: 'var(--terminal-text-muted)' }}>
           No subdirectories
         </div>

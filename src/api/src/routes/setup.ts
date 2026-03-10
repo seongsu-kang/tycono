@@ -190,6 +190,32 @@ setupRouter.post('/browse', (req, res) => {
 });
 
 /**
+ * POST /api/setup/mkdir
+ * Create a new directory inside the browsed location.
+ */
+setupRouter.post('/mkdir', (req, res) => {
+  const { path: parentPath, name } = req.body;
+  if (!parentPath || !name || typeof parentPath !== 'string' || typeof name !== 'string') {
+    res.status(400).json({ error: 'path and name are required' });
+    return;
+  }
+  // Sanitize name — no path separators or dots-only
+  const sanitized = name.trim().replace(/[/\\]/g, '');
+  if (!sanitized || sanitized === '.' || sanitized === '..') {
+    res.status(400).json({ error: 'Invalid folder name' });
+    return;
+  }
+  const target = path.join(path.resolve(parentPath), sanitized);
+  try {
+    fs.mkdirSync(target, { recursive: true });
+    res.json({ ok: true, path: target });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
  * POST /api/setup/connect-akb
  * Connect an existing AKB directory.
  */

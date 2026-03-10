@@ -110,6 +110,7 @@ export const api = {
   scaffold: (input: ScaffoldInput) => post<ScaffoldResult>('/setup/scaffold', input),
   getTeams: () => get<TeamTemplate[]>('/setup/teams'),
   browse: (path?: string) => post<BrowseResult>('/setup/browse', { path }),
+  mkdir: (parentPath: string, name: string) => post<{ ok: boolean; path: string }>('/setup/mkdir', { path: parentPath, name }),
   connectAkb: (path: string) => post<ConnectAkbResult>('/setup/connect-akb', { path }),
   getRequiredTools: (team: string) => post<{ tools: Array<{ package: string; binary: string; installCmd: string; skillId: string; installed: boolean }> }>('/setup/required-tools', { team }),
   installTools: (team: string, onEvent: (event: string, data: Record<string, unknown>) => void): Promise<void> => {
