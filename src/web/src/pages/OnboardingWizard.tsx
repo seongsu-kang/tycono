@@ -176,6 +176,10 @@ export default function OnboardingWizard({ onComplete }: Props) {
   const [scaffoldProjectRoot, setScaffoldProjectRoot] = useState<string>('');
   const [connectingAkb, setConnectingAkb] = useState(false);
 
+  // Tool installation
+  const [installingTools, setInstallingTools] = useState(false);
+  const [toolLogs, setToolLogs] = useState<Array<{ event: string; tool: string; detail?: string }>>([]);
+
   // Dynamic steps based on knowledge mode
   const steps = useMemo(() => getStepsForKnowledgeMode(knowledgeMode), [knowledgeMode]);
   const currentStep = steps[stepIndex] ?? 'engine';
@@ -294,6 +298,41 @@ export default function OnboardingWizard({ onComplete }: Props) {
     }
   };
 
+  const handleInstallTools = async (team: string) => {
+    setInstallingTools(true);
+    setToolLogs([]);
+    try {
+      // Check if there are any tools to install
+      const { tools } = await api.getRequiredTools(team);
+      const pending = tools.filter(t => !t.installed);
+      if (pending.length === 0) {
+        setInstallingTools(false);
+        return;
+      }
+
+      await api.installTools(team, (event, data) => {
+        const tool = (data.tool as string) || '';
+        if (event === 'checking') {
+          setToolLogs(prev => [...prev, { event, tool, detail: 'checking...' }]);
+        } else if (event === 'installing') {
+          setToolLogs(prev => [...prev, { event, tool, detail: 'installing...' }]);
+        } else if (event === 'installed') {
+          setToolLogs(prev => [...prev, { event, tool, detail: 'installed' }]);
+        } else if (event === 'skipped') {
+          setToolLogs(prev => [...prev, { event, tool, detail: (data.reason as string) || 'skipped' }]);
+        } else if (event === 'error') {
+          setToolLogs(prev => [...prev, { event, tool, detail: (data.error as string) || 'failed' }]);
+        } else if (event === 'done') {
+          // done
+        }
+      });
+    } catch {
+      // Tool install failure is non-blocking
+    } finally {
+      setInstallingTools(false);
+    }
+  };
+
   const handleScaffold = async () => {
     setScaffolding(true);
     setScaffoldError(null);
@@ -315,9 +354,14 @@ export default function OnboardingWizard({ onComplete }: Props) {
       setCreatedFiles(result.created);
       setScaffoldProjectRoot(result.projectRoot);
       setScaffoldDone(true);
+      setScaffolding(false);
+
+      // Auto-install tools after scaffold (non-blocking)
+      if (selectedTeam !== 'custom') {
+        handleInstallTools(selectedTeam);
+      }
     } catch (err) {
       setScaffoldError(err instanceof Error ? err.message : 'Scaffold failed');
-    } finally {
       setScaffolding(false);
     }
   };
@@ -843,6 +887,32 @@ export default function OnboardingWizard({ onComplete }: Props) {
                       </div>
                     ))}
                   </div>
+                  {/* Tool Installation Progress */}
+                  {(installingTools || toolLogs.length > 0) && (
+                    <div
+                      className="rounded-lg p-4 text-xs space-y-1"
+                      style={{ background: 'var(--terminal-bg)', color: 'var(--terminal-text)', border: '1px solid var(--terminal-border)', fontFamily: 'var(--pixel-font)' }}
+                    >
+                      <div className="font-medium mb-2" style={{ color: 'var(--terminal-text-secondary)' }}>
+                        {installingTools ? 'Installing skill tools...' : 'Skill tools'}
+                      </div>
+                      {toolLogs.map((log, i) => (
+                        <div key={i} className="py-0.5 flex items-center gap-2">
+                          <span style={{ color: log.event === 'installed' || log.event === 'skipped' ? 'var(--active-green)' : log.event === 'error' ? '#f87171' : 'var(--terminal-text-muted)' }}>
+                            {log.event === 'installed' ? '\u2713' : log.event === 'skipped' ? '\u2713' : log.event === 'error' ? '\u2717' : '\u2026'}
+                          </span>
+                          <span>{log.tool}</span>
+                          <span style={{ color: 'var(--terminal-text-muted)' }}>{log.detail}</span>
+                        </div>
+                      ))}
+                      {installingTools && (
+                        <div className="flex items-center gap-2 mt-1" style={{ color: 'var(--terminal-text-muted)' }}>
+                          <div className="w-3 h-3 border border-current rounded-full animate-spin" style={{ borderTopColor: 'var(--accent)' }} />
+                          <span>Please wait...</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {knowledgeMode === 'import' && knowledgePaths.length > 0 && (
                     <div className="text-xs p-3 rounded" style={{ background: 'var(--accent)', color: '#fff', opacity: 0.9 }}>
                       Knowledge import will start in the background after entering the office.
@@ -872,10 +942,11 @@ export default function OnboardingWizard({ onComplete }: Props) {
             {scaffoldDone ? (
               <button
                 onClick={handleEnterOffice}
+                disabled={installingTools}
                 className="px-5 py-2 rounded text-sm font-medium transition-colors"
-                style={{ background: 'var(--active-green)', color: '#fff' }}
+                style={{ background: 'var(--active-green)', color: '#fff', opacity: installingTools ? 0.5 : 1 }}
               >
-                Enter Office
+                {installingTools ? 'Setting up tools...' : 'Enter Office'}
               </button>
             ) : (
               <button

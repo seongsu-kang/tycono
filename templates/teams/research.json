@@ -5,7 +5,7 @@
     "level": "c-level",
     "reportsTo": "CEO",
     "persona": "Research director who defines research questions, methodology, and oversees analysis quality.",
-    "defaultSkills": ["knowledge-gate", "akb-linter"]
+    "defaultSkills": ["knowledge-gate", "akb-linter", "agent-browser"]
   },
   {
     "id": "analyst",
@@ -13,7 +13,7 @@
     "level": "member",
     "reportsTo": "lead-researcher",
     "persona": "Data analyst who gathers information, runs analyses, and produces findings.",
-    "defaultSkills": ["knowledge-gate"]
+    "defaultSkills": ["knowledge-gate", "agent-browser"]
   },
   {
     "id": "writer",
@@ -21,6 +21,6 @@
     "level": "member",
     "reportsTo": "lead-researcher",
     "persona": "Writer who transforms research findings into clear, publishable documents and reports.",
-    "defaultSkills": ["knowledge-gate", "akb-linter"]
+    "defaultSkills": ["knowledge-gate", "akb-linter", "agent-browser"]
   }
 ]

@@ -287,7 +287,7 @@ function presetM(deskCount: number): FloorLayout {
     { id: 'work-plant-2', type: 'plant', room: 'work', zone: 'floor', offsetX: 80, offsetY: 4 },
     // meet room
     { id: 'meet-plant', type: 'plant', room: 'meet', zone: 'floor', anchorX: 'right', offsetX: -12, offsetY: 4 },
-    { id: 'meet-table', type: 'meeting-table', room: 'meet', zone: 'floor', offsetX: 10, offsetY: 14, condition: 'no-desks',
+    { id: 'meet-table', type: 'meeting-table', room: 'meet', zone: 'floor', offsetX: 10, offsetY: 42,
       facility: { id: 'meeting', label: 'MEETING', icon: '\u{1F3E2}', color: '#3B82F6', hitW: 44, hitH: 40 } },
     // comm room
     { id: 'comm-coffee-machine', type: 'coffee-machine', room: 'comm', zone: 'floor', anchorX: 'right', offsetX: -30, offsetY: 4, condition: 'no-desks' },
@@ -445,7 +445,7 @@ function presetL(deskCount: number): FloorLayout {
     { id: 'work-plant-1', type: 'plant', room: 'work', zone: 'floor', offsetX: 36, offsetY: 4 },
     { id: 'work-plant-2', type: 'plant', room: 'work', zone: 'floor', offsetX: 80, offsetY: 4 },
     { id: 'meet-plant', type: 'plant', room: 'meet', zone: 'floor', anchorX: 'right', offsetX: -12, offsetY: 4 },
-    { id: 'meet-table', type: 'meeting-table', room: 'meet', zone: 'floor', offsetX: 10, offsetY: 14, condition: 'no-desks',
+    { id: 'meet-table', type: 'meeting-table', room: 'meet', zone: 'floor', offsetX: 10, offsetY: 42,
       facility: { id: 'meeting', label: 'MEETING', icon: '\u{1F3E2}', color: '#3B82F6', hitW: 44, hitH: 40 } },
     { id: 'comm-coffee-machine', type: 'coffee-machine', room: 'comm', zone: 'floor', anchorX: 'right', offsetX: -30, offsetY: 4, condition: 'no-desks' },
     { id: 'comm-plant-1', type: 'plant', room: 'comm', zone: 'floor', offsetX: 38, offsetY: 4, condition: 'no-desks' },

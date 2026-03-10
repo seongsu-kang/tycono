@@ -11,12 +11,13 @@ interface Props {
   onLanguageChange?: (lang: string) => void;
   onOpenSync?: () => void;
   onOpenGitStatus?: () => void;
+  onOpenSessions?: () => void;
   onOpenStats?: () => void;
 }
 
 export default function SettingsPanel({
   onClose, speechSettings, onSpeechSettingsChange,
-  language, onLanguageChange, onOpenSync, onOpenGitStatus, onOpenStats,
+  language, onLanguageChange, onOpenSync, onOpenGitStatus, onOpenSessions, onOpenStats,
 }: Props) {
   const [instanceId, setInstanceId] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState<string | null>(null);
@@ -355,6 +356,12 @@ export default function SettingsPanel({
                 <button onClick={() => { onClose(); onOpenGitStatus(); }}
                   className="theme-btn" style={{ flex: 1, padding: '8px 12px', fontSize: 10 }}>
                   📂 GIT STATUS
+                </button>
+              )}
+              {onOpenSessions && (
+                <button onClick={() => { onClose(); onOpenSessions(); }}
+                  className="theme-btn" style={{ flex: 1, padding: '8px 12px', fontSize: 10 }}>
+                  🖥 SESSIONS
                 </button>
               )}
               {onOpenStats && (

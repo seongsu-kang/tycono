@@ -1,7 +1,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { readFile, listFiles, fileExists } from '../services/file-reader.js';
+import { readFile, listFiles, fileExists, COMPANY_ROOT } from '../services/file-reader.js';
 import { extractBoldKeyValues } from '../services/markdown-parser.js';
 import path from 'node:path';
+import fs from 'node:fs';
 
 export const operationsRouter = Router();
 
@@ -39,34 +40,26 @@ operationsRouter.get('/standups/:date', (req: Request, res: Response, next: Next
   }
 });
 
-// --- Waves ---
+// --- Waves (JSON-only) ---
 operationsRouter.get('/waves', (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const files = listFiles('operations/waves');
+    const files = listFiles('operations/waves', '*.json');
     const waves = files
-      .filter(f => f.endsWith('.md'))
       .map(f => {
-        const id = path.basename(f, '.md');
-        const content = readFile(`operations/waves/${f}`);
-        // Check if structured JSON exists
-        const jsonFile = `operations/waves/${id}.json`;
-        const hasJson = fileExists(jsonFile);
-        let directive = '';
-        let rolesCount = 0;
-        let startedAt = '';
-        if (hasJson) {
-          try {
-            const jsonData = JSON.parse(readFile(jsonFile));
-            directive = jsonData.directive ?? '';
-            rolesCount = jsonData.roles?.length ?? 0;
-            startedAt = jsonData.startedAt ?? '';
-          } catch { /* ignore parse errors */ }
-        } else {
-          // Extract directive from markdown (> line)
-          const quoteLine = content.split('\n').find(l => l.startsWith('> '));
-          directive = quoteLine?.replace(/^>\s*/, '') ?? '';
+        const id = path.basename(f, '.json');
+        try {
+          const data = JSON.parse(readFile(`operations/waves/${f}`));
+          return {
+            id,
+            timestamp: id,
+            directive: data.directive ?? '',
+            rolesCount: data.roles?.length ?? 0,
+            startedAt: data.startedAt ?? '',
+            ...(data.commit ? { commit: data.commit } : {}),
+          };
+        } catch {
+          return { id, timestamp: id, directive: '', rolesCount: 0, startedAt: '' };
         }
-        return { id, timestamp: id, content, hasReplay: hasJson, directive, rolesCount, startedAt };
       })
       .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
@@ -79,26 +72,39 @@ operationsRouter.get('/waves', (_req: Request, res: Response, next: NextFunction
 operationsRouter.get('/waves/:id', (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const mdPath = `operations/waves/${id}.md`;
     const jsonPath = `operations/waves/${id}.json`;
 
-    if (!fileExists(mdPath) && !fileExists(jsonPath)) {
+    if (!fileExists(jsonPath)) {
       res.status(404).json({ error: `Wave not found: ${id}` });
       return;
     }
 
-    const content = fileExists(mdPath) ? readFile(mdPath) : '';
+    const data = JSON.parse(readFile(jsonPath));
+    res.json({ id, timestamp: id, replay: data });
+  } catch (err) {
+    next(err);
+  }
+});
 
-    // Return structured data if JSON exists
-    if (fileExists(jsonPath)) {
-      try {
-        const jsonData = JSON.parse(readFile(jsonPath));
-        res.json({ id, timestamp: id, content, replay: jsonData });
-        return;
-      } catch { /* fall through to md-only response */ }
+// PATCH /waves/:id — update wave metadata (e.g. commit info)
+operationsRouter.patch('/waves/:id', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const jsonPath = `operations/waves/${id}.json`;
+
+    if (!fileExists(jsonPath)) {
+      res.status(404).json({ error: `Wave not found: ${id}` });
+      return;
     }
 
-    res.json({ id, timestamp: id, content });
+    const data = JSON.parse(readFile(jsonPath));
+    const { commitSha, commitMessage, committedAt } = req.body ?? {};
+    if (commitSha) {
+      data.commit = { sha: commitSha, message: commitMessage ?? '', committedAt: committedAt ?? new Date().toISOString() };
+    }
+    const absPath = path.resolve(COMPANY_ROOT, jsonPath);
+    fs.writeFileSync(absPath, JSON.stringify(data, null, 2), 'utf-8');
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

@@ -4,6 +4,7 @@ import { glob } from 'glob';
 import type { ToolCall, ToolResult } from '../llm-adapter.js';
 import { validateWrite, validateRead } from '../authority-validator.js';
 import type { OrgTree } from '../org-tree.js';
+import { buildKnowledgeGateWarning } from '../knowledge-gate.js';
 
 /* ─── Types ──────────────────────────────────── */
 
@@ -219,12 +220,9 @@ function writeFile(
 
   let result = `File written: ${filePath} (${content.length} chars)`;
 
-  // AKB Level 0 hint: 새 .md 파일 생성 시 (journal 제외)
+  // Knowledge Gate: 새 .md 파일 생성 시 자동 검색 + 경고 (journal 제외)
   if (isNewFile && filePath.endsWith('.md') && !filePath.includes('journal/')) {
-    result += '\n\n[AKB] 새 .md 파일입니다. 확인: '
-      + '(1) search_files로 기존 문서를 검색했는가? '
-      + '(2) 관련 Hub에 등록했는가? '
-      + '(3) cross-link를 추가했는가?';
+    result += buildKnowledgeGateWarning(companyRoot, filePath, content);
   }
 
   return { tool_use_id: id, content: result };

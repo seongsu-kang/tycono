@@ -43,12 +43,10 @@ export interface Standup {
 export interface Wave {
   id: string;
   timestamp: string;
-  content: string;
-  /** Whether structured JSON replay data is available */
-  hasReplay?: boolean;
-  directive?: string;
-  rolesCount?: number;
-  startedAt?: string;
+  directive: string;
+  rolesCount: number;
+  startedAt: string;
+  commit?: { sha: string; message: string; committedAt: string };
 }
 
 export interface WaveReplay {

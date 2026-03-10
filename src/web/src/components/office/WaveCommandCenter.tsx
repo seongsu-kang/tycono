@@ -54,7 +54,7 @@ export default function WaveCommandCenter({
   const handleReply = useCallback(async () => {
     if (!selectedRoleId || !replyText.trim()) return;
     const node = nodes.get(selectedRoleId);
-    if (!node?.jobId || node.status !== 'awaiting_input') return;
+    if (!node?.jobId || (node.status !== 'awaiting_input' && node.status !== 'done')) return;
 
     setReplying(true);
     try {
@@ -122,11 +122,15 @@ export default function WaveCommandCenter({
     }
   }, [nodes]);
 
-  // Fire onDone callback once
+  // Fire onDone callback when all jobs complete (re-fires after follow-ups)
   useEffect(() => {
     if (allDone && !doneFired.current) {
       doneFired.current = true;
       onDone?.();
+    }
+    // Reset doneFired when wave goes back to running (follow-up sent)
+    if (!allDone && doneFired.current) {
+      doneFired.current = false;
     }
   }, [allDone, onDone]);
 
@@ -362,6 +366,40 @@ export default function WaveCommandCenter({
                     style={{ background: '#F59E0B', color: '#000' }}
                   >
                     {replying ? '...' : 'Reply'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Follow-up directive for completed roles */}
+            {selectedNode?.status === 'done' && selectedNode.jobId && (
+              <div className="px-4 py-3 border-t border-[var(--terminal-border)] shrink-0"
+                   style={{ background: '#1565C00A' }}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[11px] font-semibold" style={{ color: '#64B5F6' }}>
+                    Follow-up to {selectedNode.roleName}
+                  </span>
+                  <span className="text-[10px] text-[var(--terminal-text-muted)]">
+                    Send a follow-up directive
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleReply(); } }}
+                    placeholder="e.g., 좋아 KB-3 진행해, Engineer에게 시켜..."
+                    disabled={replying}
+                    className="flex-1 px-3 py-1.5 text-xs rounded border bg-[var(--terminal-bg)] text-[var(--terminal-text)] border-[var(--terminal-border)] outline-none focus:border-[#64B5F6]"
+                  />
+                  <button
+                    onClick={handleReply}
+                    disabled={replying || !replyText.trim()}
+                    className="px-4 py-1.5 text-xs rounded font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    style={{ background: '#1565C0', color: '#fff' }}
+                  >
+                    {replying ? '...' : 'Send'}
                   </button>
                 </div>
               </div>

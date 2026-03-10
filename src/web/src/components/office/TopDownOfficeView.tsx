@@ -193,7 +193,7 @@ let _dragging: { defId: string; startMx: number; startMy: number; origOffX: numb
 let _draggingDesk: { roleId: string; startMx: number; startMy: number; origDx: number; origDy: number } | null = null;
 let _placingType: FurnitureType | null = null;   // furniture type being placed
 let _placingZone: 'wall' | 'floor' | null = null;
-let _stretchCooldown = 1800;  // 30s @ 60fps — triggers random stretch animation
+let _stretchCooldown = 900;  // 15s @ 60fps — triggers random stretch animation
 
 
 /* ═══════════════════════════════════════════
@@ -672,7 +672,7 @@ function updateChars(chars: Record<string, CharState>, frame: number) {
       ch.isStretching = true;
       ch.stretchTimer = 120;  // 2 seconds @ 60fps
     }
-    _stretchCooldown = 1800;  // reset to 30s
+    _stretchCooldown = 900;  // reset to 15s
   }
 
   for (const [id, ch] of Object.entries(chars)) {

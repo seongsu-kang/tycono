@@ -1,0 +1,19 @@
+{
+  "id": "agent-browser",
+  "name": "Agent Browser",
+  "description": "Token-efficient browser automation CLI for AI agents. Accessibility-first alternative to Playwright MCP.",
+  "version": "1.0.0",
+  "author": "tycono",
+  "tags": ["browser", "automation", "ui", "testing"],
+  "category": "core",
+  "compatibleRoles": ["*"],
+  "dependencies": [],
+  "files": ["SKILL.md"],
+  "tools": [
+    {
+      "package": "agent-browser",
+      "binary": "agent-browser",
+      "installCmd": "npm install -g agent-browser"
+    }
+  ]
+}

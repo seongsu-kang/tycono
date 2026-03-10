@@ -10,6 +10,7 @@ import {
   formatOrgChart,
   canConsult,
 } from './org-tree.js';
+import { extractKeywords, searchRelatedDocs } from './knowledge-gate.js';
 
 /* ─── Types ──────────────────────────────────── */
 
@@ -103,10 +104,27 @@ export function assembleContext(
   // 9. Code Root (코드 프로젝트 경로)
   const config = readConfig(companyRoot);
   if (config.codeRoot) {
-    sections.push(`# Code Project\n\nThe code repository is located at: \`${config.codeRoot}\`\nUse this path when working with source code (reading, writing, building, testing).`);
+    sections.push(`# Code Project
+
+The code repository is located at: \`${config.codeRoot}\` (env: $TYCONO_CODE_ROOT)
+The AKB (knowledge) directory is at: \`${companyRoot}\` (env: $TYCONO_AKB_ROOT)
+
+Use the code repository path for all source code work (reading, writing, building, testing).
+
+## Git Worktree Rules (CRITICAL)
+- Your cwd is already set to the code repository. When creating worktrees, use relative paths or \`$TYCONO_CODE_ROOT\`.
+- **NEVER run \`git worktree add\` in \`$TYCONO_AKB_ROOT\`** — the AKB directory is not a code repository.
+- Recommended worktree path: \`$TYCONO_CODE_ROOT/.worktrees/{branch-name}\`
+- Example: \`git worktree add .worktrees/feature-xyz -b feature/xyz\` (from cwd, which is already code repo)`);
   }
 
-  // 10. Task는 별도 필드로 분리
+  // 10. Pre-Knowledging: 작업 관련 문서 자동 탐색
+  const preKSection = buildPreKnowledgingSection(companyRoot, task);
+  if (preKSection) {
+    sections.push(preKSection);
+  }
+
+  // Task는 별도 필드로 분리
   let subordinates = getSubordinates(orgTree, roleId);
 
   // Filter subordinates by targetRoles ONLY for CEO (wave dispatch scope)
@@ -169,7 +187,20 @@ export function assembleContext(
 
 ## Output
 - Always produce a concrete deliverable: code change, report, analysis, or clear status update.
-- End with a brief summary of what you did and any unresolved items.`);
+- End with a brief summary of what you did and any unresolved items.
+
+## Sub-task Efficiency (when dispatched by a superior)
+- Focus ONLY on the assigned task — nothing else.
+- Do NOT update journals, knowledge docs, or tasks.md — your superior handles that.
+- Do NOT read CLAUDE.md or explore unrelated files — go straight to the target file.
+- If tsc/tests fail, fix the specific error. Do NOT refactor surrounding code.
+
+## Commit Rule (when you modify code files)
+- After completing code changes, you MUST commit your work.
+- Use a descriptive commit message: \`git commit -m "type(scope): description"\`
+- Common types: feat, fix, refactor, test, chore
+- This ensures your work is not lost in uncommitted changes.
+- Do NOT push — just commit locally. Your superior or the system handles push/PR.`);
 
   const systemPrompt = sections.join('\n\n---\n\n');
 
@@ -188,6 +219,27 @@ export function assembleContext(
 }
 
 /* ─── Section Builders ───────────────────────── */
+
+function buildPreKnowledgingSection(companyRoot: string, task: string): string | null {
+  // Extract keywords from the task directive
+  const keywords = extractKeywords(task);
+  if (keywords.length < 2) return null; // Too few keywords to be meaningful
+
+  const related = searchRelatedDocs(companyRoot, keywords);
+  if (related.length === 0) return null;
+
+  const docList = related
+    .map(doc => `- \`${doc.path}\` — ${doc.preview} (relevance: ${doc.matches})`)
+    .join('\n');
+
+  return `# 📚 Pre-Knowledging: Related Documents
+
+The following existing documents are related to this task. **Read relevant ones before starting work** to avoid duplicating knowledge or missing existing context.
+
+${docList}
+
+> **Knowledging Rule**: Check these documents first. If your work produces new knowledge, update existing docs or create new ones with cross-links.`;
+}
 
 function loadCompanyRules(companyRoot: string): string | null {
   const parts: string[] = [];
@@ -449,51 +501,48 @@ ${subInfo}
 
 ## How to Dispatch
 
-**Use Bash to run the dispatch command:**
+**Dispatch is async: start a job → poll for result → review → next task.**
 
 \`\`\`bash
-# ⛔ ALWAYS use --wait. This is the ONLY correct dispatch pattern.
-python3 "$DISPATCH_CMD" --wait ${exampleSubId} "Task description here"
+# Step 1: Dispatch (returns immediately with job ID)
+python3 "$DISPATCH_CMD" ${exampleSubId} "Task description here"
 
-# Check job status/result (if --wait timed out after 300s)
+# Step 2: Poll for result (repeat every 10-30s until DONE)
 python3 "$DISPATCH_CMD" --check <jobId>
 \`\`\`
 
-**IMPORTANT**: Always use \`python3 "$DISPATCH_CMD" --wait\` — this is the ONLY way to dispatch tasks.
 ⛔ **NEVER use the Agent tool or Task tool to spawn sub-agents.** Those bypass the job tracking system. Use ONLY the dispatch command.
 
-### ⛔ CRITICAL: --wait is MANDATORY
-
-You MUST use \`--wait\` for EVERY dispatch. Never omit --wait.
-\`--wait\` blocks up to 300 seconds. If the subordinate finishes sooner, you get the result immediately.
-After each result, decide: dispatch next task, re-dispatch with feedback, or report.
-
-**NEVER dispatch without --wait.** Dispatch without --wait is a BROKEN pattern that loses results.
-**NEVER dispatch and immediately finish.** The dispatch-check-review loop must continue
-until ALL planned work is completed.
-
-### The ONLY Pattern: Dispatch + Wait + Review + Next
+### The Pattern: Dispatch → Poll → Review → Next
 
 \`\`\`bash
-# 1. Dispatch first task and WAIT for result
-python3 "$DISPATCH_CMD" --wait ${exampleSubId} "Task A"
+# 1. Dispatch first task (returns job ID immediately)
+python3 "$DISPATCH_CMD" ${exampleSubId} "Task A"
+# Output includes: Job ID: job-xxx
 
-# 2. Review the result — is it satisfactory?
-# If yes → dispatch next task
-python3 "$DISPATCH_CMD" --wait ${subordinates.length > 1 ? subordinates[1] : exampleSubId} "Task B"
+# 2. Poll for result (repeat until status is DONE)
+python3 "$DISPATCH_CMD" --check job-xxx
+# If RUNNING → wait 10-30s → --check again
+# If DONE → read the result → proceed to next task
 
-# 3. If --wait timed out (300s), check status
-python3 "$DISPATCH_CMD" --check <jobId>
-# If still running, check again after a moment
+# 3. Dispatch next task
+python3 "$DISPATCH_CMD" ${subordinates.length > 1 ? subordinates[1] : exampleSubId} "Task B"
+python3 "$DISPATCH_CMD" --check job-yyy
+# ... repeat
 
 # 4. Continue until ALL tasks are done
 \`\`\`
 
-### Status Values
-- **running** — Subordinate is working (use --check again)
-- **done** — Task completed, result available
-- **error** — Task failed (re-dispatch or report)
-- **awaiting_input** — Subordinate has a question for you`;
+### --check Status Values
+- **RUNNING** — Subordinate still working → poll again in 10-30s
+- **DONE** — Task completed, result is printed
+- **ERROR** — Task failed (re-dispatch with different instructions or report)
+- **AWAITING_INPUT** — Subordinate has a question for you
+
+### ⛔ CRITICAL Rules
+- **NEVER re-dispatch the same task.** If --check shows RUNNING, just keep polling.
+- **NEVER dispatch and immediately finish.** The dispatch→check→review loop must continue until ALL work is complete.
+- **Save the job ID** from each dispatch to use with --check.`;
 
   // C-level roles get mandatory delegation rules
   if (isCLevel) {
@@ -509,9 +558,10 @@ python3 "$DISPATCH_CMD" --check <jobId>
 When you receive a directive:
 1. **Analyze** — Break it into sub-tasks appropriate for each subordinate
 2. **Dispatch** — Assign tasks to subordinates with clear acceptance criteria
-3. **Monitor** — Wait for results, review quality
-4. **Follow up** — If output doesn't meet criteria, dispatch back with feedback
-5. **Report** — Synthesize results and report to your superior
+3. **Monitor** — Poll for results, review quality
+4. **Verify** — Check git status: did subordinate commit? What files changed?
+5. **Follow up** — If output doesn't meet criteria, dispatch back with feedback
+6. **Report** — Synthesize results with change summary (files, commits, branch)
 
 ### What You Do vs What Subordinates Do
 
@@ -530,31 +580,45 @@ When you receive a directive:
 
 The loop:
 \`\`\`
-PLAN TASKS → DISPATCH (--wait) → REVIEW RESULT → DECIDE
-                                                   ├── PASS → Next Task (loop back to DISPATCH)
-                                                   └── FAIL → Re-dispatch with feedback (loop back)
-                                                   └── ALL DONE → Update knowledge → Report
+PLAN TASKS → DISPATCH → POLL (--check) → REVIEW RESULT → DECIDE
+                                                           ├── PASS → Next DIFFERENT Task
+                                                           └── FAIL → Re-dispatch with SPECIFIC fix
+                                                           └── ALL DONE → Update knowledge → Report
 \`\`\`
+
+### ⛔ CRITICAL: No Duplicate Dispatch
+
+**NEVER dispatch the same or similar task to the same role twice.**
+- If --check shows RUNNING, keep polling — do NOT re-dispatch
+- If a subordinate completed a task, accept the result — do NOT re-dispatch
+- If the result is unsatisfactory, re-dispatch with SPECIFIC different instructions
+- Track dispatched job IDs — never repeat the same task
+- After 2 dispatches to the same role, accept the result or report to CEO
 
 **Example: Full supervision session**
 \`\`\`bash
-# Task 1: Dispatch to engineer and WAIT for result
-python3 "$DISPATCH_CMD" --wait engineer "Implement feature X. Read tasks.md first."
+# Task 1: Dispatch to engineer
+python3 "$DISPATCH_CMD" engineer "Implement feature X. Read tasks.md first."
+# → Job ID: job-001
 
-# Review result... looks good. Task 2:
-python3 "$DISPATCH_CMD" --wait qa "Test feature X that engineer just implemented."
+# Poll until done
+python3 "$DISPATCH_CMD" --check job-001
+# → Status: RUNNING — check again in 10-30s
+python3 "$DISPATCH_CMD" --check job-001
+# → Status: DONE (result printed)
 
-# Review QA result... found bugs. Re-dispatch:
-python3 "$DISPATCH_CMD" --wait engineer "Fix bugs found by QA: [specific issues]"
+# Review result... looks good. Task 2 (QA):
+python3 "$DISPATCH_CMD" qa "Test feature X that engineer just implemented."
+# → Job ID: job-002
+python3 "$DISPATCH_CMD" --check job-002
+# → Status: DONE — found bugs
 
-# Review fix... all good. Update knowledge and report.
+# Re-dispatch with SPECIFIC fix:
+python3 "$DISPATCH_CMD" engineer "Fix BUG: null check missing in auth.ts line 42"
+# → Job ID: job-003
+python3 "$DISPATCH_CMD" --check job-003
+# → Status: DONE — all good. Update knowledge and report.
 \`\`\`
-
-**Key rules:**
-- ⛔ ALWAYS use \`--wait\` — NEVER dispatch without it
-- \`--wait\` blocks up to 300 seconds — if it times out, use \`--check\` to poll
-- After EVERY result, decide the NEXT action — don't just stop
-- Continue dispatching until the CEO's directive is FULLY addressed
 
 ⚠️ Do NOT use curl or other methods to create jobs — always use the dispatch command.
 
@@ -569,13 +633,34 @@ Every dispatch MUST include:
 ### Anti-Patterns (NEVER do these)
 
 - ❌ **Dispatching once and stopping** — you MUST keep working until directive is complete
-- ❌ **Dispatching without --wait** — ALWAYS use --wait, fire-and-forget is FORBIDDEN
+- ❌ **Dispatching and NOT polling with --check** — you must poll for results
+- ❌ **Re-dispatching when --check shows RUNNING** — just poll again
 - ❌ Writing code yourself instead of dispatching to engineer
 - ❌ Dispatching without acceptance criteria
 - ❌ Accepting output without reviewing it
 - ❌ Forgetting to update knowledge/tasks after work completes
 - ❌ Doing only 1 dispatch when you should chain multiple (Engineer → QA)
-- ❌ Reporting to superior without synthesizing subordinate outputs`;
+- ❌ Reporting to superior without synthesizing subordinate outputs
+
+### Post-Dispatch Verification (CRITICAL)
+
+After a subordinate completes a code task, you MUST verify the work is preserved:
+
+\`\`\`bash
+# 1. Check if subordinate committed their work
+git log --oneline -3
+
+# 2. If NOT committed (changes are unstaged), commit on their behalf
+git add -A && git commit -m "feat(scope): description of subordinate's work"
+
+# 3. Include in your report to CEO:
+#    - What files were changed
+#    - Commit hash (if committed)
+#    - Whether the changes compile (tsc --noEmit)
+\`\`\`
+
+⛔ **Uncommitted work = lost work.** If the subordinate didn't commit, YOU must commit before reporting.
+Your final report MUST include a **Change Summary** with files changed and commit status.`;
   } else {
     section += `
 

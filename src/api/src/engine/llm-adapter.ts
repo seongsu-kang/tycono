@@ -52,12 +52,17 @@ export interface StreamCallbacks {
  *   - AnthropicProvider: @anthropic-ai/sdk 기반 (기본)
  *   - (향후) OpenAIProvider, OllamaProvider, MockProvider
  */
+export interface ChatOptions {
+  maxTokens?: number;
+}
+
 export interface LLMProvider {
   chat(
     systemPrompt: string,
     messages: LLMMessage[],
     tools?: ToolDefinition[],
     signal?: AbortSignal,
+    options?: ChatOptions,
   ): Promise<LLMResponse>;
 
   chatStream?(
@@ -89,10 +94,11 @@ export class AnthropicProvider implements LLMProvider {
     messages: LLMMessage[],
     tools?: ToolDefinition[],
     signal?: AbortSignal,
+    options?: ChatOptions,
   ): Promise<LLMResponse> {
     const params: Anthropic.MessageCreateParamsNonStreaming = {
       model: this.model,
-      max_tokens: 8192,
+      max_tokens: options?.maxTokens ?? 8192,
       system: systemPrompt,
       messages: messages.map((m) => ({
         role: m.role,

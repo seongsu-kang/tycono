@@ -1042,8 +1042,10 @@ body {
   animation: quest-glow 1.2s ease-in-out infinite;
   box-shadow: 0 0 0 2px var(--accent), 0 0 12px 2px var(--accent);
   border-radius: 6px;
-  position: relative;
   z-index: 60;
+}
+.quest-spotlight:not(.td-facility-label):not(.td-edit-btn) {
+  position: relative;
 }
 @keyframes quest-glow {
   0%, 100% { box-shadow: 0 0 0 2px var(--accent), 0 0 12px 2px rgba(99, 102, 241, 0.5); }

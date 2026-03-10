@@ -12,6 +12,7 @@ interface Props {
   onClose: () => void;
   onHire: (input: CreateRoleInput, appearance: CharacterAppearance) => Promise<void>;
   onStoreVisit?: () => void;
+  questHint?: { message: string; roleId?: string };
 }
 
 const LEVEL_OPTIONS: { value: CreateRoleInput['level']; label: string }[] = [
@@ -46,6 +47,17 @@ function defaultsForLevel(level: CreateRoleInput['level']) {
       };
   }
 }
+
+/* ─── Quest role suggestions ─── */
+
+const QUEST_ROLE_SUGGESTIONS: Record<string, { name: string; id: string; level: CreateRoleInput['level'] }> = {
+  cto: { name: 'CTO', id: 'cto', level: 'c-level' },
+  cbo: { name: 'CBO', id: 'cbo', level: 'c-level' },
+  pm: { name: 'PM', id: 'pm', level: 'member' },
+  engineer: { name: 'Engineer', id: 'engineer', level: 'member' },
+  designer: { name: 'Designer', id: 'designer', level: 'member' },
+  qa: { name: 'QA Engineer', id: 'qa', level: 'member' },
+};
 
 /* ─── Instance ID for voting ─── */
 
@@ -107,7 +119,7 @@ function parseBulkLine(line: string, existingIds: Set<string>, seenIds: Set<stri
   return { name, id, level, reportsTo, error };
 }
 
-export default function HireRoleModal({ existingRoles, onClose, onHire, onStoreVisit }: Props) {
+export default function HireRoleModal({ existingRoles, onClose, onHire, onStoreVisit, questHint }: Props) {
   const [mode, setMode] = useState<'single' | 'bulk' | 'store'>('single');
 
   /* ─── Store browse state ─── */
@@ -393,6 +405,29 @@ export default function HireRoleModal({ existingRoles, onClose, onHire, onStoreV
               </button>
             </div>
           </div>
+          {questHint && (
+            <div className="mt-2 px-3 py-1.5 rounded-lg text-xs flex items-center gap-2" style={{ background: 'rgba(0,0,0,0.2)' }}>
+              <span>🐾</span>
+              <span className="opacity-90">{questHint.message}</span>
+              {questHint.roleId && mode === 'single' && step === 1 && !name && (
+                <button
+                  className="ml-auto px-2 py-0.5 rounded text-[10px] font-semibold cursor-pointer hover:brightness-125"
+                  style={{ background: 'rgba(255,255,255,0.15)', color: '#fff' }}
+                  onClick={() => {
+                    const suggest = QUEST_ROLE_SUGGESTIONS[questHint.roleId!];
+                    if (suggest) {
+                      setName(suggest.name);
+                      setId(suggest.id);
+                      setIdEdited(true);
+                      setLevel(suggest.level);
+                    }
+                  }}
+                >
+                  Auto-fill →
+                </button>
+              )}
+            </div>
+          )}
           <div className="text-sm opacity-80 mt-0.5 flex items-center gap-2">
             <span>{mode === 'single' ? `Step ${step} of ${TOTAL_STEPS}` : mode === 'bulk' ? (bulkStep === 'input' ? 'Enter roles, one per line' : `Review ${bulkEntries.length} roles`) : (storeStep === 'browse' ? `${storeChars.length} characters available` : 'Review & customize')}</span>
             {mode === 'store' && storeStep === 'browse' && (
@@ -443,6 +478,47 @@ export default function HireRoleModal({ existingRoles, onClose, onHire, onStoreV
                       >Sign out</button>
                     </div>
                   )}
+
+                  {/* Import by ID */}
+                  <div className="flex gap-2">
+                    <input
+                      placeholder="Paste ID (tycono:engineer)"
+                      className="flex-1 p-2 rounded-lg border border-white/10 bg-white/5 text-sm text-white/90 placeholder-white/25 focus:outline-none focus:border-accent/40 transition-colors font-mono"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const raw = (e.target as HTMLInputElement).value.trim();
+                          const cleanId = raw.replace(/^tycono:/, '');
+                          if (cleanId) {
+                            handleStoreSelect(cleanId);
+                            (e.target as HTMLInputElement).value = '';
+                          }
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        const input = document.querySelector<HTMLInputElement>('[placeholder="Paste ID (tycono:engineer)"]');
+                        if (input) {
+                          const raw = input.value.trim();
+                          const cleanId = raw.replace(/^tycono:/, '');
+                          if (cleanId) {
+                            handleStoreSelect(cleanId);
+                            input.value = '';
+                          }
+                        }
+                      }}
+                      disabled={storeFetching}
+                      className="px-3 py-2 rounded-lg bg-accent/10 border border-accent/25 text-accent text-xs font-medium hover:bg-accent/20 transition-colors shrink-0 cursor-pointer disabled:opacity-50"
+                    >
+                      {storeFetching ? 'Loading...' : 'Fetch'}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-px bg-white/10"></div>
+                    <span className="text-[10px] text-white/30">or browse</span>
+                    <div className="flex-1 h-px bg-white/10"></div>
+                  </div>
 
                   {/* Search + Sort bar */}
                   <div className="flex gap-2">

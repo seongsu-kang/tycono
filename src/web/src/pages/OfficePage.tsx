@@ -386,12 +386,12 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
         setSessions(restored);
         const active = restored.find((s) => s.status === 'active') ?? restored[0];
         setActiveSessionId(active.id);
-        setTerminalOpen(true);
+        openTerminal();
       }
     }).catch((err) => {
       console.error('Failed to load sessions', err);
     });
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Phase 3: Poll execution status every 3s */
   useEffect(() => {
@@ -431,6 +431,23 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   }, [panel]);
 
   const closePanel = () => setPanel({ type: 'none' });
+
+  // Mutual exclusion: right-side area is shared by Terminal, SidePanel, and WaveCenter
+  const openPanel = (p: PanelState) => {
+    setPanel(p);
+    setTerminalOpen(false);
+    setShowWaveCenter(false);
+  };
+  const openTerminal = () => {
+    setTerminalOpen(true);
+    setPanel({ type: 'none' });
+    setShowWaveCenter(false);
+  };
+  const openWaveCenter = () => {
+    setShowWaveCenter(true);
+    setTerminalOpen(false);
+    setPanel({ type: 'none' });
+  };
 
   /* Phase 2 handlers */
   const handleExecutionStart = async (roleId: string, task: string) => {
@@ -720,7 +737,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
         startedAt: Date.now(),
       };
       setWaveCenterWaves(prev => [newActiveWave, ...prev]);
-      setShowWaveCenter(true);
+      openWaveCenter();
 
       // Create virtual wave sessions in terminal
       const now = new Date().toISOString();
@@ -747,7 +764,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
       setSessions((prev) => [...waveSessions, ...prev]);
       if (waveSessions.length > 0) {
         setActiveSessionId(waveSessions[0].id);
-        setTerminalOpen(true);
+        openTerminal();
       }
 
       // Connect SSE streams for each wave job
@@ -807,7 +824,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
 
   /* Terminal handlers */
   const handleOpenTerminal = (roleId?: string) => {
-    setTerminalOpen(true);
+    openTerminal();
     fireQuestTrigger({ type: 'terminal_opened' });
     if (roleId) {
       handleCreateSession(roleId);
@@ -819,7 +836,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
       const session = await api.createSession(roleId, 'talk');
       setSessions((prev) => [session, ...prev]);
       setActiveSessionId(session.id);
-      setTerminalOpen(true);
+      openTerminal();
     } catch (err) {
       console.error('Failed to create session', err);
       addToast(`Failed to create session: ${err instanceof Error ? err.message : 'API unreachable'}`, '#B71C1C');
@@ -869,7 +886,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
         console.error('Failed to create session', err);
       }
     }
-    setTerminalOpen(true);
+    openTerminal();
   };
 
   const handleCloseSession = async (sessionId: string) => {
@@ -1428,11 +1445,11 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
               decisions={decisions}
               roleStatuses={effectiveRoleStatuses}
               activeExecs={activeExecs}
-              onRoleClick={(id) => setPanel({ type: 'role', roleId: id })}
-              onProjectClick={(id) => setPanel({ type: 'project', projectId: id })}
-              onBulletinClick={() => { setPanel({ type: 'bulletin' }); fireQuestTrigger({ type: 'bulletin_visited' }); }}
-              onDecisionsClick={() => setPanel({ type: 'decisions' })}
-              onKnowledgeClick={() => { setPanel({ type: 'knowledge' }); fireQuestTrigger({ type: 'knowledge_visited' }); }}
+              onRoleClick={(id) => openPanel({ type: 'role', roleId: id })}
+              onProjectClick={(id) => openPanel({ type: 'project', projectId: id })}
+              onBulletinClick={() => { openPanel({ type: 'bulletin' }); fireQuestTrigger({ type: 'bulletin_visited' }); }}
+              onDecisionsClick={() => openPanel({ type: 'decisions' })}
+              onKnowledgeClick={() => { openPanel({ type: 'knowledge' }); fireQuestTrigger({ type: 'knowledge_visited' }); }}
               onSettingsClick={() => { setShowSettingsPanel(true); fireQuestTrigger({ type: 'settings_visited' }); }}
               onThemeClick={() => setShowThemeDropup(v => !v)}
               onStatsClick={() => { setShowStatsPanel(true); fireQuestTrigger({ type: 'stats_visited' }); }}
@@ -1440,7 +1457,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
               getRoleSpeech={ambient.getSpeech}
               getAppearance={getAppearance}
               onHireClick={() => setShowHireModal(true)}
-              onMascotClick={() => setPanel({ type: 'quest' })}
+              onMascotClick={() => openPanel({ type: 'quest' })}
               roleLevels={roleLevels}
               coinBalance={coinBalance}
               onCoinsSpent={(b) => setCoinBalance(b)}
@@ -1464,7 +1481,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
                         key={role.id}
                         role={role}
                         speech={ambient.getSpeech(role.id)}
-                        onClick={() => setPanel({ type: 'role', roleId: role.id })}
+                        onClick={() => openPanel({ type: 'role', roleId: role.id })}
                         liveStatus={effectiveRoleStatuses[role.id]}
                         activeTask={activeExecsByRole[role.id]?.task}
                         featured
@@ -1483,7 +1500,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
                       key={role.id}
                       role={role}
                       speech={ambient.getSpeech(role.id)}
-                      onClick={() => setPanel({ type: 'role', roleId: role.id })}
+                      onClick={() => openPanel({ type: 'role', roleId: role.id })}
                       liveStatus={effectiveRoleStatuses[role.id]}
                       activeTask={activeExecsByRole[role.id]?.task}
                       appearance={getAppearance(role.id)}
@@ -1510,7 +1527,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
               {/* Meeting Room — Project Hub */}
               <div
                 className="facility-card-compact"
-                onClick={mainProject ? () => setPanel({ type: 'project', projectId: mainProject.id }) : undefined}
+                onClick={mainProject ? () => openPanel({ type: 'project', projectId: mainProject.id }) : undefined}
                 style={mainProject ? undefined : { borderStyle: 'dashed', opacity: 0.5 }}
               >
                 <div className="fcc-hdr" style={{ background: '#3B82F6' }}>{'\u{1F3E2}'} MEETING ROOM</div>
@@ -1527,7 +1544,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
               </div>
 
               {/* Bulletin Board — Operations Log */}
-              <div className="facility-card-compact" onClick={() => setPanel({ type: 'bulletin' })}>
+              <div className="facility-card-compact" onClick={() => openPanel({ type: 'bulletin' })}>
                 <div className="fcc-hdr" style={{ background: '#64748b' }}>{'\u{1F4CB}'} BULLETIN</div>
                 <div className="fcc-canvas"><FacilityCanvas type="bulletin" /></div>
                 <div className="fcc-body">
@@ -1545,7 +1562,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
               </div>
 
               {/* Decision Log — Strategic Decisions */}
-              <div className="facility-card-compact" onClick={() => setPanel({ type: 'decisions' })}>
+              <div className="facility-card-compact" onClick={() => openPanel({ type: 'decisions' })}>
                 <div className="fcc-hdr" style={{ background: '#EF4444' }}>{'\u{1F4DC}'} DECISIONS</div>
                 <div className="fcc-canvas"><FacilityCanvas type="decision" /></div>
                 <div className="fcc-body">
@@ -1558,7 +1575,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
               </div>
 
               {/* Knowledge Base — Research & Docs */}
-              <div className="facility-card-compact" onClick={() => setPanel({ type: 'knowledge' })}>
+              <div className="facility-card-compact" onClick={() => openPanel({ type: 'knowledge' })}>
                 <div className="fcc-hdr" style={{ background: '#0D9488' }}>{'\u{1F4DA}'} KNOWLEDGE</div>
                 <div className="fcc-canvas"><FacilityCanvas type="knowledge" /></div>
                 <div className="fcc-body">
@@ -1705,7 +1722,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           {/* Active wave indicator */}
           {waveCenterWaves.length > 0 && !showWaveCenter && (
             <button
-              onClick={() => setShowWaveCenter(true)}
+              onClick={() => openWaveCenter()}
               className={`px-3 py-1 font-black text-white cursor-pointer ${waveDone ? '' : 'animate-pulse'}`}
               style={{
                 background: waveDone ? '#2E7D32' : '#B71C1C',
@@ -1749,7 +1766,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
             </button>
           )}
           <button
-            onClick={() => setShowWaveCenter(true)}
+            onClick={() => openWaveCenter()}
             className="wave-btn px-3 py-1 font-black text-white cursor-pointer"
             data-quest-target="wave-btn"
             style={{ background: '#B71C1C', border: '2px solid #7f1212', fontFamily: 'var(--pixel-font)' }}
@@ -1814,7 +1831,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           decisions={decisions}
           mode={panel.type === 'bulletin' ? 'bulletin' : 'decisions'}
           onClose={closePanel}
-          onOpenWaveCenter={() => { closePanel(); setShowWaveCenter(true); }}
+          onOpenWaveCenter={() => openWaveCenter()}
           terminalWidth={terminalOpen ? terminalWidth : 0}
         />
       )}
@@ -1883,7 +1900,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
             setWaveState(null);
             setWaveMinimized(false);
             setWaveDone(false);
-            setPanel({ type: 'knowledge', docId });
+            openPanel({ type: 'knowledge', docId });
             api.getKnowledge().then(setKnowledgeDocs).catch(() => {});
           }}
         />
@@ -1917,9 +1934,10 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           }}
           onOpenKnowledgeDoc={(docId) => {
             setShowWaveCenter(false);
-            setPanel({ type: 'knowledge', docId });
+            openPanel({ type: 'knowledge', docId });
             api.getKnowledge().then(setKnowledgeDocs).catch(() => {});
           }}
+          onRefreshWaves={() => api.getWaves().then(setWaves).catch(() => {})}
           terminalWidth={terminalOpen ? terminalWidth : 0}
         />
       )}
@@ -1980,7 +1998,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
               }}
               onOpenKnowledgeDoc={(docId) => {
                 setJobStack([]); setWaveJobs([]); setWaveActiveIdx(0); setJobMinimized(false);
-                setPanel({ type: 'knowledge', docId });
+                openPanel({ type: 'knowledge', docId });
                 api.getKnowledge().then(setKnowledgeDocs).catch(() => {});
               }}
             />
@@ -2094,7 +2112,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
                 const session = await api.createSession(delegateRole.id, 'do');
                 setSessions((prev) => [session, ...prev]);
                 setActiveSessionId(session.id);
-                setTerminalOpen(true);
+                openTerminal();
                 const prompt = `Review the following unsaved changes, write a proper commit message, save (git add + commit), and push. If the current branch is not the main branch, create a PR and merge it.\n\nChanged files:\n${filesSummary}`;
                 handleSendMessage(session.id, prompt, 'do');
               } catch (err) {

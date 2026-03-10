@@ -8,6 +8,7 @@ import { setActivity, updateActivity, completeActivity } from './activity-tracke
 import type { RunnerResult } from '../engine/runners/types.js';
 import { estimateCost } from './pricing.js';
 import { readConfig, getConversationLimits } from './company-config.js';
+import { postKnowledgingCheck, type KnowledgeDebtItem } from '../engine/knowledge-gate.js';
 
 /* ─── Types ──────────────────────────────── */
 
@@ -31,6 +32,8 @@ export interface Job {
   targetRole?: string;
   /** Selective dispatch scope — only these roles can be dispatched to */
   targetRoles?: string[];
+  /** Knowledge debt items detected by Post-Knowledging check */
+  knowledgeDebt?: KnowledgeDebtItem[];
 }
 
 export interface JobInfo {
@@ -44,6 +47,8 @@ export interface JobInfo {
   createdAt: string;
   /** Which role should respond when status is awaiting_input */
   targetRole?: string;
+  /** Final output text (available when status is done) */
+  output?: string;
 }
 
 export interface StartJobParams {
@@ -214,7 +219,7 @@ class JobManager {
         sourceRole: params.sourceRole ?? 'ceo',
         orgTree,
         readOnly: params.readOnly,
-        maxTurns: limits.hardLimit,  // Runner backup safety net = Harness hardLimit
+        maxTurns: limits.hardLimit,
         model,
         jobId,
         teamStatus,
@@ -366,9 +371,41 @@ class JobManager {
             targetRole,
           });
         } else {
+          // ─── Post-Knowledging check ───
+          // Extract changed .md files from tool calls and check for knowledge debt
+          const changedMdFiles = result.toolCalls
+            .filter(tc => (tc.name === 'write_file' || tc.name === 'edit_file') && tc.input && typeof tc.input.path === 'string')
+            .map(tc => String(tc.input!.path))
+            .filter(p => p.endsWith('.md'));
+
+          if (changedMdFiles.length > 0) {
+            try {
+              const pkResult = postKnowledgingCheck(COMPANY_ROOT, changedMdFiles);
+              if (!pkResult.pass) {
+                job.knowledgeDebt = pkResult.debt;
+                console.log(
+                  `[Post-K] Job ${jobId} (${params.roleId}): ${pkResult.debt.length} knowledge debt item(s)`,
+                );
+                for (const d of pkResult.debt) {
+                  console.log(`  [Post-K] ${d.type}: ${d.message}`);
+                }
+                // Include debt info in done event
+                (doneData as Record<string, unknown>).knowledgeDebt = pkResult.debt.map(d => ({
+                  type: d.type,
+                  file: d.file,
+                  message: d.message,
+                }));
+              }
+            } catch (err) {
+              console.warn('[Post-K] Check failed:', err);
+            }
+          }
+
           job.status = 'done';
           completeActivity(params.roleId);
           stream.emit('job:done', params.roleId, doneData);
+          // Cleanup orphaned child jobs (awaiting_input with no parent to respond)
+          this.cleanupOrphanedChildren(job.id);
         }
       })
       .catch((err: Error) => {
@@ -395,6 +432,20 @@ class JobManager {
       });
 
     return job;
+  }
+
+  /** Cleanup orphaned child jobs when parent completes */
+  private cleanupOrphanedChildren(parentJobId: string): void {
+    for (const job of this.jobs.values()) {
+      if (job.parentJobId === parentJobId && job.status === 'awaiting_input') {
+        job.status = 'done';
+        completeActivity(job.roleId);
+        job.stream.emit('job:done', job.roleId, {
+          output: '[Auto-closed] Parent job completed',
+          turns: 0,
+        });
+      }
+    }
   }
 
   /** Get a job by ID (in-memory or reconstruct from file) */
@@ -444,6 +495,7 @@ class JobManager {
       childJobIds: job.childJobIds,
       createdAt: job.createdAt,
       targetRole: job.targetRole,
+      output: job.result?.output,
     };
   }
 
@@ -483,18 +535,19 @@ class JobManager {
     return true;
   }
 
-  /** Reply to an awaiting_input job → creates a continuation job */
+  /** Reply to an awaiting_input or done job → creates a continuation job */
   replyToJob(id: string, response: string, responderRole?: string): Job | null {
     const job = this.jobs.get(id);
-    if (!job || job.status !== 'awaiting_input') return null;
+    if (!job || (job.status !== 'awaiting_input' && job.status !== 'done')) return null;
 
+    const isFollowUp = job.status === 'done';
     const effectiveResponder = responderRole ?? job.targetRole ?? 'ceo';
 
     // Mark previous job as done (don't emit job:done — the stream stays open
     // for the continuation job which will emit its own job:done when finished)
     job.status = 'done';
-    completeActivity(job.roleId);
-    job.stream.emit('job:reply', job.roleId, { response, responderRole: effectiveResponder });
+    if (!isFollowUp) completeActivity(job.roleId);
+    job.stream.emit('job:reply', job.roleId, { response, responderRole: effectiveResponder, isFollowUp });
 
     // Build continuation prompt with previous context
     const prevOutput = job.result?.output ?? '';
@@ -504,16 +557,20 @@ class JobManager {
 
     // Use the actual responder role name in the prompt
     const responderLabel = effectiveResponder === 'ceo' ? 'CEO' : effectiveResponder.toUpperCase();
-    const continuationTask = `[Continuation — previous output follows]\n${contextSummary}\n\n[${responderLabel} Response]\n${response}`;
+    const continuationTask = isFollowUp
+      ? `[CEO Follow-up Directive]\n${response}\n\n[Previous context — your earlier report follows]\n${contextSummary}`
+      : `[Continuation — previous output follows]\n${contextSummary}\n\n[${responderLabel} Response]\n${response}`;
 
-    // Create new job for same role (mark as continuation to skip question detection)
+    // Create new job for same role
+    // Follow-ups (from done state) should allow question detection since they're fresh directives
+    // Continuations (from awaiting_input) skip question detection to avoid infinite loops
     const newJob = this.startJob({
       type: job.type,
       roleId: job.roleId,
       task: continuationTask,
       sourceRole: effectiveResponder,
       parentJobId: job.id,
-      isContinuation: true,
+      isContinuation: !isFollowUp,
     });
 
     job.childJobIds.push(newJob.id);

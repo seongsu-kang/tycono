@@ -300,16 +300,25 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
         `${i + 1}. **${d.roleId}**: "${d.task.slice(0, 80)}"\n   Result: ${d.result.slice(0, 300)}`,
       ).join('\n\n');
 
+      // Build list of already-dispatched tasks to prevent re-dispatch
+      const dispatchedList = dispatches.map(d => `- ${d.roleId}: "${d.task.slice(0, 100)}"`).join('\n');
+
       const supervisionPrompt = [
         '[SUPERVISION LOOP] Your subordinates have completed their tasks. Follow the C-Level Protocol:',
         '',
         '## Subordinate Results',
         dispatchSummary,
         '',
+        '## Already Dispatched (DO NOT re-dispatch these)',
+        dispatchedList,
+        '',
+        '⛔ **Do NOT re-dispatch the same or similar task to the same role.** If a subordinate already completed a task, accept the result and move on.',
+        '⛔ **If the result is satisfactory, do NOT dispatch again.** Only re-dispatch if the result clearly fails acceptance criteria with SPECIFIC feedback on what to fix.',
+        '',
         '## Required Actions (do ALL of these):',
         '',
         '### 1. Review',
-        'Does each result meet the acceptance criteria? If not, re-dispatch with specific feedback.',
+        'Does each result meet the acceptance criteria? If clearly unsatisfactory, re-dispatch with SPECIFIC fix instructions (not the same task again).',
         '',
         '### 2. Knowledge Update (The Loop Step ④)',
         'Record any new decisions, findings, or analysis in appropriate AKB documents:',
@@ -321,10 +330,11 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
         'Update task status in the relevant tasks.md or project documents.',
         'Mark completed items as DONE. Identify the NEXT task to dispatch.',
         '',
-        '### 4. Next Dispatch',
-        'If there are remaining tasks (e.g., QA after Engineer, or the next task in the backlog):',
-        '- Dispatch the next task to the appropriate subordinate',
-        '- If all work is done, synthesize a final report for your superior',
+        '### 4. Next Dispatch (ONLY if there is genuinely NEW work)',
+        'If there are DIFFERENT remaining tasks (e.g., QA after Engineer, or a DIFFERENT backlog item):',
+        '- Dispatch the NEXT DIFFERENT task to the appropriate subordinate',
+        '- If all work from the directive is done, synthesize a final report for your superior',
+        '- **If the subordinate already completed the requested work, report success — do NOT re-dispatch**',
         '',
         'Execute these actions now using your tools (Read, Edit, Bash, dispatch).',
       ].join('\n');

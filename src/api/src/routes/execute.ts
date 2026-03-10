@@ -326,18 +326,10 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
     return;
   }
 
-  // Build wave summary from job streams
   const now = new Date();
   const dateStr = now.toISOString().slice(0, 10);
-  const timeStr = now.toTimeString().slice(0, 5);
-  const lines: string[] = [
-    `# Wave — ${dateStr} ${timeStr}`,
-    '',
-    `> ${directive}`,
-    '',
-  ];
 
-  // Structured data for JSON (replay in WaveCenter)
+  // Structured data for JSON replay
   interface WaveRoleData {
     roleId: string;
     roleName: string;
@@ -376,37 +368,6 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
     }
 
     rolesData.push({ roleId, roleName, jobId, status, events, childJobs });
-
-    // Markdown summary (unchanged)
-    lines.push(`## ${roleId.toUpperCase()}`);
-    lines.push('');
-
-    const textParts: string[] = [];
-    for (const e of events) {
-      if (e.type === 'text' && typeof e.data.text === 'string') {
-        textParts.push(e.data.text);
-      }
-    }
-    const fullText = textParts.join('');
-    const summary = fullText.length > 1500
-      ? '...' + fullText.slice(-1500)
-      : fullText;
-
-    if (summary.trim()) {
-      lines.push(summary.trim());
-    } else {
-      lines.push('(No text output)');
-    }
-
-    if (doneEvent) {
-      const turns = doneEvent.data.turns as number ?? 0;
-      const tools = doneEvent.data.toolCalls as number ?? 0;
-      lines.push('');
-      lines.push(`*${turns} turns, ${tools} tool calls*`);
-    }
-    lines.push('');
-    lines.push('---');
-    lines.push('');
   }
 
   // Write to operations/waves/
@@ -416,13 +377,8 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
   }
   const hhmmss = now.toTimeString().slice(0, 8).replace(/:/g, '');
   const baseName = `${dateStr.replace(/-/g, '')}-${hhmmss}-wave`;
-  const mdPath = path.join(wavesDir, `${baseName}.md`);
   const jsonPath = path.join(wavesDir, `${baseName}.json`);
 
-  // Write markdown (human-readable summary)
-  fs.writeFileSync(mdPath, lines.join('\n'), 'utf-8');
-
-  // Write JSON (structured data for replay)
   const waveJson = {
     id: baseName,
     directive,
@@ -432,7 +388,7 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
   };
   fs.writeFileSync(jsonPath, JSON.stringify(waveJson, null, 2), 'utf-8');
 
-  jsonResponse(res, 200, { ok: true, path: `operations/waves/${baseName}.md` });
+  jsonResponse(res, 200, { ok: true, path: `operations/waves/${baseName}.json` });
 }
 
 /* ═══════════════════════════════════════════════

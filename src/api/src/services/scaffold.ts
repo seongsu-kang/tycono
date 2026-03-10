@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execSync } from 'node:child_process';
 import { writeConfig } from './company-config.js';
 import type { CompanyConfig } from './company-config.js';
 
@@ -61,6 +62,12 @@ export function getAvailableTeams(): string[] {
     .map(f => f.replace('.json', ''));
 }
 
+export interface SkillToolDef {
+  package: string;
+  binary: string;
+  installCmd: string;
+}
+
 export interface SkillMeta {
   id: string;
   name: string;
@@ -72,6 +79,7 @@ export interface SkillMeta {
   compatibleRoles: string[];
   dependencies: string[];
   files: string[];
+  tools?: SkillToolDef[];
 }
 
 /**
@@ -92,6 +100,88 @@ export function getAvailableSkills(): SkillMeta[] {
   }
 
   return skills;
+}
+
+/**
+ * Check if a CLI binary is available on the system
+ */
+function isBinaryInstalled(binary: string): boolean {
+  try {
+    execSync(`which ${binary}`, { stdio: 'ignore', timeout: 5000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Collect all tools required by a set of skills
+ */
+export function getRequiredTools(skillIds: string[]): Array<SkillToolDef & { skillId: string; installed: boolean }> {
+  const tools: Array<SkillToolDef & { skillId: string; installed: boolean }> = [];
+  const seen = new Set<string>();
+
+  for (const skillId of skillIds) {
+    const metaPath = path.join(TEMPLATES_DIR, 'skills', skillId, 'meta.json');
+    if (!fs.existsSync(metaPath)) continue;
+
+    const meta: SkillMeta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+    if (!meta.tools?.length) continue;
+
+    for (const tool of meta.tools) {
+      if (seen.has(tool.package)) continue;
+      seen.add(tool.package);
+      tools.push({
+        ...tool,
+        skillId,
+        installed: isBinaryInstalled(tool.binary),
+      });
+    }
+  }
+
+  return tools;
+}
+
+export interface ToolInstallCallbacks {
+  onChecking?: (tool: string) => void;
+  onInstalling?: (tool: string) => void;
+  onInstalled?: (tool: string) => void;
+  onSkipped?: (tool: string, reason: string) => void;
+  onError?: (tool: string, error: string) => void;
+  onDone?: (stats: { installed: number; skipped: number; failed: number }) => void;
+}
+
+/**
+ * Install CLI tools required by skills
+ */
+export function installSkillTools(skillIds: string[], callbacks?: ToolInstallCallbacks): void {
+  const tools = getRequiredTools(skillIds);
+  let installed = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (const tool of tools) {
+    callbacks?.onChecking?.(tool.package);
+
+    if (tool.installed) {
+      callbacks?.onSkipped?.(tool.package, 'already installed');
+      skipped++;
+      continue;
+    }
+
+    callbacks?.onInstalling?.(tool.package);
+    try {
+      execSync(tool.installCmd, { stdio: 'ignore', timeout: 120000 });
+      callbacks?.onInstalled?.(tool.package);
+      installed++;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'install failed';
+      callbacks?.onError?.(tool.package, msg);
+      failed++;
+    }
+  }
+
+  callbacks?.onDone?.({ installed, skipped, failed });
 }
 
 function renderTemplate(template: string, vars: Record<string, string>): string {

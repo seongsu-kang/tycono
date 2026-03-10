@@ -67,7 +67,7 @@ export default function OperationsPanel({ standups, waves, decisions, mode, onCl
             <ContentCard key={i} title={`Standup ${s.date}`} content={s.content} />
           ))}
           {tab === 'waves' && waves.map((w, i) => (
-            <ContentCard key={i} title={`Wave ${w.id}`} subtitle={w.timestamp} content={w.content} />
+            <ContentCard key={i} title={`Wave ${w.id}`} subtitle={w.startedAt} content={w.directive} />
           ))}
           {tab === 'decisions' && decisions.map((d, i) => (
             <ContentCard key={i} title={`#${d.id} ${d.title}`} subtitle={d.date} content={d.content} />

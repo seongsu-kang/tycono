@@ -27,7 +27,7 @@ interface Props {
   onSendMessage: (sessionId: string, content: string, mode: 'talk' | 'do') => void;
   onFocusTerminal: (roleId: string) => void;
   onCustomize?: (roleId: string) => void;
-  onUpdateRole?: (roleId: string, changes: { name?: string }) => Promise<void>;
+  onUpdateRole?: (roleId: string, changes: { name?: string; persona?: string }) => Promise<void>;
   appearance?: CharacterAppearance;
   relationships?: Array<{ roleA: string; roleB: string; familiarity: number; dispatches: number; wavesTogether: number; conversations: number }>;
   roleLevel?: number;
@@ -82,6 +82,11 @@ export default function SidePanel({
   const [nameValue, setNameValue] = useState('');
   const [nameSaving, setNameSaving] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
+
+  // Persona editing
+  const [editingPersona, setEditingPersona] = useState(false);
+  const [personaValue, setPersonaValue] = useState('');
+  const [personaSaving, setPersonaSaving] = useState(false);
 
   // Activity stream for working state (compact summary)
   const { events: activityEvents, status: activityStatus } = useActivityStream(activeJobId ?? null);
@@ -510,9 +515,49 @@ export default function SidePanel({
           <div className="px-4 py-2 space-y-1">
             {/* Profile */}
             <CollapsibleSection title={`Profile${role.persona ? '' : ' (empty)'}`} open={showProfile} onToggle={() => setShowProfile(v => !v)}>
-              {role.persona && (
-                <div className="text-xs leading-relaxed rounded-lg p-3" style={{ background: 'var(--hud-bg-alt)', border: '1px solid var(--terminal-border)', color: 'var(--terminal-text-secondary)' }}>
-                  {role.persona}
+              {editingPersona ? (
+                <div className="space-y-2">
+                  <textarea
+                    value={personaValue}
+                    onChange={(e) => setPersonaValue(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Escape') setEditingPersona(false); }}
+                    disabled={personaSaving}
+                    autoFocus
+                    rows={5}
+                    placeholder="Describe this role's personality and communication style. How do they talk? Are they sarcastic? Cheerful? Blunt?"
+                    className="w-full text-xs leading-relaxed rounded-lg p-3 outline-none resize-y"
+                    style={{ background: 'var(--hud-bg-alt)', border: '1px solid var(--active-green)', color: 'var(--terminal-text)', fontFamily: 'inherit', minHeight: '80px' }}
+                  />
+                  <div className="flex gap-1.5 justify-end">
+                    <button
+                      onClick={() => setEditingPersona(false)}
+                      disabled={personaSaving}
+                      className="text-[10px] px-2 py-0.5 rounded cursor-pointer"
+                      style={{ color: 'var(--terminal-text-muted)', border: '1px solid var(--terminal-border)' }}
+                    >Cancel</button>
+                    <button
+                      onClick={async () => {
+                        if (!onUpdateRole) return;
+                        setPersonaSaving(true);
+                        try { await onUpdateRole(role.id, { persona: personaValue.trim() }); } catch { /* handled by parent */ }
+                        setPersonaSaving(false);
+                        setEditingPersona(false);
+                      }}
+                      disabled={personaSaving}
+                      className="text-[10px] px-2 py-0.5 rounded cursor-pointer font-semibold"
+                      style={{ background: 'var(--active-green)', color: '#000' }}
+                    >{personaSaving ? 'Saving...' : 'Save'}</button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  className="text-xs leading-relaxed rounded-lg p-3 group/persona cursor-pointer hover:opacity-90 transition-opacity"
+                  style={{ background: 'var(--hud-bg-alt)', border: '1px solid var(--terminal-border)', color: 'var(--terminal-text-secondary)' }}
+                  onClick={() => { if (onUpdateRole) { setPersonaValue(role.persona || ''); setEditingPersona(true); } }}
+                  title={onUpdateRole ? 'Click to edit persona' : undefined}
+                >
+                  {role.persona || <span style={{ color: 'var(--terminal-text-muted)' }}>No persona set. Click to add one.</span>}
+                  {onUpdateRole && <span className="opacity-0 group-hover/persona:opacity-60 text-[10px] ml-1">{'\u270E'}</span>}
                 </div>
               )}
               <div className="space-y-0 mt-2">
