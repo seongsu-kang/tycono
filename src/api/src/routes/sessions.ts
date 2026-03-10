@@ -188,9 +188,9 @@ sessionsRouter.post('/:id/reply', (req, res) => {
     return;
   }
 
-  const { message, responderRole } = req.body;
-  if (!message) {
-    res.status(400).json({ error: 'message is required' });
+  const { message, responderRole, attachments } = req.body;
+  if (!message && (!attachments || attachments.length === 0)) {
+    res.status(400).json({ error: 'message or attachments required' });
     return;
   }
 
@@ -198,10 +198,11 @@ sessionsRouter.post('/:id/reply', (req, res) => {
   const ceoMsg: Message = {
     id: `msg-${Date.now()}-ceo-reply`,
     from: 'ceo',
-    content: message,
+    content: message ?? '',
     type: 'conversation',
     status: 'done',
     timestamp: new Date().toISOString(),
+    attachments,
   };
   addMessage(req.params.id, ceoMsg);
 
@@ -210,7 +211,7 @@ sessionsRouter.post('/:id/reply', (req, res) => {
 
   if (job) {
     // Normal path: reply to existing job
-    newJob = jobManager.replyToJob(job.id, message, responderRole);
+    newJob = jobManager.replyToJob(job.id, message ?? '(image attached)', responderRole);
     if (!newJob) {
       res.status(400).json({ error: 'Job not in a replyable state' });
       return;
@@ -224,8 +225,8 @@ sessionsRouter.post('/:id/reply', (req, res) => {
       .map(m => `${m.from === 'ceo' ? 'CEO' : m.from.toUpperCase()}: ${m.content.slice(0, 500)}`)
       .join('\n');
     const task = prevMessages
-      ? `[Conversation History]\n${prevMessages}\n\n[CEO Follow-up]\n${message}`
-      : message;
+      ? `[Conversation History]\n${prevMessages}\n\n[CEO Follow-up]\n${message ?? '(image attached)'}`
+      : (message ?? '(image attached)');
 
     newJob = jobManager.startJob({
       type: 'assign',
@@ -233,6 +234,7 @@ sessionsRouter.post('/:id/reply', (req, res) => {
       task,
       sourceRole: responderRole ?? 'ceo',
       sessionId: req.params.id,
+      attachments,
     });
   }
 

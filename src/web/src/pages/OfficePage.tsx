@@ -1383,6 +1383,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
               onHireClick={() => setShowHireModal(true)}
               onMascotClick={() => openPanel({ type: 'quest' })}
               roleLevels={roleLevels}
+              language={language}
               coinBalance={coinBalance}
               onCoinsSpent={(b) => setCoinBalance(b)}
               onFurniturePlaced={(_type, price) => {

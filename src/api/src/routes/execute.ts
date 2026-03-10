@@ -105,6 +105,7 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
   const targetRole = (body.targetRole as string) || 'cto';
   const parentJobId = body.parentJobId as string | undefined;
   const waveId = body.waveId as string | undefined;
+  const attachments = body.attachments as Array<{ type: 'image'; data: string; name: string; mediaType: string }> | undefined;
 
   // Wave shorthand — broadcast to C-level direct reports (optionally filtered)
   if (type === 'wave') {
@@ -215,6 +216,7 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
       type: readOnly ? 'conversation' : 'directive',
       status: 'done',
       timestamp: new Date().toISOString(),
+      attachments,
     };
     addMessage(session.id, ceoMsg);
   }
@@ -227,6 +229,7 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
     readOnly,
     parentJobId,
     sessionId,
+    attachments,
   });
 
   // D-014: Add role message linked to job

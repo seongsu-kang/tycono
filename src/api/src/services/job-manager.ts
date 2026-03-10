@@ -72,6 +72,8 @@ export interface StartJobParams {
   targetRoles?: string[];
   /** D-014: Link this job to a session (internal tracking) */
   sessionId?: string;
+  /** Image attachments (base64 encoded) */
+  attachments?: Array<{ type: 'image'; data: string; name: string; mediaType: string }>;
 }
 
 /* ─── Helpers ────────────────────────────── */
@@ -268,6 +270,7 @@ class JobManager {
         teamStatus,
         targetRoles: params.targetRoles,
         codeRoot: config.codeRoot,
+        attachments: params.attachments,
         env: {
           ...process.env,
           ...portEnv,

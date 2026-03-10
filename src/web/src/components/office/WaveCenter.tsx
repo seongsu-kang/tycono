@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
 import useWaveTree, { type WaveNode } from '../../hooks/useWaveTree';
 import OrgTreeLive from './OrgTreeLive';
 import EventRow from '../common/EventRow';
-import type { OrgNode, Wave, WaveReplay } from '../../types';
+import type { OrgNode, Wave, WaveReplay, ImageAttachment } from '../../types';
 import { api } from '../../api/client';
 import { usePanelResize } from './KnowledgePanel';
 
@@ -147,6 +147,64 @@ export default function WaveCenter({
   const [replyText, setReplyText] = useState('');
   const [replying, setReplying] = useState(false);
 
+  // File attachment state
+  const [attachments, setAttachments] = useState<ImageAttachment[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (attachError) {
+      const t = setTimeout(() => setAttachError(null), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [attachError]);
+
+  const processFile = useCallback(async (file: File): Promise<ImageAttachment | null> => {
+    const SUPPORTED = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+    if (!SUPPORTED.includes(file.type)) {
+      setAttachError(`Unsupported: ${file.type}. Use PNG, JPG, GIF, or WebP.`);
+      return null;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setAttachError(`Too large: ${(file.size / 1024 / 1024).toFixed(1)}MB. Max 5MB.`);
+      return null;
+    }
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64Data = (reader.result as string).split(',')[1];
+        resolve({ type: 'image', data: base64Data, name: file.name, mediaType: file.type as ImageAttachment['mediaType'] });
+      };
+      reader.onerror = () => { setAttachError('Failed to read file'); resolve(null); };
+      reader.readAsDataURL(file);
+    });
+  }, []);
+
+  const handleFiles = useCallback(async (files: FileList | File[]) => {
+    const processed: ImageAttachment[] = [];
+    for (const file of Array.from(files)) {
+      const att = await processFile(file);
+      if (att) processed.push(att);
+    }
+    if (processed.length > 0) setAttachments(prev => [...prev, ...processed]);
+  }, [processFile]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); }, []);
+  const handleDragLeave = useCallback((e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); }, []);
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault(); e.stopPropagation(); setIsDragging(false);
+    if (e.dataTransfer.files.length > 0) handleFiles(e.dataTransfer.files);
+  }, [handleFiles]);
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const imageFiles: File[] = [];
+    for (let i = 0; i < e.clipboardData.items.length; i++) {
+      const item = e.clipboardData.items[i];
+      if (item.type.startsWith('image/')) { const f = item.getAsFile(); if (f) imageFiles.push(f); }
+    }
+    if (imageFiles.length > 0) { e.preventDefault(); handleFiles(imageFiles); }
+  }, [handleFiles]);
+
   // History sidebar resize
   const [sidebarW, setSidebarW] = useState(320);
   const sidebarResizing = useRef(false);
@@ -258,23 +316,26 @@ export default function WaveCenter({
   };
 
   const handleReply = useCallback(async () => {
-    if (!waveTree.selectedRoleId || !replyText.trim()) return;
+    if (!waveTree.selectedRoleId || (!replyText.trim() && attachments.length === 0)) return;
     const node = waveTree.nodes.get(waveTree.selectedRoleId);
     if (!node) return;
 
+    const atts = attachments.length > 0 ? attachments : undefined;
     setReplying(true);
     try {
       if (node.status === 'awaiting_input' && node.sessionId) {
         // Reply to active awaiting_input session
-        const resp = await api.replyToSession(node.sessionId, replyText.trim());
+        const resp = await api.replyToSession(node.sessionId, replyText.trim(), atts);
         setReplyText('');
+        setAttachments([]);
         // Use the returned sessionId (may be a new continuation session)
         waveTree.connectStream(resp.sessionId || node.sessionId, waveTree.selectedRoleId);
       } else {
         // Start new job (follow-up for done, replay, or not-dispatched)
         const waveId = currentActiveWave?.id ?? replayData?.waveId ?? replayData?.id;
-        const resp = await api.startJob({ type: 'assign', roleId: waveTree.selectedRoleId, task: replyText.trim(), ...(waveId && { waveId }) });
+        const resp = await api.startJob({ type: 'assign', roleId: waveTree.selectedRoleId, task: replyText.trim(), ...(waveId && { waveId }), ...(atts && { attachments: atts }) });
         setReplyText('');
+        setAttachments([]);
         if (resp.sessionId) {
           waveTree.connectStream(resp.sessionId, waveTree.selectedRoleId);
         }
@@ -284,7 +345,7 @@ export default function WaveCenter({
     } finally {
       setReplying(false);
     }
-  }, [waveTree, replyText, currentActiveWave, replayData]);
+  }, [waveTree, replyText, attachments, currentActiveWave, replayData]);
 
   const handleForceStop = useCallback(async (roleId: string) => {
     const node = waveTree.nodes.get(roleId);
@@ -611,23 +672,50 @@ export default function WaveCenter({
                        selectedNode.status === 'not-dispatched' ? 'This role was not dispatched. Send a follow-up to activate.' : ''}
                     </div>
                   )}
-                  {selectedNode?.events.map((event) => (
-                    <EventRow
-                      key={event.seq}
-                      event={event}
-                      isThinkingCollapsed={collapsedThinking.has(event.seq)}
-                      onToggleThinking={() => toggleThinking(event.seq)}
-                      onNavigateToJob={(childJobId) => {
-                        for (const [, node] of waveTree.nodes) {
-                          if (node.events.some(e => e.data.childJobId === childJobId)) {
-                            waveTree.selectNode(node.roleId);
-                            return;
+                  {selectedNode?.events.map((event, idx) => {
+                    const events = selectedNode.events;
+                    // Detect follow-up boundary: job:start that's not the first in the list
+                    const isFollowUpStart = event.type === 'job:start' && idx > 0;
+                    // Hide terminal events (job:done/error/awaiting_input) right before a follow-up start
+                    const nextEvent = events[idx + 1];
+                    const isTerminalBeforeFollowUp = (event.type === 'job:done' || event.type === 'job:error' || event.type === 'job:awaiting_input')
+                      && nextEvent?.type === 'job:start';
+
+                    if (isTerminalBeforeFollowUp) return null;
+
+                    if (isFollowUpStart) {
+                      // Extract CEO follow-up text from the task
+                      const task = (event.data.task as string) ?? '';
+                      const ceoMatch = task.match(/\[CEO Follow-up\]\n([\s\S]+)$/);
+                      const ceoText = ceoMatch ? ceoMatch[1].trim() : task;
+                      return (
+                        <Fragment key={`followup-${event.seq}`}>
+                          <div className="flex items-start gap-2 my-3 pt-2 pb-2 border-t border-b" style={{ borderColor: 'var(--terminal-border)' }}>
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0" style={{ background: '#B71C1C33', color: '#EF5350' }}>CEO</span>
+                            <span className="text-[var(--terminal-text-secondary)] whitespace-pre-wrap">{ceoText}</span>
+                          </div>
+                        </Fragment>
+                      );
+                    }
+
+                    return (
+                      <EventRow
+                        key={event.seq}
+                        event={event}
+                        isThinkingCollapsed={collapsedThinking.has(event.seq)}
+                        onToggleThinking={() => toggleThinking(event.seq)}
+                        onNavigateToJob={(childJobId) => {
+                          for (const [, node] of waveTree.nodes) {
+                            if (node.events.some(e => e.data.childJobId === childJobId)) {
+                              waveTree.selectNode(node.roleId);
+                              return;
+                            }
                           }
-                        }
-                      }}
-                      onOpenKnowledgeDoc={onOpenKnowledgeDoc}
-                    />
-                  ))}
+                        }}
+                        onOpenKnowledgeDoc={onOpenKnowledgeDoc}
+                      />
+                    );
+                  })}
                   {selectedNode?.status === 'running' && (
                     <span className="inline-block w-2 h-4 bg-green-400 animate-pulse ml-0.5" />
                   )}

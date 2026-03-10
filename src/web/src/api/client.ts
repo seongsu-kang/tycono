@@ -1,4 +1,4 @@
-import type { Company, Role, RoleDetail, Project, ProjectDetail, Standup, Wave, Decision, Session, CreateRoleInput, CompanyStatus, EngineDetection, PathValidation, ScaffoldInput, ScaffoldResult, TeamTemplate, BrowseResult, ConnectAkbResult, KnowledgeDoc, KnowledgeDocDetail, OrgTreeResponse, TrackedRole, CompanyStats, GitStatus, ActiveSessionsResponse, ActiveSession } from '../types';
+import type { Company, Role, RoleDetail, Project, ProjectDetail, Standup, Wave, Decision, Session, CreateRoleInput, CompanyStatus, EngineDetection, PathValidation, ScaffoldInput, ScaffoldResult, TeamTemplate, BrowseResult, ConnectAkbResult, KnowledgeDoc, KnowledgeDocDetail, OrgTreeResponse, TrackedRole, CompanyStats, GitStatus, ActiveSessionsResponse, ActiveSession, ImageAttachment } from '../types';
 import type { SpeechSettings } from '../types/speech';
 
 const BASE = '/api';
@@ -98,11 +98,11 @@ export const api = {
   abortSession: (sessionId: string) =>
     post<{ ok: boolean; jobId: string }>(`/sessions/${sessionId}/abort`, {}),
   /** SCA-011: Reply to an awaiting_input job via session */
-  replyToSession: (sessionId: string, message: string) =>
-    post<{ ok: boolean; jobId: string; sessionId: string }>(`/sessions/${sessionId}/reply`, { message }),
+  replyToSession: (sessionId: string, message: string, attachments?: ImageAttachment[]) =>
+    post<{ ok: boolean; jobId: string; sessionId: string }>(`/sessions/${sessionId}/reply`, { message, ...(attachments && { attachments }) }),
 
   // Jobs (start only — monitoring/control via Session API)
-  startJob: (params: { type?: string; roleId?: string; task?: string; directive?: string; sourceRole?: string; readOnly?: boolean; targetRole?: string; targetRoles?: string[]; waveId?: string }) =>
+  startJob: (params: { type?: string; roleId?: string; task?: string; directive?: string; sourceRole?: string; readOnly?: boolean; targetRole?: string; targetRoles?: string[]; waveId?: string; attachments?: ImageAttachment[] }) =>
     post<{ jobId: string; jobIds?: string[]; waveId?: string; sessionId?: string; sessionIds?: string[] }>('/jobs', params),
   saveWave: (params: { directive: string; jobIds: string[]; waveId?: string; sessionIds?: string[] }) =>
     post<{ ok: boolean; path: string }>('/waves/save', params),

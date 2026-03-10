@@ -61,6 +61,7 @@ interface TopDownOfficeViewProps {
   onCoinsSpent?: (newBalance: number) => void;
   onFurniturePlaced?: (type: string, price: number) => void;
   purchasedPreset?: 'M' | 'L';
+  language?: string;
 }
 
 /* ─── Canvas constants ──────────────────── */
@@ -88,70 +89,58 @@ const ROLE_COLORS: Record<string, string> = {
 
 /* ─── Role dialogue (REACT-006) ─────────── */
 
-const ROLE_DIALOGUES: Record<string, string[]> = {
-  ceo: [
-    "대표님?",
-    "무슨 일이신가요?",
-    "회의 시간이신가요?",
-    "좋은 아이디어 있으시면 말씀해주세요.",
-    "다들 잘하고 있나요?",
-  ],
-  cto: [
-    "뭐 필요하신 거 있으세요?",
-    "기술 관련 질문이신가요?",
-    "아키텍처 리뷰 중이에요.",
-    "배포는 조금만 기다려주세요.",
-    "코드 봐드릴까요?",
-  ],
-  cbo: [
-    "비즈니스 관련 얘기신가요?",
-    "수익 모델 검토 중이에요.",
-    "시장 조사 결과 보실래요?",
-    "경쟁사 분석 중입니다.",
-    "뭔가 도와드릴까요?",
-  ],
-  pm: [
-    "프로젝트 진행 상황 궁금하신가요?",
-    "로드맵 업데이트 중이에요.",
-    "태스크 할당 중입니다.",
-    "우선순위 조정이 필요할까요?",
-    "스프린트 리뷰 준비 중이에요.",
-  ],
-  engineer: [
-    "일하고 있어요!",
-    "버그 수정 중입니다.",
-    "코드 리뷰 필요하신가요?",
-    "테스트 작성 중이에요.",
-    "PR 올리고 있어요.",
-  ],
-  designer: [
-    "디자인 피드백 있으신가요?",
-    "목업 작업 중이에요.",
-    "UI 개선안 생각 중입니다.",
-    "컬러 팔레트 고민 중이에요.",
-    "프로토타입 보여드릴까요?",
-  ],
-  qa: [
-    "테스트 중이에요.",
-    "버그 발견했어요!",
-    "테스트 케이스 작성 중입니다.",
-    "회귀 테스트 진행 중이에요.",
-    "품질 체크 중입니다.",
-  ],
-  'data-analyst': [
-    "데이터 분석 중이에요.",
-    "리포트 준비 중입니다.",
-    "대시보드 확인해보실래요?",
-    "지표 추적 중이에요.",
-    "인사이트 발견했어요!",
-  ],
-  default: [
-    "안녕하세요!",
-    "무엇을 도와드릴까요?",
-    "열심히 일하고 있어요.",
-    "좋은 하루 되세요!",
-  ],
+const ROLE_DIALOGUES: Record<string, Record<string, string[]>> = {
+  ceo: {
+    en: ["Boss?", "What's up?", "Time for a meeting?", "Got any ideas?", "How's everyone doing?"],
+    ko: ["대표님?", "무슨 일이신가요?", "회의 시간이신가요?", "좋은 아이디어 있으시면 말씀해주세요.", "다들 잘하고 있나요?"],
+    ja: ["社長?", "何かありますか?", "会議の時間ですか?", "良いアイデアがあれば教えてください。", "みんな元気ですか?"],
+  },
+  cto: {
+    en: ["Need anything?", "Tech question?", "Reviewing architecture.", "Deploy in a moment.", "Want me to look at the code?"],
+    ko: ["뭐 필요하신 거 있으세요?", "기술 관련 질문이신가요?", "아키텍처 리뷰 중이에요.", "배포는 조금만 기다려주세요.", "코드 봐드릴까요?"],
+    ja: ["何かお手伝いしましょうか?", "技術的な質問ですか?", "アーキテクチャレビュー中です。", "デプロイはもう少しお待ちください。", "コード見ましょうか?"],
+  },
+  cbo: {
+    en: ["Business question?", "Reviewing revenue model.", "Want to see market research?", "Analyzing competitors.", "Can I help?"],
+    ko: ["비즈니스 관련 얘기신가요?", "수익 모델 검토 중이에요.", "시장 조사 결과 보실래요?", "경쟁사 분석 중입니다.", "뭔가 도와드릴까요?"],
+    ja: ["ビジネスの話ですか?", "収益モデルを検討中です。", "市場調査の結果を見ますか?", "競合分析中です。", "何かお手伝いしましょうか?"],
+  },
+  pm: {
+    en: ["Curious about progress?", "Updating the roadmap.", "Assigning tasks.", "Need to re-prioritize?", "Preparing sprint review."],
+    ko: ["프로젝트 진행 상황 궁금하신가요?", "로드맵 업데이트 중이에요.", "태스크 할당 중입니다.", "우선순위 조정이 필요할까요?", "스프린트 리뷰 준비 중이에요."],
+    ja: ["進捗が気になりますか?", "ロードマップを更新中です。", "タスクを割り当て中です。", "優先順位の調整が必要ですか?", "スプリントレビューの準備中です。"],
+  },
+  engineer: {
+    en: ["Working on it!", "Fixing a bug.", "Need a code review?", "Writing tests.", "Pushing a PR."],
+    ko: ["일하고 있어요!", "버그 수정 중입니다.", "코드 리뷰 필요하신가요?", "테스트 작성 중이에요.", "PR 올리고 있어요."],
+    ja: ["作業中です!", "バグ修正中です。", "コードレビュー必要ですか?", "テスト書いてます。", "PR出してます。"],
+  },
+  designer: {
+    en: ["Got design feedback?", "Working on mockups.", "Thinking about UI improvements.", "Picking colors...", "Want to see the prototype?"],
+    ko: ["디자인 피드백 있으신가요?", "목업 작업 중이에요.", "UI 개선안 생각 중입니다.", "컬러 팔레트 고민 중이에요.", "프로토타입 보여드릴까요?"],
+    ja: ["デザインのフィードバックありますか?", "モックアップ作業中です。", "UI改善案を考えています。", "カラーパレットを検討中です。", "プロトタイプ見せましょうか?"],
+  },
+  qa: {
+    en: ["Testing in progress.", "Found a bug!", "Writing test cases.", "Running regression tests.", "Quality check in progress."],
+    ko: ["테스트 중이에요.", "버그 발견했어요!", "테스트 케이스 작성 중입니다.", "회귀 테스트 진행 중이에요.", "품질 체크 중입니다."],
+    ja: ["テスト中です。", "バグ見つけました!", "テストケース作成中です。", "回帰テスト実行中です。", "品質チェック中です。"],
+  },
+  'data-analyst': {
+    en: ["Analyzing data.", "Preparing a report.", "Want to check the dashboard?", "Tracking metrics.", "Found an insight!"],
+    ko: ["데이터 분석 중이에요.", "리포트 준비 중입니다.", "대시보드 확인해보실래요?", "지표 추적 중이에요.", "인사이트 발견했어요!"],
+    ja: ["データ分析中です。", "レポート準備中です。", "ダッシュボード確認しますか?", "指標追跡中です。", "インサイト発見しました!"],
+  },
+  default: {
+    en: ["Hello!", "How can I help?", "Working hard.", "Have a great day!"],
+    ko: ["안녕하세요!", "무엇을 도와드릴까요?", "열심히 일하고 있어요.", "좋은 하루 되세요!"],
+    ja: ["こんにちは!", "何かお手伝いしましょうか?", "頑張って仕事してます。", "良い一日を!"],
+  },
 };
+
+function getRoleDialogues(roleId: string, lang: string): string[] {
+  const role = ROLE_DIALOGUES[roleId] || ROLE_DIALOGUES.default;
+  return role[lang] || role.en || role.default || [];
+}
 
 /* ─── Facility zones (built from furniture data) ─── */
 
@@ -1086,7 +1075,7 @@ export default function TopDownOfficeView({
   onRoleClick, onProjectClick, onBulletinClick, onDecisionsClick, onKnowledgeClick, onSettingsClick, onThemeClick, onStatsClick,
   getRoleSpeech, getAppearance, onHireClick, onMascotClick, roleLevels,
   coinBalance = 0, onCoinsSpent, onFurniturePlaced,
-  purchasedPreset,
+  purchasedPreset, language = 'en',
 }: TopDownOfficeViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -1198,7 +1187,9 @@ export default function TopDownOfficeView({
     if (pw === 0 || ph === 0) return;
 
     const { canvasW, canvasH } = _layout;
-    let z = Math.floor(Math.min(pw / canvasW, ph / canvasH));
+    // Use fractional zoom to fill viewport more tightly (round to nearest 0.5)
+    let z = Math.min(pw / canvasW, ph / canvasH);
+    z = Math.round(z * 2) / 2;  // snap to 0.5 increments for crisp pixel rendering
     z = Math.max(2, Math.min(z, 5));
     zoomRef.current = z;
 
@@ -1386,7 +1377,7 @@ export default function TopDownOfficeView({
 
             if (hoverDuration >= 2000 && cooldownPassed) {
               // Pick random dialogue
-              const dialogues = ROLE_DIALOGUES[id] || ROLE_DIALOGUES.default;
+              const dialogues = getRoleDialogues(id, language);
               const randomDialogue = dialogues[Math.floor(Math.random() * dialogues.length)];
               hState.currentSpeech = randomDialogue;
               hState.lastSpeechTime = now;
