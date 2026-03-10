@@ -391,15 +391,26 @@ export default function WaveCenter({
   }, []);
 
 
-  // Notify when done
+  // Notify when done + auto-save to disk so completed waves appear in PAST WAVES
   const doneFired = useRef(false);
+  const doneFiredWaveId = useRef<string | null>(null);
   useEffect(() => {
+    // Reset doneFired when switching to a different wave
+    if (currentActiveWave?.id !== doneFiredWaveId.current) {
+      doneFired.current = false;
+      doneFiredWaveId.current = currentActiveWave?.id ?? null;
+    }
     if (waveTree.allDone && !doneFired.current && currentActiveWave) {
       doneFired.current = true;
       fetchCodeGit();
       onDone?.();
+      // Auto-save wave to disk (prevents disappearing waves)
+      if (onSave) {
+        const jobIds = currentActiveWave.rootJobs.map(r => r.jobId).filter((id): id is string => !!id);
+        onSave(currentActiveWave.directive, jobIds, { waveId: currentActiveWave.id, sessionIds: currentActiveWave.sessionIds }).catch(() => {});
+      }
     }
-  }, [waveTree.allDone, currentActiveWave, onDone, fetchCodeGit]);
+  }, [waveTree.allDone, currentActiveWave, onDone, onSave, fetchCodeGit]);
 
   const handleSave = useCallback(async () => {
     if (!onSave || !currentActiveWave) return;
