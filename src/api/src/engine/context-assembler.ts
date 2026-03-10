@@ -507,6 +507,15 @@ function buildDispatchSection(orgTree: OrgTree, roleId: string, subordinates: st
 
   let section = `# Dispatch (Team Management)
 
+⛔ **YOU HAVE SUBORDINATES. YOU MUST USE THEM.**
+⛔ **For ANY directive — whether it's "do X", "review Y", or even "what do you think about Z" — dispatch to your team first, THEN synthesize their input into your response.**
+⛔ **Reading files and giving your own opinion WITHOUT dispatching is NEVER acceptable when you have a team.**
+
+Even for opinion/analysis requests:
+- Dispatch to relevant subordinates: "Analyze X from your perspective and report findings"
+- Poll for results → Synthesize their input with your own analysis
+- Your value is ORCHESTRATION, not solo work
+
 ## Available Team Members
 ${subInfo}
 
@@ -675,11 +684,15 @@ Your final report MUST include a **Change Summary** with files changed and commi
   } else {
     section += `
 
-## Rules
-- Only dispatch to your direct reports listed above
-- Include clear task description, acceptance criteria, and relevant file paths
-- The dispatched agent will work independently and return results to you
-- After receiving results, synthesize and report back`;
+## Delegation Rules (MANDATORY)
+
+⛔ **You have subordinates — USE THEM before doing work yourself.**
+
+- **Always dispatch first.** Break the directive into sub-tasks and assign to your team.
+- Only do work yourself if NO subordinate can handle it (e.g., cross-cutting decisions).
+- Include clear task description, acceptance criteria, and relevant file paths in every dispatch.
+- After receiving results, synthesize and report back.
+- Your output should reference subordinate findings, not just your own file reads.`;
   }
 
   return section;

@@ -78,6 +78,21 @@ function handleJobsRequest(url: string, method: string, req: IncomingMessage, re
     return;
   }
 
+  // GET /api/jobs/:id — internal only (used by dispatch bridge Python script)
+  const jobMatch = path.match(/^\/api\/jobs\/([^/]+)$/);
+  if (method === 'GET' && jobMatch) {
+    const jobId = jobMatch[1];
+    const info = jobManager.getJobInfo(jobId);
+    if (!info) {
+      res.writeHead(404);
+      res.end(JSON.stringify({ error: 'Job not found' }));
+    } else {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(info));
+    }
+    return;
+  }
+
   // GET /api/jobs/:id/history — internal only (used by engine Python sub-processes)
   const historyMatch = path.match(/^\/api\/jobs\/([^/]+)\/history$/);
   if (method === 'GET' && historyMatch) {
@@ -88,9 +103,9 @@ function handleJobsRequest(url: string, method: string, req: IncomingMessage, re
     return;
   }
 
-  // All other /api/jobs/* endpoints removed — use /api/sessions/* instead
-  res.writeHead(410);  // Gone
-  res.end(JSON.stringify({ error: 'Job monitoring endpoints removed. Use /api/sessions/:id/stream, /api/sessions/:id/abort, /api/sessions/:id/reply instead.' }));
+  // All other /api/jobs/* endpoints → 410
+  res.writeHead(410);
+  res.end(JSON.stringify({ error: 'Use /api/sessions/* for client-facing operations. /api/jobs/:id and /api/jobs/:id/history are internal only.' }));
 }
 
 /* ─── POST /api/jobs ─────────────────────── */
