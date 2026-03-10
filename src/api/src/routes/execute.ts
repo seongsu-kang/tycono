@@ -17,6 +17,12 @@ import { jobManager, type Job } from '../services/job-manager.js';
 import { ActivityStream, type ActivityEvent, type ActivitySubscriber } from '../services/activity-stream.js';
 import { earnCoinsInternal } from './coins.js';
 import { appendFollowUpToWave } from '../services/wave-tracker.js';
+import { waveMultiplexer } from '../services/wave-multiplexer.js';
+
+/* ─── SSE-003: Auto-attach child dispatch jobs to wave multiplexer ── */
+jobManager.onJobCreated((job) => {
+  waveMultiplexer.onJobCreated(job);
+});
 
 /* ─── Runner — lazy, re-created when engine changes ── */
 
@@ -33,6 +39,13 @@ const roleStatus = new Map<string, 'idle' | 'working' | 'done'>();
 export function handleExecRequest(req: IncomingMessage, res: ServerResponse): void {
   const url = req.url ?? '';
   const method = req.method ?? '';
+
+  // ── /api/waves/:waveId/stream — SSE multiplexed wave stream ──
+  const waveStreamMatch = url.match(/^\/api\/waves\/([^/]+)\/stream/);
+  if (method === 'GET' && waveStreamMatch) {
+    handleWaveStream(waveStreamMatch[1], url, res, req);
+    return;
+  }
 
   // ── /api/waves/save ──
   if (method === 'POST' && url === '/api/waves/save') {
@@ -185,6 +198,9 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
         attachments,
       });
       jobIds.push(job.id);
+
+      // SSE-001: Register wave job with multiplexer
+      waveMultiplexer.registerJob(waveId, job);
 
       // Add a role message (will be updated as execution progresses)
       const roleMsg: Message = {
@@ -375,6 +391,28 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
   }
 
   jsonResponse(res, 200, { ok: true, path: `operations/waves/${baseName}.json` });
+}
+
+/* ─── GET /api/waves/:waveId/stream — SSE multiplexed wave stream (SSE-002) ── */
+
+function handleWaveStream(waveId: string, url: string, res: ServerResponse, req: IncomingMessage): void {
+  const fromMatch = url.match(/[?&]from=(\d+)/);
+  const fromWaveSeq = fromMatch ? parseInt(fromMatch[1], 10) : 0;
+
+  // Check if wave has any registered jobs
+  const jobIds = waveMultiplexer.getWaveJobIds(waveId);
+  if (jobIds.length === 0) {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: `No jobs found for wave: ${waveId}` }));
+    return;
+  }
+
+  // attach() handles everything: replay history + subscribe to live events
+  const client = waveMultiplexer.attach(waveId, res as any, fromWaveSeq);
+
+  req.on('close', () => {
+    waveMultiplexer.detach(waveId, client);
+  });
 }
 
 /* ═══════════════════════════════════════════════

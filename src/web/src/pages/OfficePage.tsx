@@ -88,6 +88,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   const [waveState, setWaveState] = useState<{
     directive: string;
     rootJobs: Array<{ sessionId: string; roleId: string; roleName: string; jobId?: string }>;
+    waveId?: string;
   } | null>(null);
   const [waveMinimized, setWaveMinimized] = useState(false);
   const [waveDone, setWaveDone] = useState(false);

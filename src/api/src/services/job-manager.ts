@@ -7,7 +7,7 @@ import type { ExecutionRunner } from '../engine/runners/types.js';
 import { setActivity, updateActivity, completeActivity } from './activity-tracker.js';
 import type { RunnerResult } from '../engine/runners/types.js';
 import { estimateCost } from './pricing.js';
-import { readConfig, getConversationLimits } from './company-config.js';
+import { readConfig, getConversationLimits, resolveCodeRoot } from './company-config.js';
 import { postKnowledgingCheck, type KnowledgeDebtItem } from '../engine/knowledge-gate.js';
 import { earnCoinsInternal } from '../routes/coins.js';
 import { getSession, createSession, addMessage, updateMessage as updateSessionMessage, appendMessageEvent, type Message, type ImageAttachment } from './session-store.js';
@@ -269,7 +269,7 @@ class JobManager {
         jobId: job.id,
         teamStatus,
         targetRoles: params.targetRoles,
-        codeRoot: config.codeRoot,
+        codeRoot: resolveCodeRoot(COMPANY_ROOT),
         attachments: params.attachments,
         env: {
           ...process.env,

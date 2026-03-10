@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { ActivityEvent, OrgNode } from '../types';
 import type { StreamStatus } from './useActivityStream';
+import { useWaveStream } from './useWaveStream';
 
 export type WaveNodeStatus = 'waiting' | 'running' | 'done' | 'error' | 'not-dispatched' | 'awaiting_input';
 
@@ -38,6 +39,8 @@ export default function useWaveTree(
   rootJobs: Array<{ sessionId: string; roleId: string; roleName?: string }>,
   orgNodes: Record<string, OrgNode>,
   rootRoleId: string,
+  /** SSE-005: When provided, use multiplexed wave stream instead of per-role SSE */
+  waveId?: string | null,
 ): UseWaveTreeResult {
   const [nodes, setNodes] = useState<Map<string, WaveNode>>(new Map());
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
@@ -46,6 +49,9 @@ export default function useWaveTree(
   const nodesRef = useRef<Map<string, WaveNode>>(nodes);
   nodesRef.current = nodes;
   const injectedRef = useRef(false);
+
+  // SSE-005: Multiplexed wave stream hook
+  const { connectWaveStream, disconnectWaveStream } = useWaveStream();
 
   // Build org tree helper
   const buildOrgTree = useCallback(() => {
@@ -314,10 +320,25 @@ export default function useWaveTree(
   }, []);
 
   // Start SSE streams for root jobs
+  // SSE-005: Use multiplexed wave stream when waveId is available
   const startedSessionsRef = useRef<Set<string>>(new Set());
+  const usingMultiplexRef = useRef(false);
   useEffect(() => {
     if (rootJobs.length === 0) return;
 
+    // SSE-005: Prefer multiplexed stream (1 connection) over per-role streams (N connections)
+    if (waveId) {
+      usingMultiplexRef.current = true;
+      connectWaveStream(waveId, setNodes, orgNodes);
+
+      return () => {
+        disconnectWaveStream();
+        usingMultiplexRef.current = false;
+      };
+    }
+
+    // Fallback: per-role SSE (for cases without waveId, e.g. legacy)
+    usingMultiplexRef.current = false;
     const sessionIds = new Set<string>();
     for (const rj of rootJobs) {
       sessionIds.add(rj.sessionId);
@@ -336,7 +357,7 @@ export default function useWaveTree(
       }
       startedSessionsRef.current.clear();
     };
-  }, [rootJobs, connectStream]);
+  }, [rootJobs, connectStream, waveId, connectWaveStream, disconnectWaveStream, orgNodes]);
 
   // Progress
   const progress = (() => {

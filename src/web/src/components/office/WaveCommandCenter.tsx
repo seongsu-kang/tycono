@@ -16,6 +16,7 @@ interface Props {
   rootJobs: Array<{ sessionId: string; roleId: string; roleName: string; jobId?: string }>;
   orgNodes: Record<string, OrgNode>;
   rootRoleId: string;
+  waveId?: string;
   onClose: () => void;
   onMinimize: () => void;
   onDone?: () => void;
@@ -24,10 +25,10 @@ interface Props {
 }
 
 export default function WaveCommandCenter({
-  directive, rootJobs, orgNodes, rootRoleId,
+  directive, rootJobs, orgNodes, rootRoleId, waveId,
   onClose, onMinimize, onDone, onOpenKnowledgeDoc, onSave,
 }: Props) {
-  const { nodes, selectedRoleId, selectNode, progress, allDone, connectStream } = useWaveTree(rootJobs, orgNodes, rootRoleId);
+  const { nodes, selectedRoleId, selectNode, progress, allDone, connectStream } = useWaveTree(rootJobs, orgNodes, rootRoleId, waveId);
   const [elapsed, setElapsed] = useState(0);
   const [collapsedThinking, setCollapsedThinking] = useState<Set<number>>(new Set());
   const [replyText, setReplyText] = useState('');

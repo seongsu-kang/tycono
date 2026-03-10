@@ -4,7 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { assembleContext } from '../context-assembler.js';
 import { getSubordinates } from '../org-tree.js';
-import { readConfig } from '../../services/company-config.js';
+import { readConfig, resolveCodeRoot } from '../../services/company-config.js';
 import { getTokenLedger } from '../../services/token-ledger.js';
 import type { ExecutionRunner, RunnerConfig, RunnerCallbacks, RunnerHandle, RunnerResult } from './types.js';
 
@@ -350,12 +350,12 @@ export class ClaudeCliRunner implements ExecutionRunner {
     cleanEnv.CONSULT_SOURCE_ROLE = roleId;
 
     const modelName = config.model ?? 'claude-sonnet-4-5';
-    // Use codeRoot as cwd if configured, otherwise fall back to companyRoot
-    const companyConfig = readConfig(companyRoot);
-    const cwd = companyConfig.codeRoot || companyRoot;
+    // Use codeRoot as cwd — auto-creates ../{name}-code/ if not configured
+    const codeRoot = resolveCodeRoot(companyRoot);
+    const cwd = codeRoot;
 
     // Inject repo paths so agents never confuse repos
-    cleanEnv.TYCONO_CODE_ROOT = companyConfig.codeRoot || '';
+    cleanEnv.TYCONO_CODE_ROOT = codeRoot;
     cleanEnv.TYCONO_AKB_ROOT = companyRoot;
     console.log(`[Runner] Spawning claude -p: role=${roleId}, model=${modelName}, maxTurns=${maxTurns}, jobId=${config.jobId ?? 'none'}, cwd=${cwd}, subordinates=[${subordinates.join(',')}]`);
 

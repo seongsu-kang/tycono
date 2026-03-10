@@ -277,7 +277,7 @@ export default function SettingsPanel({
                 <div style={{ fontSize: 9, color: '#4ade80', marginTop: 4 }}>Code repository updated!</div>
               )}
               <div style={{ fontSize: 9, color: 'var(--terminal-text-muted)', marginTop: 4 }}>
-                Path to your code repository (separate from AKB)
+                Path to your code repository (separate from AKB). If not set, auto-created as ../[company]-code/ when AI starts working.
               </div>
             </div>
 

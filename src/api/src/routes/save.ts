@@ -16,9 +16,9 @@ saveRouter.get('/status', (req: Request, res: Response, next: NextFunction) => {
   try {
     res.json(getGitStatus(COMPANY_ROOT, getRepo(req)));
   } catch (err) {
-    // codeRoot not configured is expected for fresh installs — return empty status
-    if (err instanceof Error && err.message.includes('codeRoot not configured')) {
-      res.json({ isRepo: false, branch: '', staged: [], unstaged: [], untracked: [], notConfigured: true });
+    // Not a git repo (e.g. auto-created code dir) — return empty status
+    if (err instanceof Error && (err.message.includes('not a git repository') || err.message.includes('codeRoot'))) {
+      res.json({ isRepo: false, branch: '', staged: [], unstaged: [], untracked: [] });
       return;
     }
     next(err);

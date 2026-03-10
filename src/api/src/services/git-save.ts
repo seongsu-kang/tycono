@@ -16,6 +16,7 @@
 import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { resolveCodeRoot } from './company-config.js';
 
 export type RepoType = 'akb' | 'code';
 
@@ -87,47 +88,17 @@ const SAVE_PATHS = [
   'CLAUDE.md',
 ];
 
-interface TyconoConfig {
-  companyName: string;
-  engine: string;
-  createdAt: string;
-  codeRoot?: string;
-}
-
-/**
- * Read codeRoot from .tycono/config.json
- * @param akbRoot - AKB repository root (COMPANY_ROOT)
- * @returns codeRoot path if configured, undefined otherwise
- */
-function getCodeRoot(akbRoot: string): string | undefined {
-  try {
-    const configPath = join(akbRoot, '.tycono', 'config.json');
-    const content = readFileSync(configPath, 'utf-8');
-    const config: TyconoConfig = JSON.parse(content);
-    return config.codeRoot;
-  } catch {
-    return undefined;
-  }
-}
-
 /**
  * Resolve repository root based on repo type
  * @param akbRoot - AKB repository root (COMPANY_ROOT)
  * @param repo - Repository type ('akb' or 'code')
  * @returns Resolved repository root path
- * @throws Error if repo='code' but codeRoot not configured
  */
 function resolveRepoRoot(akbRoot: string, repo: RepoType = 'akb'): string {
   if (repo === 'akb') {
     return akbRoot;
   }
-
-  const codeRoot = getCodeRoot(akbRoot);
-  if (!codeRoot) {
-    throw new Error('codeRoot not configured in .tycono/config.json');
-  }
-
-  return codeRoot;
+  return resolveCodeRoot(akbRoot);
 }
 
 /**

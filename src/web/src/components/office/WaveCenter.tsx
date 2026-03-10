@@ -72,10 +72,12 @@ export default function WaveCenter({
   const rootJobs = currentActiveWave?.rootJobs ?? emptyRootJobs;
 
   // Unified wave tree — works for active waves and as base for replay
+  // SSE-005: Pass waveId to enable multiplexed SSE (1 connection per wave)
   const waveTree = useWaveTree(
     rootJobs,
     orgNodes,
     rootRoleId,
+    currentActiveWave?.id ?? null,
   );
 
   // When replay loads, inject static data + reconnect running follow-ups

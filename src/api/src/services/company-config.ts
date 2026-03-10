@@ -44,6 +44,29 @@ function configPath(companyRoot: string): string {
   return path.join(companyRoot, CONFIG_DIR, CONFIG_FILE);
 }
 
+/**
+ * Resolve codeRoot: explicit config > auto-generated sibling directory.
+ * When codeRoot is not configured, defaults to `../{dirname}-code/` next to companyRoot.
+ * Auto-creates the directory if it doesn't exist.
+ */
+export function resolveCodeRoot(companyRoot: string): string {
+  const config = readConfig(companyRoot);
+  if (config.codeRoot) return config.codeRoot;
+
+  // Auto-generate: ../{folder-name}-code/
+  const dirName = path.basename(companyRoot);
+  const autoCodeRoot = path.join(path.dirname(companyRoot), `${dirName}-code`);
+
+  if (!fs.existsSync(autoCodeRoot)) {
+    fs.mkdirSync(autoCodeRoot, { recursive: true });
+  }
+
+  // Persist so it's stable across restarts
+  writeConfig(companyRoot, { ...config, codeRoot: autoCodeRoot });
+
+  return autoCodeRoot;
+}
+
 /** Read config from .tycono/config.json. Returns defaults if missing. */
 export function readConfig(companyRoot: string): CompanyConfig {
   const p = configPath(companyRoot);

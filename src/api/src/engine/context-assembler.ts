@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { readPreferences } from '../services/preferences.js';
-import { readConfig } from '../services/company-config.js';
+import { readConfig, resolveCodeRoot } from '../services/company-config.js';
 import {
   type OrgTree,
   type OrgNode,
@@ -102,11 +102,10 @@ export function assembleContext(
   }
 
   // 9. Code Root (코드 프로젝트 경로)
-  const config = readConfig(companyRoot);
-  if (config.codeRoot) {
-    sections.push(`# Code Project
+  const codeRoot = resolveCodeRoot(companyRoot);
+  sections.push(`# Code Project
 
-The code repository is located at: \`${config.codeRoot}\` (env: $TYCONO_CODE_ROOT)
+The code repository is located at: \`${codeRoot}\` (env: $TYCONO_CODE_ROOT)
 The AKB (knowledge) directory is at: \`${companyRoot}\` (env: $TYCONO_AKB_ROOT)
 
 Use the code repository path for all source code work (reading, writing, building, testing).
@@ -116,7 +115,6 @@ Use the code repository path for all source code work (reading, writing, buildin
 - **NEVER run \`git worktree add\` in \`$TYCONO_AKB_ROOT\`** — the AKB directory is not a code repository.
 - Recommended worktree path: \`$TYCONO_CODE_ROOT/.worktrees/{branch-name}\`
 - Example: \`git worktree add .worktrees/feature-xyz -b feature/xyz\` (from cwd, which is already code repo)`);
-  }
 
   // 10. Pre-Knowledging: 작업 관련 문서 자동 탐색
   const preKSection = buildPreKnowledgingSection(companyRoot, task);
