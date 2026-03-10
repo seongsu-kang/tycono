@@ -997,10 +997,15 @@ function ReplayView({ replay, orgNodes, rootRoleId, onOpenKnowledgeDoc, onRefres
   onOpenKnowledgeDoc?: (docId: string) => void;
   onRefreshWaves?: () => void;
 }) {
-  const nodes = useMemo(() => buildReplayNodes(orgNodes, rootRoleId, replay.roles), [orgNodes, rootRoleId, replay]);
+  const initialNodes = useMemo(() => buildReplayNodes(orgNodes, rootRoleId, replay.roles), [orgNodes, rootRoleId, replay]);
+  const [nodes, setNodes] = useState<Map<string, WaveNode>>(initialNodes);
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(replay.roles[0]?.roleId ?? null);
   const [collapsedThinking, setCollapsedThinking] = useState<Set<number>>(new Set());
   const outputRef = useRef<HTMLDivElement>(null);
+  const streamsRef = useRef<Map<string, AbortController>>(new Map());
+
+  // Sync with replay changes
+  useEffect(() => { setNodes(initialNodes); }, [initialNodes]);
 
   // Git changes + commit state
   const [codeGit, setCodeGit] = useState<GitInfo | null>(null);
@@ -1048,21 +1053,111 @@ function ReplayView({ replay, orgNodes, rootRoleId, onOpenKnowledgeDoc, onRefres
     }
   }, [commitMsg, fetchCodeGit, replay.id, onRefreshWaves]);
 
+  /** Connect SSE for a follow-up job and update replay nodes in real-time */
+  const connectFollowUpStream = useCallback((sessionId: string, roleId: string) => {
+    const existing = streamsRef.current.get(sessionId);
+    if (existing) existing.abort();
+
+    const controller = new AbortController();
+    streamsRef.current.set(sessionId, controller);
+
+    // Mark node as running
+    setNodes(prev => {
+      const next = new Map(prev);
+      const node = next.get(roleId);
+      if (node) next.set(roleId, { ...node, sessionId, status: 'running', streamStatus: 'streaming', events: [] });
+      return next;
+    });
+
+    fetch(`/api/sessions/${sessionId}/stream?from=0`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok || !response.body) return;
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+
+          let currentEvent = '';
+          for (const line of lines) {
+            if (line.startsWith('event: ')) {
+              currentEvent = line.slice(7).trim();
+            } else if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (currentEvent === 'activity') {
+                  const event = data as import('../../types').ActivityEvent;
+                  setNodes(prev => {
+                    const next = new Map(prev);
+                    const node = next.get(roleId);
+                    if (!node) return prev;
+                    if (node.events.some(e => e.seq === event.seq)) return prev;
+                    const updated = { ...node, events: [...node.events, event] };
+                    if (event.type === 'job:done') { updated.status = 'done'; updated.streamStatus = 'done'; }
+                    else if (event.type === 'job:error') { updated.status = 'error'; updated.streamStatus = 'error'; }
+                    else if (event.type === 'job:awaiting_input') { updated.status = 'awaiting_input'; updated.streamStatus = 'done'; }
+                    next.set(roleId, updated);
+                    return next;
+                  });
+                } else if (currentEvent === 'stream:end') {
+                  setNodes(prev => {
+                    const next = new Map(prev);
+                    const node = next.get(roleId);
+                    if (!node || node.status !== 'running') return prev;
+                    next.set(roleId, { ...node, status: 'done', streamStatus: 'done' });
+                    return next;
+                  });
+                }
+              } catch { /* skip */ }
+              currentEvent = '';
+            }
+          }
+        }
+      })
+      .catch((err) => {
+        if (err.name === 'AbortError') return;
+        setNodes(prev => {
+          const next = new Map(prev);
+          const node = next.get(roleId);
+          if (node) next.set(roleId, { ...node, status: 'error', streamStatus: 'error' });
+          return next;
+        });
+      });
+  }, []);
+
+  // Cleanup SSE streams on unmount
+  useEffect(() => {
+    return () => {
+      for (const [, ctrl] of streamsRef.current) ctrl.abort();
+      streamsRef.current.clear();
+    };
+  }, []);
+
   const handleReply = useCallback(async () => {
     if (!selectedRoleId || !replyText.trim()) return;
     const node = nodes.get(selectedRoleId);
     if (!node) return;
     setReplying(true);
     try {
-      // Replay follow-up: start a new assign job for this role
-      await api.startJob({ type: 'assign', roleId: selectedRoleId, task: replyText.trim() });
+      // Start a new assign job for this role — wave "comes alive" again
+      const resp = await api.startJob({ type: 'assign', roleId: selectedRoleId, task: replyText.trim() });
       setReplyText('');
+      // Connect SSE stream to show live results in the replay tree
+      const sessionId = resp.sessionId;
+      if (sessionId) {
+        connectFollowUpStream(sessionId, selectedRoleId);
+      }
     } catch (err) {
       console.error('Follow-up failed:', err);
     } finally {
       setReplying(false);
     }
-  }, [selectedRoleId, replyText, nodes, replay.roles, replay.sessionIds]);
+  }, [selectedRoleId, replyText, nodes, connectFollowUpStream]);
 
   const toggleThinking = (seq: number) => {
     setCollapsedThinking(prev => {
@@ -1074,6 +1169,7 @@ function ReplayView({ replay, orgNodes, rootRoleId, onOpenKnowledgeDoc, onRefres
   };
 
   const startedAt = replay.startedAt ? new Date(replay.startedAt).toLocaleString() : '';
+  const hasRunning = Array.from(nodes.values()).some(n => n.status === 'running' || n.status === 'awaiting_input');
   const progress = useMemo(() => {
     let done = 0, total = 0;
     for (const [id, n] of nodes) {
@@ -1088,12 +1184,18 @@ function ReplayView({ replay, orgNodes, rootRoleId, onOpenKnowledgeDoc, onRefres
     <div className="flex flex-col flex-1 min-h-0">
       {/* Wave info bar */}
       <div className="px-4 py-2 border-b flex items-center gap-3 shrink-0" style={{ borderColor: 'var(--terminal-border)' }}>
-        <div className="w-3 h-3 rounded-full shrink-0" style={{ background: '#2E7D32' }} />
+        <div className="w-3 h-3 rounded-full shrink-0" style={{
+          background: hasRunning ? '#FBBF24' : '#2E7D32',
+          animation: hasRunning ? 'wave-pulse 2s ease-in-out infinite' : undefined,
+        }} />
         <span className="text-[var(--terminal-text-secondary)] text-xs italic flex-1 min-w-0 truncate">
           &ldquo;{replay.directive}&rdquo;
         </span>
-        <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0" style={{ background: '#2E7D3222', color: '#2E7D32' }}>
-          REPLAY
+        <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0" style={{
+          background: hasRunning ? '#FBBF2422' : '#2E7D3222',
+          color: hasRunning ? '#FBBF24' : '#2E7D32',
+        }}>
+          {hasRunning ? 'LIVE' : 'REPLAY'}
         </span>
         <span className="text-[var(--terminal-text-muted)] text-[10px] shrink-0">{startedAt}</span>
         <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0" style={{ background: '#2E7D3222', color: '#2E7D32' }}>
@@ -1127,9 +1229,10 @@ function ReplayView({ replay, orgNodes, rootRoleId, onOpenKnowledgeDoc, onRefres
             <span className="text-[var(--terminal-text)] font-bold text-xs">{selectedNode.roleId.toUpperCase()}</span>
             <span className="text-[var(--terminal-text-muted)] text-xs">{selectedNode.roleName}</span>
             <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{
-              background: `${selectedColor}22`, color: selectedColor,
+              background: selectedNode.status === 'running' ? '#FBBF2422' : selectedNode.status === 'awaiting_input' ? '#F59E0B22' : `${selectedColor}22`,
+              color: selectedNode.status === 'running' ? '#FBBF24' : selectedNode.status === 'awaiting_input' ? '#F59E0B' : selectedColor,
             }}>
-              {selectedNode.status === 'done' ? 'Complete' : selectedNode.status === 'error' ? 'Error' : selectedNode.status}
+              {selectedNode.status === 'done' ? 'Complete' : selectedNode.status === 'error' ? 'Error' : selectedNode.status === 'running' ? 'Working...' : selectedNode.status === 'awaiting_input' ? 'Awaiting Reply' : selectedNode.status}
             </span>
             <span className="text-[10px] text-[var(--terminal-text-muted)]">{selectedNode.events.length} events</span>
           </div>
@@ -1159,6 +1262,9 @@ function ReplayView({ replay, orgNodes, rootRoleId, onOpenKnowledgeDoc, onRefres
               onOpenKnowledgeDoc={onOpenKnowledgeDoc}
             />
           ))}
+          {selectedNode?.status === 'running' && (
+            <span className="inline-block w-2 h-4 bg-green-400 animate-pulse ml-0.5" />
+          )}
           {!selectedNode && (
             <div className="flex-1 flex items-center justify-center text-[var(--terminal-text-muted)] text-xs h-full">
               Click a node in the org tree to view activity
@@ -1166,8 +1272,8 @@ function ReplayView({ replay, orgNodes, rootRoleId, onOpenKnowledgeDoc, onRefres
           )}
         </div>
 
-        {/* Follow-up to completed role */}
-        {selectedNode?.status === 'done' && selectedNode.sessionId && (
+        {/* Follow-up to completed/done role */}
+        {selectedNode && (selectedNode.status === 'done' || selectedNode.status === 'not-dispatched') && (
           <div className="px-4 py-3 border-t shrink-0" style={{ borderColor: 'var(--terminal-border)', background: '#1565C00A' }}>
             <div className="flex items-center gap-2 mb-2">
               <span className="text-[11px] font-semibold" style={{ color: '#64B5F6' }}>
