@@ -44,6 +44,34 @@ export interface Wave {
   id: string;
   timestamp: string;
   content: string;
+  /** Whether structured JSON replay data is available */
+  hasReplay?: boolean;
+  directive?: string;
+  rolesCount?: number;
+  startedAt?: string;
+}
+
+export interface WaveReplay {
+  id: string;
+  directive: string;
+  startedAt: string;
+  duration: number;
+  roles: WaveReplayRole[];
+}
+
+export interface WaveReplayRole {
+  roleId: string;
+  roleName: string;
+  jobId: string;
+  status: string;
+  events: ActivityEvent[];
+  childJobs: Array<{
+    roleId: string;
+    roleName: string;
+    jobId: string;
+    status: string;
+    events: ActivityEvent[];
+  }>;
 }
 
 export interface Decision {
@@ -345,4 +373,31 @@ export interface GitStatus {
     mergedAt: string;
     roleId: string;
   };
+}
+
+/* ─── Active Session Types ──────────────────── */
+
+export interface PortAllocation {
+  api: number;
+  vite: number;
+  hmr?: number;
+}
+
+export interface ActiveSession {
+  sessionId: string;
+  roleId: string;
+  task: string;
+  ports: PortAllocation;
+  worktreePath?: string;
+  pid?: number;
+  startedAt: string;
+  status: 'active' | 'idle' | 'dead';
+  jobStatus?: string | null;
+  roleName?: string;
+  alive?: boolean | null;
+}
+
+export interface ActiveSessionsResponse {
+  sessions: ActiveSession[];
+  summary: { active: number; totalPorts: number };
 }

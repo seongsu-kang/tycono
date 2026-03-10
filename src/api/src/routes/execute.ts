@@ -308,7 +308,7 @@ function handleReplyToJob(jobId: string, body: Record<string, unknown>, res: Ser
 
   const newJob = jobManager.replyToJob(jobId, message, responderRole);
   if (!newJob) {
-    jsonResponse(res, 400, { error: 'Job not found or not awaiting input' });
+    jsonResponse(res, 400, { error: 'Job not found or not in a replyable state' });
     return;
   }
 
@@ -337,16 +337,50 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
     '',
   ];
 
+  // Structured data for JSON (replay in WaveCenter)
+  interface WaveRoleData {
+    roleId: string;
+    roleName: string;
+    jobId: string;
+    status: string;
+    events: ReturnType<typeof ActivityStream.readAll>;
+    childJobs: Array<{ roleId: string; roleName: string; jobId: string; status: string; events: ReturnType<typeof ActivityStream.readAll> }>;
+  }
+  const rolesData: WaveRoleData[] = [];
+
   for (const jobId of jobIds) {
     const events = ActivityStream.readAll(jobId);
     const startEvent = events.find(e => e.type === 'job:start');
     const roleId = startEvent?.roleId ?? 'unknown';
-    const doneEvent = events.find(e => e.type === 'job:done' || e.type === 'job:awaiting_input');
+    const roleName = (startEvent?.data?.roleName as string) ?? roleId;
+    const doneEvent = events.find(e => e.type === 'job:done' || e.type === 'job:awaiting_input' || e.type === 'job:error');
+    const status = doneEvent?.type === 'job:done' ? 'done' : doneEvent?.type === 'job:error' ? 'error' : doneEvent?.type === 'job:awaiting_input' ? 'awaiting_input' : 'unknown';
 
+    // Collect child jobs (dispatched sub-roles)
+    const childJobs: WaveRoleData['childJobs'] = [];
+    for (const e of events) {
+      if (e.type === 'dispatch:start' && e.data.childJobId) {
+        const childJobId = e.data.childJobId as string;
+        const targetRoleId = (e.data.targetRoleId as string) ?? 'unknown';
+        const childEvents = ActivityStream.readAll(childJobId);
+        const childDone = childEvents.find(ce => ce.type === 'job:done' || ce.type === 'job:error' || ce.type === 'job:awaiting_input');
+        const childStatus = childDone?.type === 'job:done' ? 'done' : childDone?.type === 'job:error' ? 'error' : 'unknown';
+        childJobs.push({
+          roleId: targetRoleId,
+          roleName: (childEvents.find(ce => ce.type === 'job:start')?.data?.roleName as string) ?? targetRoleId,
+          jobId: childJobId,
+          status: childStatus,
+          events: childEvents,
+        });
+      }
+    }
+
+    rolesData.push({ roleId, roleName, jobId, status, events, childJobs });
+
+    // Markdown summary (unchanged)
     lines.push(`## ${roleId.toUpperCase()}`);
     lines.push('');
 
-    // Collect text output
     const textParts: string[] = [];
     for (const e of events) {
       if (e.type === 'text' && typeof e.data.text === 'string') {
@@ -354,7 +388,6 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
       }
     }
     const fullText = textParts.join('');
-    // Take last 1500 chars as summary
     const summary = fullText.length > 1500
       ? '...' + fullText.slice(-1500)
       : fullText;
@@ -381,11 +414,25 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
   if (!fs.existsSync(wavesDir)) {
     fs.mkdirSync(wavesDir, { recursive: true });
   }
-  const filename = `wave-${dateStr}-${Date.now()}.md`;
-  const filePath = path.join(wavesDir, filename);
-  fs.writeFileSync(filePath, lines.join('\n'), 'utf-8');
+  const hhmmss = now.toTimeString().slice(0, 8).replace(/:/g, '');
+  const baseName = `${dateStr.replace(/-/g, '')}-${hhmmss}-wave`;
+  const mdPath = path.join(wavesDir, `${baseName}.md`);
+  const jsonPath = path.join(wavesDir, `${baseName}.json`);
 
-  jsonResponse(res, 200, { ok: true, path: `operations/waves/${filename}` });
+  // Write markdown (human-readable summary)
+  fs.writeFileSync(mdPath, lines.join('\n'), 'utf-8');
+
+  // Write JSON (structured data for replay)
+  const waveJson = {
+    id: baseName,
+    directive,
+    startedAt: now.toISOString(),
+    duration: 0, // Could be computed from events
+    roles: rolesData,
+  };
+  fs.writeFileSync(jsonPath, JSON.stringify(waveJson, null, 2), 'utf-8');
+
+  jsonResponse(res, 200, { ok: true, path: `operations/waves/${baseName}.md` });
 }
 
 /* ═══════════════════════════════════════════════

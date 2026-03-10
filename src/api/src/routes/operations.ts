@@ -48,7 +48,25 @@ operationsRouter.get('/waves', (_req: Request, res: Response, next: NextFunction
       .map(f => {
         const id = path.basename(f, '.md');
         const content = readFile(`operations/waves/${f}`);
-        return { id, timestamp: id, content };
+        // Check if structured JSON exists
+        const jsonFile = `operations/waves/${id}.json`;
+        const hasJson = fileExists(jsonFile);
+        let directive = '';
+        let rolesCount = 0;
+        let startedAt = '';
+        if (hasJson) {
+          try {
+            const jsonData = JSON.parse(readFile(jsonFile));
+            directive = jsonData.directive ?? '';
+            rolesCount = jsonData.roles?.length ?? 0;
+            startedAt = jsonData.startedAt ?? '';
+          } catch { /* ignore parse errors */ }
+        } else {
+          // Extract directive from markdown (> line)
+          const quoteLine = content.split('\n').find(l => l.startsWith('> '));
+          directive = quoteLine?.replace(/^>\s*/, '') ?? '';
+        }
+        return { id, timestamp: id, content, hasReplay: hasJson, directive, rolesCount, startedAt };
       })
       .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
@@ -61,12 +79,25 @@ operationsRouter.get('/waves', (_req: Request, res: Response, next: NextFunction
 operationsRouter.get('/waves/:id', (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const filePath = `operations/waves/${id}.md`;
-    if (!fileExists(filePath)) {
+    const mdPath = `operations/waves/${id}.md`;
+    const jsonPath = `operations/waves/${id}.json`;
+
+    if (!fileExists(mdPath) && !fileExists(jsonPath)) {
       res.status(404).json({ error: `Wave not found: ${id}` });
       return;
     }
-    const content = readFile(filePath);
+
+    const content = fileExists(mdPath) ? readFile(mdPath) : '';
+
+    // Return structured data if JSON exists
+    if (fileExists(jsonPath)) {
+      try {
+        const jsonData = JSON.parse(readFile(jsonPath));
+        res.json({ id, timestamp: id, content, replay: jsonData });
+        return;
+      } catch { /* fall through to md-only response */ }
+    }
+
     res.json({ id, timestamp: id, content });
   } catch (err) {
     next(err);

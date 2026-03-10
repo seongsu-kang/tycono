@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import useWaveTree from '../../hooks/useWaveTree';
 import OrgTreePreview from './OrgTreePreview';
 import OrgTreeLive from './OrgTreeLive';
 import EventRow from '../common/EventRow';
-import type { OrgNode, Wave } from '../../types';
+import type { OrgNode, Wave, WaveReplay } from '../../types';
 import { api } from '../../api/client';
 import { usePanelResize } from './KnowledgePanel';
 
@@ -46,6 +46,8 @@ export default function WaveCenter({
   const [selectedWaveIdx, setSelectedWaveIdx] = useState(0);
   const [directive, setDirective] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [replayData, setReplayData] = useState<WaveReplay | null>(null);
+  const [replayLoading, setReplayLoading] = useState(false);
 
   // OrgTree role selection (for dispatch mode)
   const [activeRoles, setActiveRoles] = useState<Set<string>>(() => {
@@ -117,8 +119,25 @@ export default function WaveCenter({
     }
   };
 
-  const currentActiveWave = activeWaves[selectedWaveIdx] ?? null;
-  const hasOrgData = Boolean(rootRoleId && Object.keys(orgNodes).length > 0);
+  const handleLoadPastWave = useCallback(async (waveId: string) => {
+    setReplayLoading(true);
+    setReplayData(null);
+    setSelectedWaveIdx(-1); // deselect active waves
+    setViewMode('monitor');
+    try {
+      const detail = await api.getWaveDetail(waveId);
+      if (detail.replay) {
+        setReplayData(detail.replay);
+      }
+    } catch (err) {
+      console.error('Failed to load wave replay:', err);
+    } finally {
+      setReplayLoading(false);
+    }
+  }, []);
+
+  const currentActiveWave = selectedWaveIdx >= 0 ? (activeWaves[selectedWaveIdx] ?? null) : null;
+  const hasOrgData = !!rootRoleId && Object.keys(orgNodes).length > 0;
 
   return (
     <>
@@ -216,10 +235,17 @@ export default function WaveCenter({
                 onSave={onSave}
                 onOpenKnowledgeDoc={onOpenKnowledgeDoc}
               />
+            ) : replayData ? (
+              <ReplayView replay={replayData} onOpenKnowledgeDoc={onOpenKnowledgeDoc} />
+            ) : replayLoading ? (
+              <div className="flex-1 flex items-center justify-center text-[var(--terminal-text-muted)] text-sm">
+                Loading wave data...
+              </div>
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center text-[var(--terminal-text-muted)] gap-3 p-8">
                 <span className="text-3xl">{'🌊'}</span>
                 <div className="text-sm">No active waves</div>
+                <div className="text-[10px]">Select a past wave from the list, or start a new one</div>
                 <button
                   onClick={() => setViewMode('dispatch')}
                   className="px-4 py-2 text-xs font-semibold rounded-lg cursor-pointer"
@@ -243,7 +269,7 @@ export default function WaveCenter({
                   {activeWaves.map((w, i) => (
                     <button
                       key={w.id}
-                      onClick={() => { setViewMode('monitor'); setSelectedWaveIdx(i); }}
+                      onClick={() => { setViewMode('monitor'); setSelectedWaveIdx(i); setReplayData(null); }}
                       className="text-left p-2 rounded-lg cursor-pointer transition-colors"
                       style={{
                         background: viewMode === 'monitor' && selectedWaveIdx === i ? 'var(--terminal-bg)' : 'transparent',
@@ -277,7 +303,12 @@ export default function WaveCenter({
               )}
               <div className="flex flex-col gap-1.5">
                 {pastWaves.map((w) => (
-                  <PastWaveCard key={w.id} wave={w} />
+                  <PastWaveCard
+                    key={w.id}
+                    wave={w}
+                    active={replayData?.id === w.id}
+                    onLoad={w.hasReplay ? () => handleLoadPastWave(w.id) : undefined}
+                  />
                 ))}
               </div>
             </div>
@@ -737,33 +768,151 @@ function MonitorView({
   );
 }
 
+/* ─── Replay View (read-only past wave) ─── */
+
+function ReplayView({ replay, onOpenKnowledgeDoc }: { replay: WaveReplay; onOpenKnowledgeDoc?: (docId: string) => void }) {
+  const [selectedRoleId, setSelectedRoleId] = useState<string | null>(replay.roles[0]?.roleId ?? null);
+  const [collapsedThinking, setCollapsedThinking] = useState<Set<number>>(new Set());
+  const outputRef = useRef<HTMLDivElement>(null);
+
+  // Build a flat map of all roles (including children) for display
+  const allRoles = useMemo(() => {
+    const map = new Map<string, { roleId: string; roleName: string; status: string; events: typeof replay.roles[0]['events'] }>();
+    for (const r of replay.roles) {
+      map.set(r.roleId, { roleId: r.roleId, roleName: r.roleName, status: r.status, events: r.events });
+      for (const c of r.childJobs) {
+        map.set(c.roleId, { roleId: c.roleId, roleName: c.roleName, status: c.status, events: c.events });
+      }
+    }
+    return map;
+  }, [replay]);
+
+  const selectedRole = selectedRoleId ? allRoles.get(selectedRoleId) : null;
+  const selectedColor = selectedRoleId ? (ROLE_COLORS[selectedRoleId] ?? '#888') : '#888';
+
+  // Scroll to top when switching roles
+  useEffect(() => {
+    if (outputRef.current) outputRef.current.scrollTop = 0;
+  }, [selectedRoleId]);
+
+  const toggleThinking = (seq: number) => {
+    setCollapsedThinking(prev => {
+      const next = new Set(prev);
+      if (next.has(seq)) next.delete(seq);
+      else next.add(seq);
+      return next;
+    });
+  };
+
+  const startedAt = replay.startedAt ? new Date(replay.startedAt).toLocaleString() : '';
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      {/* Wave info bar */}
+      <div className="px-4 py-2 border-b flex items-center gap-3 shrink-0" style={{ borderColor: 'var(--terminal-border)' }}>
+        <div className="w-3 h-3 rounded-full shrink-0" style={{ background: '#2E7D32' }} />
+        <span className="text-[var(--terminal-text-secondary)] text-xs italic flex-1 min-w-0 truncate">
+          &ldquo;{replay.directive}&rdquo;
+        </span>
+        <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0" style={{ background: '#2E7D3222', color: '#2E7D32' }}>
+          REPLAY
+        </span>
+        <span className="text-[var(--terminal-text-muted)] text-[10px] shrink-0">{startedAt}</span>
+      </div>
+
+      {/* Role selector (horizontal pills) */}
+      <div className="px-4 py-2 border-b shrink-0 flex gap-2 flex-wrap" style={{ borderColor: 'var(--terminal-border)' }}>
+        {Array.from(allRoles.values()).map(r => {
+          const color = ROLE_COLORS[r.roleId] ?? '#888';
+          const isSelected = r.roleId === selectedRoleId;
+          return (
+            <button
+              key={r.roleId}
+              onClick={() => setSelectedRoleId(r.roleId)}
+              className="px-2.5 py-1 text-[10px] font-bold rounded-lg cursor-pointer transition-colors uppercase"
+              style={{
+                background: isSelected ? `${color}22` : 'transparent',
+                color: isSelected ? color : 'var(--terminal-text-muted)',
+                border: isSelected ? `1.5px solid ${color}` : '1.5px solid var(--terminal-border)',
+              }}
+            >
+              {r.roleId}
+              <span className="ml-1 text-[8px] font-normal opacity-70">
+                {r.status === 'done' ? '✓' : r.status === 'error' ? '✗' : '?'}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Selected role header */}
+      {selectedRole && (
+        <div className="px-4 py-2 border-b shrink-0 flex items-center gap-2" style={{ borderColor: 'var(--terminal-border)' }}>
+          <div className="w-2 h-2 rounded-full" style={{ background: selectedColor }} />
+          <span className="text-[var(--terminal-text)] font-bold text-xs">{selectedRole.roleId.toUpperCase()}</span>
+          <span className="text-[var(--terminal-text-muted)] text-xs">{selectedRole.roleName}</span>
+          <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{
+            background: `${selectedColor}22`, color: selectedColor,
+          }}>
+            {selectedRole.status === 'done' ? 'Complete' : selectedRole.status === 'error' ? 'Error' : selectedRole.status}
+          </span>
+          <span className="text-[10px] text-[var(--terminal-text-muted)]">{selectedRole.events.length} events</span>
+        </div>
+      )}
+
+      {/* Events */}
+      <div ref={outputRef} className="flex-1 min-h-0 overflow-y-auto p-4 space-y-1 text-xs font-mono select-text">
+        {selectedRole && selectedRole.events.length === 0 && (
+          <div className="text-[var(--terminal-text-muted)]">No events recorded for this role.</div>
+        )}
+        {selectedRole?.events.map((event) => (
+          <EventRow
+            key={event.seq}
+            event={event}
+            isThinkingCollapsed={collapsedThinking.has(event.seq)}
+            onToggleThinking={() => toggleThinking(event.seq)}
+            onOpenKnowledgeDoc={onOpenKnowledgeDoc}
+          />
+        ))}
+        {!selectedRole && (
+          <div className="flex items-center justify-center text-[var(--terminal-text-muted)] text-xs h-full">
+            Select a role to view its activity
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─── Past Wave Card ─── */
 
-function PastWaveCard({ wave }: { wave: Wave }) {
-  const [expanded, setExpanded] = useState(false);
-  const preview = wave.content.replace(/^#{1,6}\s+/gm, '').replace(/\n+/g, ' ').slice(0, 80);
-  const date = wave.timestamp ? new Date(wave.timestamp).toLocaleDateString() : wave.id;
+function PastWaveCard({ wave, active, onLoad }: { wave: Wave; active?: boolean; onLoad?: () => void }) {
+  const preview = (wave.directive ?? wave.content.replace(/^#{1,6}\s+/gm, '').replace(/\n+/g, ' ')).slice(0, 80);
+  // Parse date from wave id like "20260310-130400-wave"
+  const m = wave.id.match(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})/);
+  const date = m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}` : wave.id;
 
   return (
     <div
       className="rounded-lg cursor-pointer transition-colors hover:bg-[var(--terminal-bg)]"
-      style={{ border: '1px solid var(--terminal-border)' }}
-      onClick={() => setExpanded(!expanded)}
+      style={{
+        border: active ? '1px solid var(--accent)' : '1px solid var(--terminal-border)',
+        background: active ? 'var(--terminal-bg)' : undefined,
+      }}
+      onClick={onLoad}
     >
       <div className="p-2">
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px]">{'📋'}</span>
+          <span className="text-[10px]">{onLoad ? '▶' : '📋'}</span>
           <span className="text-[10px] text-[var(--terminal-text-muted)]">{date}</span>
+          {wave.rolesCount ? (
+            <span className="text-[9px] text-[var(--terminal-text-muted)] ml-auto">{wave.rolesCount}R</span>
+          ) : null}
         </div>
         <div className="text-[10px] text-[var(--terminal-text-secondary)] mt-0.5 line-clamp-2 leading-relaxed">
           {preview}
         </div>
       </div>
-      {expanded && (
-        <div className="px-2 pb-2 text-[10px] text-[var(--terminal-text)] leading-relaxed whitespace-pre-wrap" style={{ borderTop: '1px solid var(--terminal-border)' }}>
-          {wave.content}
-        </div>
-      )}
     </div>
   );
 }
