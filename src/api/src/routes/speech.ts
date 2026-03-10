@@ -18,6 +18,7 @@ import {
 } from '../engine/llm-adapter.js';
 import { TokenLedger } from '../services/token-ledger.js';
 import { readConfig } from '../services/company-config.js';
+import { readPreferences } from '../services/preferences.js';
 import { calcLevel } from '../utils/role-level.js';
 
 export const speechRouter = Router();
@@ -845,6 +846,12 @@ speechRouter.post('/chat', async (req: Request, res: Response, next: NextFunctio
     // Role-specific communication style (SOUL-006: persona-priority)
     const roleStyle = getRoleChatStyle(roleId, node.level, node.persona);
 
+    // Language preference
+    const prefs = readPreferences(COMPANY_ROOT);
+    const chatLang = prefs.language && prefs.language !== 'auto' ? prefs.language : 'en';
+    const chatLangNames: Record<string, string> = { en: 'English', ko: 'Korean (한국어)', ja: 'Japanese (日本語)' };
+    const chatLangName = chatLangNames[chatLang] ?? chatLang;
+
     const systemPrompt = `You are ${node.name}, ${node.level}. ${persona.slice(0, 800)}
 ${workCtx}${levelCtx}
 Channel: #${channelId}${topicCtx} | Members: ${memberList}${relContext}
@@ -864,8 +871,9 @@ RULES:
 3. NEVER invent technologies or projects not in AKB.
 4. Nothing new to add? respond exactly: [SILENT]
 5. Do NOT repeat others' points. New angle or silent.
-6. No quotes around response. English only.
-7. NEVER start with "Honestly" or "Yeah".`;
+6. No quotes around response.
+7. NEVER start with "Honestly" or "Yeah".
+8. You MUST respond in ${chatLangName}. All messages must be in ${chatLangName}.`;
 
     // ── Chat debug logging ──
     const chatDebug = process.env.CHAT_DEBUG === '1';
