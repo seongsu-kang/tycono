@@ -11,7 +11,8 @@ interface UseActivityStreamResult {
   reconnect: () => void;
 }
 
-export default function useActivityStream(jobId: string | null): UseActivityStreamResult {
+/** Session-only activity stream hook. Connects to /api/sessions/:id/stream */
+export default function useActivityStream(sessionId: string | null): UseActivityStreamResult {
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [status, setStatus] = useState<StreamStatus>('idle');
   const [textOutput, setTextOutput] = useState('');
@@ -21,7 +22,7 @@ export default function useActivityStream(jobId: string | null): UseActivityStre
   const reconnectRef = useRef(0);
 
   const connect = useCallback(() => {
-    if (!jobId) return;
+    if (!sessionId) return;
 
     controllerRef.current?.abort();
     const controller = new AbortController();
@@ -30,7 +31,7 @@ export default function useActivityStream(jobId: string | null): UseActivityStre
     setStatus('connecting');
 
     const fromSeq = lastSeqRef.current + 1;
-    const url = `/api/jobs/${jobId}/stream?from=${fromSeq}`;
+    const url = `/api/sessions/${sessionId}/stream?from=${fromSeq}`;
 
     fetch(url, { signal: controller.signal })
       .then(async (response) => {
@@ -63,28 +64,23 @@ export default function useActivityStream(jobId: string | null): UseActivityStre
                 if (currentEvent === 'activity') {
                   const event = data as ActivityEvent;
 
-                  // Track last seq for reconnection
                   if (event.seq > lastSeqRef.current) {
                     lastSeqRef.current = event.seq;
                   }
 
                   setEvents((prev) => {
-                    // Dedup by seq
                     if (prev.some(e => e.seq === event.seq)) return prev;
                     return [...prev, event];
                   });
 
-                  // Accumulate text output
                   if (event.type === 'text') {
                     setTextOutput((prev) => prev + (event.data.text as string ?? ''));
                   }
 
-                  // Track child job IDs from dispatch events
                   if (event.type === 'dispatch:start' && event.data.childJobId) {
                     setChildJobIds((prev) => [...prev, event.data.childJobId as string]);
                   }
 
-                  // Update status on job completion
                   if (event.type === 'job:done') {
                     setStatus('done');
                   } else if (event.type === 'job:error') {
@@ -111,22 +107,20 @@ export default function useActivityStream(jobId: string | null): UseActivityStre
         if (err.name === 'AbortError') return;
         setStatus('error');
 
-        // Auto-reconnect (up to 3 times)
         if (reconnectRef.current < 3) {
           reconnectRef.current++;
           setTimeout(connect, 1000 * reconnectRef.current);
         }
       });
-  }, [jobId]);
+  }, [sessionId]);
 
   const reconnect = useCallback(() => {
     reconnectRef.current = 0;
     connect();
   }, [connect]);
 
-  // Connect when jobId changes
   useEffect(() => {
-    if (!jobId) {
+    if (!sessionId) {
       setEvents([]);
       setStatus('idle');
       setTextOutput('');
@@ -135,7 +129,6 @@ export default function useActivityStream(jobId: string | null): UseActivityStre
       return;
     }
 
-    // Reset state for new job
     setEvents([]);
     setTextOutput('');
     setChildJobIds([]);
@@ -147,7 +140,7 @@ export default function useActivityStream(jobId: string | null): UseActivityStre
     return () => {
       controllerRef.current?.abort();
     };
-  }, [jobId, connect]);
+  }, [sessionId, connect]);
 
   return { events, status, textOutput, childJobIds, reconnect };
 }

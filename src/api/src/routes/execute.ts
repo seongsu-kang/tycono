@@ -7,6 +7,7 @@ import { buildOrgTree, canDispatchTo, getSubordinates } from '../engine/org-tree
 import { createRunner, type RunnerResult } from '../engine/runners/index.js';
 import {
   getSession,
+  createSession,
   addMessage,
   updateMessage,
   type Message,
@@ -14,6 +15,7 @@ import {
 } from '../services/session-store.js';
 import { jobManager, type Job } from '../services/job-manager.js';
 import { ActivityStream, type ActivityEvent, type ActivitySubscriber } from '../services/activity-stream.js';
+import { earnCoinsInternal } from './coins.js';
 
 /* ─── Runner — lazy, re-created when engine changes ── */
 
@@ -67,58 +69,27 @@ export function handleExecRequest(req: IncomingMessage, res: ServerResponse): vo
    ═══════════════════════════════════════════════ */
 
 function handleJobsRequest(url: string, method: string, req: IncomingMessage, res: ServerResponse): void {
-  // Strip query string for matching
-  const [path, queryString] = url.split('?');
+  const [path] = url.split('?');
 
-  // POST /api/jobs — start a new job
+  // POST /api/jobs — start a new job (creates session + job)
   if (method === 'POST' && path === '/api/jobs') {
     readBody(req).then((body) => handleStartJob(body, res));
     return;
   }
 
-  // GET /api/jobs — list jobs
-  if (method === 'GET' && path === '/api/jobs') {
-    const params = new URLSearchParams(queryString ?? '');
-    handleListJobs(params, res);
-    return;
-  }
-
-  // Match /api/jobs/:id/stream
-  const streamMatch = path.match(/^\/api\/jobs\/([^/]+)\/stream$/);
-  if (streamMatch && method === 'GET') {
-    const params = new URLSearchParams(queryString ?? '');
-    const fromSeq = parseInt(params.get('from') ?? '0', 10);
-    handleJobStream(streamMatch[1], fromSeq, req, res);
-    return;
-  }
-
-  // Match /api/jobs/:id/reply
-  const replyMatch = path.match(/^\/api\/jobs\/([^/]+)\/reply$/);
-  if (replyMatch && method === 'POST') {
-    readBody(req).then((body) => handleReplyToJob(replyMatch[1], body, res));
-    return;
-  }
-
-  // Match /api/jobs/:id/history
+  // GET /api/jobs/:id/history — internal only (used by engine Python sub-processes)
   const historyMatch = path.match(/^\/api\/jobs\/([^/]+)\/history$/);
-  if (historyMatch && method === 'GET') {
-    handleJobHistory(historyMatch[1], res);
+  if (method === 'GET' && historyMatch) {
+    const jobId = historyMatch[1];
+    const events = ActivityStream.readAll(jobId);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ events }));
     return;
   }
 
-  // Match /api/jobs/:id
-  const idMatch = path.match(/^\/api\/jobs\/([^/]+)$/);
-  if (idMatch && method === 'GET') {
-    handleGetJob(idMatch[1], res);
-    return;
-  }
-  if (idMatch && method === 'DELETE') {
-    handleAbortJob(idMatch[1], res);
-    return;
-  }
-
-  res.writeHead(404);
-  res.end(JSON.stringify({ error: 'Not found' }));
+  // All other /api/jobs/* endpoints removed — use /api/sessions/* instead
+  res.writeHead(410);  // Gone
+  res.end(JSON.stringify({ error: 'Job monitoring endpoints removed. Use /api/sessions/:id/stream, /api/sessions/:id/abort, /api/sessions/:id/reply instead.' }));
 }
 
 /* ─── POST /api/jobs ─────────────────────── */
@@ -159,8 +130,31 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
     // Include both the C-level roles AND any sub-roles from targetRoles
     const fullTargetScope = targetRoles && targetRoles.length > 0 ? targetRoles : undefined;
 
+    // D-014: Create Wave meta + Sessions for each target role
+    const waveId = `wave-${Date.now()}`;
     const jobIds: string[] = [];
+    const sessionIds: string[] = [];
+
     for (const cRole of cLevelRoles) {
+      // Create a Session for this role (D-014: Wave = Session batch creation)
+      const session = createSession(cRole, {
+        mode: 'do',
+        source: 'wave',
+        waveId,
+      });
+      sessionIds.push(session.id);
+
+      // Add CEO directive as the first message in the session
+      const ceoMsg: Message = {
+        id: `msg-${Date.now()}-ceo-${cRole}`,
+        from: 'ceo',
+        content: directive,
+        type: 'directive',
+        status: 'done',
+        timestamp: new Date().toISOString(),
+      };
+      addMessage(session.id, ceoMsg);
+
       const job = jobManager.startJob({
         type: 'wave',
         roleId: cRole,
@@ -168,11 +162,24 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
         sourceRole: 'ceo',
         parentJobId,
         targetRoles: fullTargetScope,
+        sessionId: session.id,       // D-014: link job to session
       });
       jobIds.push(job.id);
+
+      // Add a role message (will be updated as execution progresses)
+      const roleMsg: Message = {
+        id: `msg-${Date.now() + 1}-role-${cRole}`,
+        from: 'role',
+        content: '',
+        type: 'conversation',
+        status: 'streaming',
+        timestamp: new Date().toISOString(),
+        jobId: job.id,
+      };
+      addMessage(session.id, roleMsg, true);
     }
 
-    jsonResponse(res, 200, { jobIds });
+    jsonResponse(res, 200, { jobIds, waveId, sessionIds });
     return;
   }
 
@@ -188,131 +195,53 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
     return;
   }
 
+  // D-014: Create/find session for CEO assigns (not for dispatch child jobs)
+  let sessionId: string | undefined;
+  if (sourceRole === 'ceo' && !parentJobId) {
+    const session = createSession(roleId, {
+      mode: readOnly ? 'talk' : 'do',
+      source: 'dispatch',
+    });
+    sessionId = session.id;
+
+    // Add CEO message
+    const ceoMsg: Message = {
+      id: `msg-${Date.now()}-ceo`,
+      from: 'ceo',
+      content: task,
+      type: readOnly ? 'conversation' : 'directive',
+      status: 'done',
+      timestamp: new Date().toISOString(),
+    };
+    addMessage(session.id, ceoMsg);
+  }
+
   const job = jobManager.startJob({
-    type: 'assign',
+    type: readOnly ? 'consult' : 'assign',
     roleId,
     task,
     sourceRole,
     readOnly,
     parentJobId,
+    sessionId,
   });
 
-  jsonResponse(res, 200, { jobId: job.id });
-}
-
-/* ─── GET /api/jobs ──────────────────────── */
-
-function handleListJobs(params: URLSearchParams, res: ServerResponse): void {
-  const status = params.get('status') as 'running' | 'done' | 'error' | null;
-  const roleId = params.get('roleId') ?? undefined;
-
-  const jobs = jobManager.listJobs({
-    status: status ?? undefined,
-    roleId,
-  });
-
-  jsonResponse(res, 200, { jobs });
-}
-
-/* ─── GET /api/jobs/:id ──────────────────── */
-
-function handleGetJob(jobId: string, res: ServerResponse): void {
-  const info = jobManager.getJobInfo(jobId);
-  if (!info) {
-    jsonResponse(res, 404, { error: 'Job not found' });
-    return;
-  }
-  jsonResponse(res, 200, info);
-}
-
-/* ─── GET /api/jobs/:id/stream ───────────── */
-
-function handleJobStream(jobId: string, fromSeq: number, req: IncomingMessage, res: ServerResponse): void {
-  const job = jobManager.getJob(jobId);
-
-  // Start SSE
-  startSSE(res);
-
-  // Replay historical events from file
-  const pastEvents = ActivityStream.readFrom(jobId, fromSeq);
-  for (const event of pastEvents) {
-    sendSSE(res, 'activity', event);
+  // D-014: Add role message linked to job
+  if (sessionId) {
+    const roleMsg: Message = {
+      id: `msg-${Date.now() + 1}-role`,
+      from: 'role',
+      content: '',
+      type: 'conversation',
+      status: 'streaming',
+      timestamp: new Date().toISOString(),
+      jobId: job.id,
+      readOnly: readOnly || undefined,
+    };
+    addMessage(sessionId, roleMsg, true);
   }
 
-  // If the job is finished (not running/awaiting), send end and close
-  if (!job || (job.status !== 'running' && job.status !== 'awaiting_input')) {
-    sendSSE(res, 'stream:end', { reason: job ? job.status : 'not-found' });
-    res.end();
-    return;
-  }
-
-  // Subscribe for live events
-  const subscriber = (event: ActivityEvent) => {
-    if (event.seq >= fromSeq) {
-      sendSSE(res, 'activity', event);
-    }
-    // Auto-close SSE when job ends or CEO replies (new stream takes over)
-    if (event.type === 'job:done' || event.type === 'job:error') {
-      sendSSE(res, 'stream:end', { reason: event.type === 'job:done' ? 'done' : 'error' });
-      res.end();
-      job.stream.unsubscribe(subscriber);
-    } else if (event.type === 'job:reply') {
-      // CEO replied → close this stream; frontend will connect to continuation job
-      sendSSE(res, 'stream:end', { reason: 'replied' });
-      res.end();
-      job.stream.unsubscribe(subscriber);
-    }
-    // awaiting_input keeps SSE open (sends event but doesn't close)
-  };
-
-  job.stream.subscribe(subscriber);
-
-  // Client disconnect → just unsubscribe (job keeps running)
-  req.on('close', () => {
-    job.stream.unsubscribe(subscriber);
-  });
-}
-
-/* ─── GET /api/jobs/:id/history ──────────── */
-
-function handleJobHistory(jobId: string, res: ServerResponse): void {
-  if (!ActivityStream.exists(jobId)) {
-    jsonResponse(res, 404, { error: 'Job history not found' });
-    return;
-  }
-  const events = ActivityStream.readAll(jobId);
-  jsonResponse(res, 200, { events });
-}
-
-/* ─── DELETE /api/jobs/:id ───────────────── */
-
-function handleAbortJob(jobId: string, res: ServerResponse): void {
-  const success = jobManager.abortJob(jobId);
-  if (!success) {
-    jsonResponse(res, 404, { error: 'Job not found or not running' });
-    return;
-  }
-  jsonResponse(res, 200, { ok: true });
-}
-
-/* ─── POST /api/jobs/:id/reply ──────────── */
-
-function handleReplyToJob(jobId: string, body: Record<string, unknown>, res: ServerResponse): void {
-  const message = body.message as string;
-  if (!message) {
-    jsonResponse(res, 400, { error: 'message is required' });
-    return;
-  }
-
-  const responderRole = body.responderRole as string | undefined;
-
-  const newJob = jobManager.replyToJob(jobId, message, responderRole);
-  if (!newJob) {
-    jsonResponse(res, 400, { error: 'Job not found or not awaiting input' });
-    return;
-  }
-
-  jsonResponse(res, 200, { jobId: newJob.id, roleId: newJob.roleId });
+  jsonResponse(res, 200, { jobId: job.id, ...(sessionId && { sessionId }) });
 }
 
 /* ─── POST /api/waves/save ──────────────── */
@@ -320,60 +249,56 @@ function handleReplyToJob(jobId: string, body: Record<string, unknown>, res: Ser
 function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): void {
   const directive = body.directive as string;
   const jobIds = body.jobIds as string[];
+  const sessionIds = body.sessionIds as string[] | undefined;
+  const waveId = body.waveId as string | undefined;
 
   if (!directive || !jobIds || jobIds.length === 0) {
     jsonResponse(res, 400, { error: 'directive and jobIds are required' });
     return;
   }
 
-  // Build wave summary from job streams
   const now = new Date();
   const dateStr = now.toISOString().slice(0, 10);
-  const timeStr = now.toTimeString().slice(0, 5);
-  const lines: string[] = [
-    `# Wave — ${dateStr} ${timeStr}`,
-    '',
-    `> ${directive}`,
-    '',
-  ];
+
+  // Structured data for JSON replay
+  interface WaveRoleData {
+    roleId: string;
+    roleName: string;
+    jobId: string;
+    status: string;
+    events: ReturnType<typeof ActivityStream.readAll>;
+    childJobs: Array<{ roleId: string; roleName: string; jobId: string; status: string; events: ReturnType<typeof ActivityStream.readAll> }>;
+  }
+  const rolesData: WaveRoleData[] = [];
 
   for (const jobId of jobIds) {
     const events = ActivityStream.readAll(jobId);
     const startEvent = events.find(e => e.type === 'job:start');
     const roleId = startEvent?.roleId ?? 'unknown';
-    const doneEvent = events.find(e => e.type === 'job:done' || e.type === 'job:awaiting_input');
+    const roleName = (startEvent?.data?.roleName as string) ?? roleId;
+    const doneEvent = events.find(e => e.type === 'job:done' || e.type === 'job:awaiting_input' || e.type === 'job:error');
+    const status = doneEvent?.type === 'job:done' ? 'done' : doneEvent?.type === 'job:error' ? 'error' : doneEvent?.type === 'job:awaiting_input' ? 'awaiting_input' : 'unknown';
 
-    lines.push(`## ${roleId.toUpperCase()}`);
-    lines.push('');
-
-    // Collect text output
-    const textParts: string[] = [];
+    // Collect child jobs (dispatched sub-roles)
+    const childJobs: WaveRoleData['childJobs'] = [];
     for (const e of events) {
-      if (e.type === 'text' && typeof e.data.text === 'string') {
-        textParts.push(e.data.text);
+      if (e.type === 'dispatch:start' && e.data.childJobId) {
+        const childJobId = e.data.childJobId as string;
+        const targetRoleId = (e.data.targetRoleId as string) ?? 'unknown';
+        const childEvents = ActivityStream.readAll(childJobId);
+        const childDone = childEvents.find(ce => ce.type === 'job:done' || ce.type === 'job:error' || ce.type === 'job:awaiting_input');
+        const childStatus = childDone?.type === 'job:done' ? 'done' : childDone?.type === 'job:error' ? 'error' : 'unknown';
+        childJobs.push({
+          roleId: targetRoleId,
+          roleName: (childEvents.find(ce => ce.type === 'job:start')?.data?.roleName as string) ?? targetRoleId,
+          jobId: childJobId,
+          status: childStatus,
+          events: childEvents,
+        });
       }
     }
-    const fullText = textParts.join('');
-    // Take last 1500 chars as summary
-    const summary = fullText.length > 1500
-      ? '...' + fullText.slice(-1500)
-      : fullText;
 
-    if (summary.trim()) {
-      lines.push(summary.trim());
-    } else {
-      lines.push('(No text output)');
-    }
-
-    if (doneEvent) {
-      const turns = doneEvent.data.turns as number ?? 0;
-      const tools = doneEvent.data.toolCalls as number ?? 0;
-      lines.push('');
-      lines.push(`*${turns} turns, ${tools} tool calls*`);
-    }
-    lines.push('');
-    lines.push('---');
-    lines.push('');
+    rolesData.push({ roleId, roleName, jobId, status, events, childJobs });
   }
 
   // Write to operations/waves/
@@ -381,11 +306,45 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
   if (!fs.existsSync(wavesDir)) {
     fs.mkdirSync(wavesDir, { recursive: true });
   }
-  const filename = `wave-${dateStr}-${Date.now()}.md`;
-  const filePath = path.join(wavesDir, filename);
-  fs.writeFileSync(filePath, lines.join('\n'), 'utf-8');
 
-  jsonResponse(res, 200, { ok: true, path: `operations/waves/${filename}` });
+  // Dedup: if waveId matches an existing file, overwrite instead of creating new
+  let baseName: string;
+  if (waveId) {
+    const existing = fs.readdirSync(wavesDir).find(f => {
+      if (!f.endsWith('.json')) return false;
+      try {
+        const data = JSON.parse(fs.readFileSync(path.join(wavesDir, f), 'utf-8'));
+        return data.waveId === waveId || data.id === waveId;
+      } catch { return false; }
+    });
+    baseName = existing ? existing.replace('.json', '') : waveId;
+  } else {
+    const hhmmss = now.toTimeString().slice(0, 8).replace(/:/g, '');
+    baseName = `${dateStr.replace(/-/g, '')}-${hhmmss}-wave`;
+  }
+  const jsonPath = path.join(wavesDir, `${baseName}.json`);
+
+  const waveJson = {
+    id: baseName,
+    directive,
+    startedAt: now.toISOString(),
+    duration: 0, // Could be computed from events
+    roles: rolesData,
+    // D-014: Session references for follow-up
+    ...(waveId && { waveId }),
+    ...(sessionIds && sessionIds.length > 0 && { sessionIds }),
+  };
+  fs.writeFileSync(jsonPath, JSON.stringify(waveJson, null, 2), 'utf-8');
+
+  // EC-012: Wave completion bonus (participating roles × 500 coins)
+  const roleCount = rolesData.length;
+  if (roleCount > 0) {
+    try {
+      earnCoinsInternal(roleCount * 500, `Wave done: ${roleCount} roles`, `wave:${baseName}`);
+    } catch { /* non-critical */ }
+  }
+
+  jsonResponse(res, 200, { ok: true, path: `operations/waves/${baseName}.json` });
 }
 
 /* ═══════════════════════════════════════════════
@@ -932,7 +891,12 @@ function handleSessionMessage(
     .then((result: RunnerResult) => {
       cleanupSSELifecycle();
       cleanupChildSubscriptions();
-      updateMessage(sessionId, roleMsg.id, { content: roleMsg.content, status: 'done' });
+      updateMessage(sessionId, roleMsg.id, {
+        content: roleMsg.content,
+        status: 'done',
+        turns: result.turns,
+        tokens: result.totalTokens,
+      });
       roleStatus.set(roleId, 'idle');
       completeActivity(roleId);
       for (const d of result.dispatches) {

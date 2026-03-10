@@ -5,7 +5,7 @@ import type { StreamStatus } from './useActivityStream';
 export type WaveNodeStatus = 'waiting' | 'running' | 'done' | 'error' | 'not-dispatched' | 'awaiting_input';
 
 export interface WaveNode {
-  jobId: string | null;
+  sessionId: string;
   roleId: string;
   roleName: string;
   children: string[];
@@ -20,7 +20,7 @@ interface UseWaveTreeResult {
   selectNode: (roleId: string) => void;
   progress: { done: number; total: number; running: number; awaitingInput: number };
   allDone: boolean;
-  connectStream: (jobId: string, roleId: string) => void;
+  connectStream: (sessionId: string, roleId: string) => void;
 }
 
 interface StreamState {
@@ -29,7 +29,7 @@ interface StreamState {
 }
 
 export default function useWaveTree(
-  rootJobs: Array<{ jobId: string; roleId: string; roleName?: string }>,
+  rootJobs: Array<{ sessionId: string; roleId: string; roleName?: string }>,
   orgNodes: Record<string, OrgNode>,
   rootRoleId: string,
 ): UseWaveTreeResult {
@@ -45,12 +45,11 @@ export default function useWaveTree(
 
     const initial = new Map<string, WaveNode>();
 
-    // Add all org nodes under CEO
     const addNode = (roleId: string) => {
       const org = orgNodes[roleId];
       if (!org) return;
       initial.set(roleId, {
-        jobId: null,
+        sessionId: '',
         roleId,
         roleName: org.name,
         children: org.children,
@@ -61,12 +60,10 @@ export default function useWaveTree(
       org.children.forEach(addNode);
     };
 
-    // Start from CEO's direct children (c-level)
     const root = orgNodes[rootRoleId];
     if (root) {
-      // Add CEO node itself (dimmed)
       initial.set(rootRoleId, {
-        jobId: null,
+        sessionId: '',
         roleId: rootRoleId,
         roleName: 'CEO',
         children: root.children,
@@ -81,7 +78,7 @@ export default function useWaveTree(
     for (const rj of rootJobs) {
       const node = initial.get(rj.roleId);
       if (node) {
-        node.jobId = rj.jobId;
+        node.sessionId = rj.sessionId;
         node.status = 'running';
         node.streamStatus = 'connecting';
       }
@@ -93,21 +90,19 @@ export default function useWaveTree(
     }
   }, [rootJobs, orgNodes, rootRoleId]);
 
-  // Connect SSE for a job
-  const connectStream = useCallback((jobId: string, roleId: string) => {
-    console.log(`[WaveTree] connectStream → role=${roleId} job=${jobId}`);
-    // Cleanup existing stream for this jobId
-    const existing = streamsRef.current.get(jobId);
+  // Connect SSE for a session
+  const connectStream = useCallback((sessionId: string, roleId: string) => {
+    console.log(`[WaveTree] connectStream → role=${roleId} session=${sessionId}`);
+    const existing = streamsRef.current.get(sessionId);
     if (existing) {
       existing.controller.abort();
     }
 
     const controller = new AbortController();
     const state: StreamState = { controller, lastSeq: -1 };
-    streamsRef.current.set(jobId, state);
+    streamsRef.current.set(sessionId, state);
 
-    const fromSeq = 0;
-    const url = `/api/jobs/${jobId}/stream?from=${fromSeq}`;
+    const url = `/api/sessions/${sessionId}/stream?from=0`;
 
     fetch(url, { signal: controller.signal })
       .then(async (response) => {
@@ -158,29 +153,29 @@ export default function useWaveTree(
                     const next = new Map(prev);
                     const node = next.get(roleId);
                     if (!node) return prev;
-                    // Dedup
                     if (node.events.some(e => e.seq === event.seq)) return prev;
 
                     const updated = { ...node, events: [...node.events, event] };
 
-                    // Handle dispatch:start — connect child SSE
+                    // Handle dispatch:start — child dispatches create their own sessions
+                    // The session-based stream will emit dispatch events with session info
                     if (event.type === 'dispatch:start' && event.data.childJobId) {
-                      const childJobId = event.data.childJobId as string;
                       const targetRoleId = (event.data.targetRoleId as string) ?? (event.data.roleId as string);
+                      // Child dispatches: use the child's sessionId if available, or jobId as fallback lookup
+                      const childSessionId = event.data.childSessionId as string | undefined;
 
-                      console.log(`[WaveTree] dispatch:start → target=${targetRoleId} childJob=${childJobId} from=${roleId}/${jobId}`);
+                      console.log(`[WaveTree] dispatch:start → target=${targetRoleId} childSession=${childSessionId ?? 'none'} from=${roleId}`);
 
-                      if (targetRoleId) {
+                      if (targetRoleId && childSessionId) {
                         const childNode = next.get(targetRoleId);
                         if (childNode) {
                           next.set(targetRoleId, {
                             ...childNode,
-                            jobId: childJobId,
+                            sessionId: childSessionId,
                             status: 'running',
                             streamStatus: 'connecting',
                           });
-                          // Schedule child stream connection
-                          setTimeout(() => connectStream(childJobId, targetRoleId), 0);
+                          setTimeout(() => connectStream(childSessionId, targetRoleId), 0);
                         } else {
                           console.warn(`[WaveTree] dispatch:start — no node found for role "${targetRoleId}"`);
                         }
@@ -188,20 +183,19 @@ export default function useWaveTree(
                     }
 
                     if (event.type === 'job:done') {
-                      console.log(`[WaveTree] job:done → role=${roleId} job=${jobId}`);
+                      console.log(`[WaveTree] job:done → role=${roleId}`);
                       updated.status = 'done';
                       updated.streamStatus = 'done';
                     } else if (event.type === 'job:error') {
-                      console.log(`[WaveTree] job:error → role=${roleId} job=${jobId}`);
+                      console.log(`[WaveTree] job:error → role=${roleId}`);
                       updated.status = 'error';
                       updated.streamStatus = 'error';
                     } else if (event.type === 'job:awaiting_input') {
-                      console.log(`[WaveTree] job:awaiting_input → role=${roleId} job=${jobId}`);
+                      console.log(`[WaveTree] job:awaiting_input → role=${roleId}`);
                       updated.status = 'awaiting_input';
                       updated.streamStatus = 'done';
                     } else if (event.type === 'job:reply') {
-                      console.log(`[WaveTree] job:reply → role=${roleId} job=${jobId}`);
-                      // Will get a new child job via dispatch or continuation
+                      console.log(`[WaveTree] job:reply → role=${roleId}`);
                       updated.status = 'running';
                       updated.streamStatus = 'streaming';
                     }
@@ -211,8 +205,7 @@ export default function useWaveTree(
                   });
                 } else if (currentEvent === 'stream:end') {
                   const reason = data.reason as string;
-                  console.log(`[WaveTree] stream:end → role=${roleId} job=${jobId} reason=${reason}`);
-                  // 'replied' means CEO responded — new stream will take over, don't change status
+                  console.log(`[WaveTree] stream:end → role=${roleId} reason=${reason}`);
                   if (reason !== 'replied') {
                     setNodes((prev) => {
                       const next = new Map(prev);
@@ -252,7 +245,7 @@ export default function useWaveTree(
     if (rootJobs.length === 0) return;
 
     for (const rj of rootJobs) {
-      connectStream(rj.jobId, rj.roleId);
+      connectStream(rj.sessionId, rj.roleId);
     }
 
     return () => {
@@ -263,14 +256,14 @@ export default function useWaveTree(
     };
   }, [rootJobs, connectStream]);
 
-  // Mark nodes as not-dispatched when all jobs are done
+  // Progress
   const progress = (() => {
     let done = 0;
     let running = 0;
     let awaitingInput = 0;
     let total = 0;
     for (const [id, node] of nodes) {
-      if (id === rootRoleId) continue; // skip CEO
+      if (id === rootRoleId) continue;
       total++;
       if (node.status === 'done') done++;
       else if (node.status === 'running') running++;

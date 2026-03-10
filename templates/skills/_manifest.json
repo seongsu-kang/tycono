@@ -12,6 +12,12 @@
       "name": "AKB Document Linter",
       "category": "core",
       "description": "Document hygiene checker that finds AI-confusing documents."
+    },
+    {
+      "id": "agent-browser",
+      "name": "Agent Browser",
+      "category": "core",
+      "description": "Token-efficient browser automation CLI for AI agents."
     }
   ]
 }

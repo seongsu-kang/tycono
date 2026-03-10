@@ -21,6 +21,7 @@ interface Props {
   onSendMessage: (sessionId: string, content: string, mode: 'talk' | 'do', attachments?: ImageAttachment[]) => void;
   onModeChange: (sessionId: string, mode: 'talk' | 'do') => void;
   onCloseTerminal: () => void;
+  onMaximize?: () => void;
   /** Office Chat channels */
   chatChannels?: ChatChannel[];
   activeChatChannelId?: string | null;
@@ -29,6 +30,7 @@ interface Props {
   onDeleteChatChannel?: (id: string) => void;
   onUpdateChatMembers?: (channelId: string, members: string[]) => void;
   onUpdateChatTopic?: (channelId: string, topic: string) => void;
+  onSendChatMessage?: (channelId: string, text: string) => void;
   unreadChannels?: Set<string>;
 }
 
@@ -43,8 +45,8 @@ const MAX_WIDTH = 800;
 export default function TerminalPanel({
   sessions, activeSessionId, roles, streamingSessionId, width, onWidthChange,
   onSwitchSession, onCloseSession, onCreateSession, onClearEmpty, onCloseAll,
-  onSendMessage, onModeChange, onCloseTerminal,
-  chatChannels, activeChatChannelId, onSwitchChatChannel, onCreateChatChannel, onDeleteChatChannel, onUpdateChatMembers, onUpdateChatTopic, unreadChannels,
+  onSendMessage, onModeChange, onCloseTerminal, onMaximize,
+  chatChannels, activeChatChannelId, onSwitchChatChannel, onCreateChatChannel, onDeleteChatChannel, onUpdateChatMembers, onUpdateChatTopic, onSendChatMessage, unreadChannels,
 }: Props) {
   const [showNewMenu, setShowNewMenu] = useState(false);
   const [showManageMenu, setShowManageMenu] = useState(false);
@@ -100,11 +102,7 @@ export default function TerminalPanel({
     startWidthRef.current = width;
     setIsResizing(true);
 
-    const onMove = (ev: MouseEvent) => {
-      const delta = startXRef.current - ev.clientX; // drag left = wider
-      const newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startWidthRef.current + delta));
-      onWidthChange?.(newWidth);
-    };
+    const maximizeRef = onMaximize;
 
     const onUp = () => {
       setIsResizing(false);
@@ -112,9 +110,21 @@ export default function TerminalPanel({
       document.removeEventListener('mouseup', onUp);
     };
 
+    const onMove = (ev: MouseEvent) => {
+      const delta = startXRef.current - ev.clientX; // drag left = wider
+      const rawWidth = startWidthRef.current + delta;
+      if (rawWidth >= window.innerWidth * 0.6 && maximizeRef) {
+        onUp();
+        maximizeRef();
+        return;
+      }
+      const newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, rawWidth));
+      onWidthChange?.(newWidth);
+    };
+
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
-  }, [width, onWidthChange]);
+  }, [width, onWidthChange, onMaximize]);
 
   return (
     <div
@@ -296,6 +306,16 @@ export default function TerminalPanel({
             </div>
           )}
         </div>
+        {/* Maximize */}
+        {onMaximize && (
+          <button
+            onClick={onMaximize}
+            className="w-7 h-7 flex items-center justify-center text-[var(--terminal-text-muted)] hover:text-[var(--terminal-text-secondary)] text-sm cursor-pointer shrink-0"
+            title="Maximize (Pro View)"
+          >
+            {'\u2922'}
+          </button>
+        )}
         {/* Close terminal */}
         <button
           onClick={onCloseTerminal}
@@ -312,6 +332,7 @@ export default function TerminalPanel({
           allRoles={roles}
           onUpdateMembers={onUpdateChatMembers}
           onUpdateTopic={onUpdateChatTopic}
+          onSendMessage={onSendChatMessage}
         />
       ) : activeSession ? (
         <>

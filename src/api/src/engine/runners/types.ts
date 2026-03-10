@@ -39,6 +39,8 @@ export interface RunnerConfig {
   attachments?: ImageAttachment[];
   /** Selective dispatch scope — only these roles can be dispatched to */
   targetRoles?: string[];
+  /** EG-001: Code project root for bash_execute tool */
+  codeRoot?: string;
 }
 
 /* ─── Callbacks ───────────────────────────────── */

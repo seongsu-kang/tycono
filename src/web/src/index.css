@@ -103,6 +103,31 @@ body {
   transition: transform 0.3s ease, right 0.3s ease, width 0.2s ease;
 }
 
+/* Pro View: panels render inline (full-width) instead of fixed overlay */
+.pro-panel-inline {
+  position: relative !important;
+}
+.pro-panel-inline .side-panel,
+.pro-panel-inline .dimmer {
+  position: absolute !important;
+  left: 0 !important;
+  right: 0 !important;
+  top: 0 !important;
+  bottom: 0 !important;
+}
+.pro-panel-inline .side-panel {
+  width: 100% !important;
+  height: 100% !important;
+  border-left: none !important;
+  box-shadow: none !important;
+}
+.pro-panel-inline .side-panel .cursor-col-resize {
+  display: none !important;
+}
+.pro-panel-inline .dimmer {
+  display: none !important;
+}
+
 /* Fade in animation for view mode transitions */
 @keyframes fadeIn {
   from { opacity: 0; }
@@ -1042,8 +1067,10 @@ body {
   animation: quest-glow 1.2s ease-in-out infinite;
   box-shadow: 0 0 0 2px var(--accent), 0 0 12px 2px var(--accent);
   border-radius: 6px;
-  position: relative;
   z-index: 60;
+}
+.quest-spotlight:not(.td-facility-label):not(.td-edit-btn) {
+  position: relative;
 }
 @keyframes quest-glow {
   0%, 100% { box-shadow: 0 0 0 2px var(--accent), 0 0 12px 2px rgba(99, 102, 241, 0.5); }
@@ -1150,6 +1177,91 @@ body {
 .td-palette__item--active {
   background: rgba(59, 130, 246, 0.25);
   border-color: rgba(59, 130, 246, 0.7);
+}
+
+/* ── Edit mode tabs ── */
+.td-edit-tabs {
+  position: absolute;
+  bottom: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 0;
+  z-index: 20;
+}
+.td-edit-tabs__btn {
+  padding: 3px 12px;
+  font-size: 9px;
+  font-family: inherit;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  background: rgba(20, 25, 35, 0.7);
+  color: rgba(255, 255, 255, 0.5);
+  border: 2px solid rgba(139, 148, 158, 0.3);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.td-edit-tabs__btn:first-child { border-right: none; }
+.td-edit-tabs__btn--active {
+  background: rgba(20, 25, 35, 0.95);
+  color: #FFD54F;
+  border-bottom-color: transparent;
+}
+
+/* ── Expand panel ── */
+.td-expand-panel {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  background: rgba(20, 25, 35, 0.9);
+  border: 2px solid rgba(139, 148, 158, 0.3);
+  image-rendering: auto;
+  z-index: 15;
+}
+.td-expand-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  font-family: inherit;
+  color: #e0e0e0;
+}
+.td-expand-item__price {
+  color: #FFD54F;
+  font-weight: 700;
+}
+.td-expand-item__status {
+  color: #4CAF50;
+  font-weight: 700;
+  font-size: 9px;
+}
+.td-expand-item__btn {
+  padding: 2px 10px;
+  font-size: 9px;
+  font-family: inherit;
+  font-weight: 700;
+  background: rgba(59, 130, 246, 0.3);
+  color: #90CAF9;
+  border: 1px solid rgba(59, 130, 246, 0.6);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.td-expand-item__btn:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.5);
+}
+.td-expand-item__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.td-expand-item--purchased {
+  color: #4CAF50;
+}
+.td-expand-item--locked {
+  opacity: 0.5;
 }
 
 /* ── Theme Dropup ── */

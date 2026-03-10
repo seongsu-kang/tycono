@@ -10,6 +10,7 @@ import path from 'node:path';
 import matter from 'gray-matter';
 import { glob } from 'glob';
 import { COMPANY_ROOT } from '../services/file-reader.js';
+import { detectDecay, searchRelatedDocs, extractKeywords } from '../engine/knowledge-gate.js';
 
 export const knowledgeRouter = Router();
 
@@ -139,6 +140,35 @@ knowledgeRouter.get('/', (_req: Request, res: Response, next: NextFunction) => {
     }).filter(Boolean);
 
     res.json(docs);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* ─── Knowledge Health endpoint ──────────────────── */
+
+knowledgeRouter.get('/health', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const report = detectDecay(companyRoot());
+    res.json(report);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* ─── Related docs search endpoint ──────────────── */
+
+knowledgeRouter.get('/related', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const query = String(req.query.q ?? '');
+    if (!query) {
+      res.status(400).json({ error: 'q parameter required' });
+      return;
+    }
+
+    const keywords = extractKeywords(query);
+    const docs = searchRelatedDocs(companyRoot(), keywords);
+    res.json({ keywords, docs });
   } catch (err) {
     next(err);
   }

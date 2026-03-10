@@ -31,23 +31,35 @@ api = os.environ.get('DISPATCH_API_URL', 'http://localhost:3001')
 def log(msg):
     print(msg, flush=True)
 
-def get_result(job_id):
-    try:
-        history = json.loads(urllib.request.urlopen(f'{api}/api/jobs/{job_id}/history', timeout=10).read())
-        events = history.get('events', [])
-        text_parts = []
-        for e in events:
-            if e['type'] == 'text':
-                text_parts.append(e['data'].get('text', ''))
-            elif e['type'] == 'job:error':
-                text_parts.append('\\nERROR: ' + e['data'].get('message', ''))
-        return ''.join(text_parts) or '(No text output)'
-    except Exception as e:
-        return f'ERROR: Failed to get result: {e}'
+def get_result(job_id, retries=3):
+    for attempt in range(retries):
+        try:
+            history = json.loads(urllib.request.urlopen(f'{api}/api/jobs/{job_id}/history', timeout=10).read())
+            events = history.get('events', [])
+            text_parts = []
+            for e in events:
+                if e['type'] == 'text':
+                    text_parts.append(e['data'].get('text', ''))
+                elif e['type'] == 'job:error':
+                    text_parts.append('\\nERROR: ' + e['data'].get('message', ''))
+            result = ''.join(text_parts)
+            if result:
+                return result
+            if attempt < retries - 1:
+                log(f'  Result empty, retrying in 2s... (attempt {attempt + 1}/{retries})')
+                time.sleep(2)
+        except Exception as e:
+            if attempt == retries - 1:
+                return f'ERROR: Failed to get result: {e}'
+            time.sleep(2)
+    return '(No text output — activity stream may still be writing. Check again with --check)'
+
+def get_job_info(job_id):
+    info = json.loads(urllib.request.urlopen(f'{api}/api/jobs/{job_id}', timeout=5).read())
+    return info
 
 def get_status(job_id):
-    info = json.loads(urllib.request.urlopen(f'{api}/api/jobs/{job_id}', timeout=5).read())
-    return info.get('status', 'unknown')
+    return get_job_info(job_id).get('status', 'unknown')
 
 def start_job(role_id, task):
     parent_job = os.environ.get('DISPATCH_PARENT_JOB', '')
@@ -63,64 +75,38 @@ def start_job(role_id, task):
     resp = json.loads(urllib.request.urlopen(req, timeout=10).read())
     return resp['jobId']
 
-def poll_until_done(job_id, role_id, max_wait=300):
-    waited = 0
-    while waited < max_wait:
-        try:
-            status = get_status(job_id)
-            if status == 'done':
-                log('')
-                log(f'=== {role_id.upper()} Result (done) ===')
-                log(get_result(job_id))
-                return
-            elif status == 'error':
-                log('')
-                log(f'=== {role_id.upper()} Result (error) ===')
-                log(get_result(job_id))
-                return
-            elif status == 'awaiting_input':
-                log('')
-                log(f'{role_id.upper()} is asking a question (awaiting_input).')
-                log(f'Check details: python3 "$DISPATCH_CMD" --check {job_id}')
-                return
-        except Exception:
-            pass
-        time.sleep(5)
-        waited += 5
-        if waited % 15 == 0:
-            log(f'  ... {role_id} still working ({waited}s)')
-    log('')
-    log(f'{role_id.upper()} is still working after {waited}s.')
-    log(f'Check result later: python3 "$DISPATCH_CMD" --check {job_id}')
-
 # Mode: --check <jobId>
 if len(sys.argv) >= 3 and sys.argv[1] == '--check':
     job_id = sys.argv[2]
     try:
-        status = get_status(job_id)
+        info = get_job_info(job_id)
+        status = info.get('status', 'unknown')
         if status == 'running':
-            log(f'Job {job_id} is still running. Try again later.')
+            log(f'Status: RUNNING — {job_id} is still working. Check again in 10-30s.')
         elif status == 'awaiting_input':
-            log(f'Job {job_id} is awaiting input (subordinate asked a question).')
-            log(get_result(job_id))
+            log(f'Status: AWAITING_INPUT — subordinate has a question.')
+            log(info.get('output', '') or get_result(job_id))
+        elif status == 'done':
+            log(f'Status: DONE')
+            log(info.get('output', '') or get_result(job_id))
+        elif status == 'error':
+            log(f'Status: ERROR')
+            log(info.get('output', '') or get_result(job_id))
         else:
-            log(f'=== Job {job_id}: {status} ===')
-            log(get_result(job_id))
+            log(f'Status: {status}')
     except Exception as e:
         log(f'ERROR: {e}')
     sys.exit(0)
 
-# Mode: --wait <roleId> "<task>" (start + wait)
-wait_mode = False
+# Mode: dispatch <roleId> "<task>" (always immediate return)
 args = sys.argv[1:]
+# Accept --wait for backwards compat but ignore it (always async now)
 if args and args[0] == '--wait':
-    wait_mode = True
     args = args[1:]
 
 # Usage check
 if len(args) < 2:
-    log('Usage: dispatch <roleId> "<task>"          — Start job (immediate return)')
-    log('       dispatch --wait <roleId> "<task>"   — Start job + wait for result')
+    log('Usage: dispatch <roleId> "<task>"          — Start job (returns immediately)')
     log('       dispatch --check <jobId>            — Check job status/result')
     subs = os.environ.get('DISPATCH_SUBORDINATES', '')
     if subs:
@@ -140,14 +126,11 @@ except Exception as e:
 log(f'=== Dispatched to {role_id.upper()} ===')
 log(f'Task: {task[:120]}')
 log(f'Job ID: {job_id}')
-
-if wait_mode:
-    log(f'Waiting for completion...')
-    poll_until_done(job_id, role_id)
-else:
-    log('')
-    log(f'Job started. Check result with:')
-    log(f'  python3 "$DISPATCH_CMD" --check {job_id}')
+log(f'')
+log(f'⛔ Job is running async. Use --check to poll for result:')
+log(f'  python3 "$DISPATCH_CMD" --check {job_id}')
+log(f'')
+log(f'DO NOT re-dispatch the same task. Poll with --check every 10-30s until status is DONE.')
 `;
 
 /* ─── Consult Bridge Script (Python3) ────── */
@@ -172,37 +155,50 @@ api = os.environ.get('CONSULT_API_URL', os.environ.get('DISPATCH_API_URL', 'http
 def log(msg):
     print(msg, flush=True)
 
-def get_result(job_id):
-    try:
-        history = json.loads(urllib.request.urlopen(f'{api}/api/jobs/{job_id}/history', timeout=10).read())
-        events = history.get('events', [])
-        text_parts = []
-        for e in events:
-            if e['type'] == 'text':
-                text_parts.append(e['data'].get('text', ''))
-            elif e['type'] == 'job:error':
-                text_parts.append('\\nERROR: ' + e['data'].get('message', ''))
-        return ''.join(text_parts) or '(No text output)'
-    except Exception as e:
-        return f'ERROR: Failed to get result: {e}'
+def get_result(job_id, retries=3):
+    for attempt in range(retries):
+        try:
+            history = json.loads(urllib.request.urlopen(f'{api}/api/jobs/{job_id}/history', timeout=10).read())
+            events = history.get('events', [])
+            text_parts = []
+            for e in events:
+                if e['type'] == 'text':
+                    text_parts.append(e['data'].get('text', ''))
+                elif e['type'] == 'job:error':
+                    text_parts.append('\\nERROR: ' + e['data'].get('message', ''))
+            result = ''.join(text_parts)
+            if result:
+                return result
+            if attempt < retries - 1:
+                log(f'  Result empty, retrying in 2s... (attempt {attempt + 1}/{retries})')
+                time.sleep(2)
+        except Exception as e:
+            if attempt == retries - 1:
+                return f'ERROR: Failed to get result: {e}'
+            time.sleep(2)
+    return '(No text output — activity stream may still be writing. Check again with --check)'
+
+def get_job_info(job_id):
+    info = json.loads(urllib.request.urlopen(f'{api}/api/jobs/{job_id}', timeout=5).read())
+    return info
 
 def get_status(job_id):
-    info = json.loads(urllib.request.urlopen(f'{api}/api/jobs/{job_id}', timeout=5).read())
-    return info.get('status', 'unknown')
+    return get_job_info(job_id).get('status', 'unknown')
 
 # Mode: --check <jobId>
 if len(sys.argv) >= 3 and sys.argv[1] == '--check':
     job_id = sys.argv[2]
     try:
-        status = get_status(job_id)
+        info = get_job_info(job_id)
+        status = info.get('status', 'unknown')
         if status == 'running':
             log(f'Job {job_id} is still running. Try again later.')
         elif status == 'awaiting_input':
             log(f'Job {job_id} is awaiting input.')
-            log(get_result(job_id))
+            log(info.get('output', '') or get_result(job_id))
         else:
             log(f'=== Job {job_id}: {status} ===')
-            log(get_result(job_id))
+            log(info.get('output', '') or get_result(job_id))
     except Exception as e:
         log(f'ERROR: {e}')
     sys.exit(0)
@@ -240,37 +236,11 @@ except Exception as e:
 log(f'=== Consulting {role_id.upper()} ===')
 log(f'Question: {question[:120]}')
 log(f'Job ID: {job_id}')
-log(f'Waiting for answer...')
-
-# Wait for completion (max ~90s — consult is read-only, usually fast)
-waited = 0
-while waited < 90:
-    try:
-        status = get_status(job_id)
-        if status == 'done':
-            log('')
-            log(f'=== {role_id.upper()} Answer ===')
-            log(get_result(job_id))
-            sys.exit(0)
-        elif status == 'error':
-            log('')
-            log(f'=== {role_id.upper()} Error ===')
-            log(get_result(job_id))
-            sys.exit(1)
-        elif status == 'awaiting_input':
-            log('')
-            log(f'{role_id.upper()} needs clarification. Check: python3 "$CONSULT_CMD" --check {job_id}')
-            sys.exit(0)
-    except Exception:
-        pass
-    time.sleep(5)
-    waited += 5
-    if waited % 15 == 0:
-        log(f'  ... {role_id} still thinking ({waited}s)')
-
-log('')
-log(f'{role_id.upper()} is still thinking after {waited}s.')
-log(f'Check result later: python3 "$CONSULT_CMD" --check {job_id}')
+log(f'')
+log(f'Consult job started. Use --check to get the answer:')
+log(f'  python3 "$CONSULT_CMD" --check {job_id}')
+log(f'')
+log(f'Poll every 10s until status is DONE.')
 `;
 
 /* ─── Claude CLI Runner ──────────────────────── */
@@ -383,6 +353,10 @@ export class ClaudeCliRunner implements ExecutionRunner {
     // Use codeRoot as cwd if configured, otherwise fall back to companyRoot
     const companyConfig = readConfig(companyRoot);
     const cwd = companyConfig.codeRoot || companyRoot;
+
+    // Inject repo paths so agents never confuse repos
+    cleanEnv.TYCONO_CODE_ROOT = companyConfig.codeRoot || '';
+    cleanEnv.TYCONO_AKB_ROOT = companyRoot;
     console.log(`[Runner] Spawning claude -p: role=${roleId}, model=${modelName}, maxTurns=${maxTurns}, jobId=${config.jobId ?? 'none'}, cwd=${cwd}, subordinates=[${subordinates.join(',')}]`);
 
     const proc = spawn('claude', args, {

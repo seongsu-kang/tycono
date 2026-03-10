@@ -31,6 +31,7 @@ import { gitRouter } from './routes/git.js';
 import { skillsRouter } from './routes/skills.js';
 import { questsRouter } from './routes/quests.js';
 import { coinsRouter } from './routes/coins.js';
+import { activeSessionsRouter } from './routes/active-sessions.js';
 import { importKnowledge } from './services/knowledge-importer.js';
 import { AnthropicProvider, type LLMProvider } from './engine/llm-adapter.js';
 import { readConfig } from './services/company-config.js';
@@ -118,7 +119,7 @@ export function createHttpServer(): http.Server {
     const method = req.method ?? '';
 
     // SSE 엔드포인트: Express 우회하여 raw HTTP로 처리
-    if ((url.startsWith('/api/exec/') || url.startsWith('/api/jobs') || url === '/api/setup/import-knowledge') && method === 'POST') {
+    if ((url.startsWith('/api/exec/') || url.startsWith('/api/jobs') || url === '/api/waves/save' || url === '/api/setup/import-knowledge') && method === 'POST') {
       setExecCors(req, res);
       if (url === '/api/setup/import-knowledge') {
         handleImportKnowledge(req, res);
@@ -199,6 +200,7 @@ export function createExpressApp(): express.Application {
   app.use('/api/skills', skillsRouter);
   app.use('/api/quests', questsRouter);
   app.use('/api/coins', coinsRouter);
+  app.use('/api/active-sessions', activeSessionsRouter);
 
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', companyRoot: COMPANY_ROOT });

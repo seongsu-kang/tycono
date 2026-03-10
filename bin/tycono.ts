@@ -19,9 +19,14 @@ function printHelp(): void {
   Build an AI company. Watch them work.
 
   Usage:
-    tycono              Start the server and open dashboard
+    tycono [path]       Start the server (optionally point to a company directory)
     tycono --help       Show this help message
     tycono --version    Show version
+
+  Examples:
+    tycono                      Start in current directory
+    tycono ./my-company         Start with existing company folder
+    tycono /path/to/akb         Start with absolute path
 
   AI Engine (auto-detected):
     1. Claude Code CLI       Install from https://claude.ai/download (recommended)
@@ -199,9 +204,13 @@ export async function main(args: string[]): Promise<void> {
   }
 
   if (command && !command.startsWith('-')) {
-    console.error(`  Unknown command: ${command}`);
-    printHelp();
-    process.exit(1);
+    // Treat as path to company directory
+    const resolved = path.resolve(command);
+    if (!fs.existsSync(resolved)) {
+      console.error(`  Path not found: ${resolved}`);
+      process.exit(1);
+    }
+    process.env.COMPANY_ROOT = resolved;
   }
 
   await startServer();

@@ -8,6 +8,9 @@ import { setActivity, updateActivity, completeActivity } from './activity-tracke
 import type { RunnerResult } from '../engine/runners/types.js';
 import { estimateCost } from './pricing.js';
 import { readConfig, getConversationLimits } from './company-config.js';
+import { postKnowledgingCheck, type KnowledgeDebtItem } from '../engine/knowledge-gate.js';
+import { earnCoinsInternal } from '../routes/coins.js';
+import { getSession, createSession, addMessage, updateMessage as updateSessionMessage, appendMessageEvent, type Message } from './session-store.js';
 
 /* ─── Types ──────────────────────────────── */
 
@@ -31,6 +34,10 @@ export interface Job {
   targetRole?: string;
   /** Selective dispatch scope — only these roles can be dispatched to */
   targetRoles?: string[];
+  /** Knowledge debt items detected by Post-Knowledging check */
+  knowledgeDebt?: KnowledgeDebtItem[];
+  /** D-014: Session this job belongs to */
+  sessionId?: string;
 }
 
 export interface JobInfo {
@@ -44,6 +51,8 @@ export interface JobInfo {
   createdAt: string;
   /** Which role should respond when status is awaiting_input */
   targetRole?: string;
+  /** Final output text (available when status is done) */
+  output?: string;
 }
 
 export interface StartJobParams {
@@ -58,6 +67,8 @@ export interface StartJobParams {
   isContinuation?: boolean;
   /** Selective dispatch: only these roles are allowed as dispatch targets */
   targetRoles?: string[];
+  /** D-014: Link this job to a session (internal tracking) */
+  sessionId?: string;
 }
 
 /* ─── Helpers ────────────────────────────── */
@@ -160,6 +171,7 @@ class JobManager {
       childJobIds: [],
       createdAt: new Date().toISOString(),
       targetRoles: params.targetRoles,
+      sessionId: params.sessionId,
     };
 
     this.jobs.set(jobId, job);
@@ -182,6 +194,7 @@ class JobManager {
           targetRoleId: params.roleId,
           task: params.task,
           childJobId: jobId,
+          childSessionId: params.sessionId,
         });
       }
     }
@@ -214,25 +227,41 @@ class JobManager {
         sourceRole: params.sourceRole ?? 'ceo',
         orgTree,
         readOnly: params.readOnly,
-        maxTurns: limits.hardLimit,  // Runner backup safety net = Harness hardLimit
+        maxTurns: limits.hardLimit,
         model,
         jobId,
         teamStatus,
         targetRoles: params.targetRoles,
+        codeRoot: config.codeRoot,
       },
       {
         onText: (text) => {
           updateActivity(params.roleId, text);
           stream.emit('text', params.roleId, { text });
+          // D-014: Update linked session message content
+          if (job.sessionId) {
+            this.updateSessionRoleMessage(job, text);
+          }
         },
         onThinking: (text) => {
           stream.emit('thinking', params.roleId, { text });
+          // D-014 SCA-010: Embed thinking event in session message
+          if (job.sessionId) {
+            this.embedSessionEvent(job, 'thinking', { text: text.slice(0, 200) });
+          }
         },
         onToolUse: (name, input) => {
           stream.emit('tool:start', params.roleId, {
             name,
             input: input ? summarizeInput(input) : undefined,
           });
+          // D-014 SCA-010: Embed tool event in session message
+          if (job.sessionId) {
+            this.embedSessionEvent(job, 'tool:start', {
+              name,
+              input: input ? summarizeInput(input) : undefined,
+            });
+          }
         },
         onDispatch: (subRoleId, subTask) => {
           // 2-layer defense: block dispatch to roles outside targetRoles scope
@@ -245,17 +274,55 @@ class JobManager {
               return;
             }
           }
-          // Create child job — startJob() auto-emits dispatch:start
-          // on parent stream when parentJobId is set.
-          // Propagate targetRoles to child jobs for cascading enforcement
-          this.startJob({
+          // Create session for child dispatch
+          const childSession = createSession(subRoleId, {
+            mode: 'do',
+            source: 'dispatch',
+          });
+          // Add directive as CEO message in child session
+          const dispatchMsg: Message = {
+            id: `msg-${Date.now()}-dispatch-${subRoleId}`,
+            from: 'ceo',
+            content: subTask,
+            type: 'directive',
+            status: 'done',
+            timestamp: new Date().toISOString(),
+          };
+          addMessage(childSession.id, dispatchMsg);
+
+          // Create child job linked to child session
+          const childJob = this.startJob({
             type: 'assign',
             roleId: subRoleId,
             task: subTask,
             sourceRole: params.roleId,
             parentJobId: jobId,
             targetRoles: params.targetRoles,
+            sessionId: childSession.id,
           });
+
+          // Add role message linked to child job
+          const childRoleMsg: Message = {
+            id: `msg-${Date.now() + 1}-role-${subRoleId}`,
+            from: 'role',
+            content: '',
+            type: 'conversation',
+            status: 'streaming',
+            timestamp: new Date().toISOString(),
+            jobId: childJob.id,
+          };
+          addMessage(childSession.id, childRoleMsg, true);
+
+          // Embed dispatch event with childSessionId in parent session
+          if (job.sessionId) {
+            this.embedSessionEvent(job, 'dispatch:start', {
+              roleId: subRoleId,
+              task: subTask,
+              childJobId: childJob.id,
+              childSessionId: childSession.id,
+              targetRoleId: subRoleId,
+            });
+          }
         },
         onConsult: (subRoleId, question) => {
           // Create child job in read-only mode for consultation
@@ -366,9 +433,55 @@ class JobManager {
             targetRole,
           });
         } else {
+          // ─── Post-Knowledging check ───
+          // Extract changed .md files from tool calls and check for knowledge debt
+          const changedMdFiles = result.toolCalls
+            .filter(tc => (tc.name === 'write_file' || tc.name === 'edit_file') && tc.input && typeof tc.input.path === 'string')
+            .map(tc => String(tc.input!.path))
+            .filter(p => p.endsWith('.md'));
+
+          if (changedMdFiles.length > 0) {
+            try {
+              const pkResult = postKnowledgingCheck(COMPANY_ROOT, changedMdFiles);
+              if (!pkResult.pass) {
+                job.knowledgeDebt = pkResult.debt;
+                console.log(
+                  `[Post-K] Job ${jobId} (${params.roleId}): ${pkResult.debt.length} knowledge debt item(s)`,
+                );
+                for (const d of pkResult.debt) {
+                  console.log(`  [Post-K] ${d.type}: ${d.message}`);
+                }
+                // Include debt info in done event
+                (doneData as Record<string, unknown>).knowledgeDebt = pkResult.debt.map(d => ({
+                  type: d.type,
+                  file: d.file,
+                  message: d.message,
+                }));
+              }
+            } catch (err) {
+              console.warn('[Post-K] Check failed:', err);
+            }
+          }
+
           job.status = 'done';
           completeActivity(params.roleId);
           stream.emit('job:done', params.roleId, doneData);
+          // D-014: Update linked session message with final results
+          if (job.sessionId) {
+            this.finalizeSessionMessage(job, 'done', result);
+          }
+
+          // EC-011: Job completion bonus (only for top-level jobs, not child dispatches)
+          if (!params.parentJobId && result) {
+            const totalTokens = (result.totalTokens?.input ?? 0) + (result.totalTokens?.output ?? 0);
+            const bonus = Math.min(2000, Math.max(500, Math.round(totalTokens / 500)));
+            try {
+              earnCoinsInternal(bonus, `Job done: ${params.roleId}`, `job:${job.id}`);
+            } catch { /* non-critical */ }
+          }
+
+          // Cleanup orphaned child jobs (awaiting_input with no parent to respond)
+          this.cleanupOrphanedChildren(job.id);
         }
       })
       .catch((err: Error) => {
@@ -392,9 +505,95 @@ class JobManager {
         completeActivity(params.roleId);
 
         stream.emit('job:error', params.roleId, { message: err.message });
+        // D-014: Mark linked session message as error
+        if (job.sessionId) {
+          this.finalizeSessionMessage(job, 'error');
+        }
       });
 
     return job;
+  }
+
+  /* ─── D-014: Session ↔ Job bridge ───────── */
+
+  /** Accumulated text content for session messages linked to jobs */
+  private sessionMsgContent = new Map<string, string>();
+
+  /** Update session role message content as text streams in */
+  private updateSessionRoleMessage(job: Job, text: string): void {
+    if (!job.sessionId) return;
+    const session = getSession(job.sessionId);
+    if (!session) return;
+
+    // Find the role message linked to this job
+    const roleMsg = session.messages.find(m => m.jobId === job.id && m.from === 'role');
+    if (!roleMsg) return;
+
+    const key = `${job.sessionId}:${roleMsg.id}`;
+    const current = (this.sessionMsgContent.get(key) ?? '') + text;
+    this.sessionMsgContent.set(key, current);
+
+    updateSessionMessage(job.sessionId, roleMsg.id, { content: current });
+  }
+
+  /** Embed an activity event into the session message linked to this job (SCA-010) */
+  private embedSessionEvent(job: Job, type: string, data: Record<string, unknown>): void {
+    if (!job.sessionId) return;
+    const session = getSession(job.sessionId);
+    if (!session) return;
+
+    const roleMsg = session.messages.find(m => m.jobId === job.id && m.from === 'role');
+    if (!roleMsg) return;
+
+    const event: ActivityEvent = {
+      seq: (roleMsg.events?.length ?? 0) + 1,
+      ts: new Date().toISOString(),
+      type: type as ActivityEvent['type'],
+      roleId: job.roleId,
+      data,
+    };
+    appendMessageEvent(job.sessionId, roleMsg.id, event);
+  }
+
+  /** Finalize session message when job completes or errors */
+  private finalizeSessionMessage(job: Job, status: 'done' | 'error', result?: RunnerResult): void {
+    if (!job.sessionId) return;
+    const session = getSession(job.sessionId);
+    if (!session) return;
+
+    const roleMsg = session.messages.find(m => m.jobId === job.id && m.from === 'role');
+    if (!roleMsg) return;
+
+    const key = `${job.sessionId}:${roleMsg.id}`;
+    const finalContent = this.sessionMsgContent.get(key) ?? roleMsg.content;
+    this.sessionMsgContent.delete(key);
+
+    updateSessionMessage(job.sessionId, roleMsg.id, {
+      content: finalContent,
+      status,
+      ...(result && {
+        turns: result.turns,
+        tokens: result.totalTokens,
+      }),
+      // KP-006: Include knowledge debt in session message
+      ...(job.knowledgeDebt && job.knowledgeDebt.length > 0 && {
+        knowledgeDebt: job.knowledgeDebt.map(d => ({ type: d.type, file: d.file, message: d.message })),
+      }),
+    });
+  }
+
+  /** Cleanup orphaned child jobs when parent completes */
+  private cleanupOrphanedChildren(parentJobId: string): void {
+    for (const job of this.jobs.values()) {
+      if (job.parentJobId === parentJobId && job.status === 'awaiting_input') {
+        job.status = 'done';
+        completeActivity(job.roleId);
+        job.stream.emit('job:done', job.roleId, {
+          output: '[Auto-closed] Parent job completed',
+          turns: 0,
+        });
+      }
+    }
   }
 
   /** Get a job by ID (in-memory or reconstruct from file) */
@@ -444,6 +643,7 @@ class JobManager {
       childJobIds: job.childJobIds,
       createdAt: job.createdAt,
       targetRole: job.targetRole,
+      output: job.result?.output,
     };
   }
 
@@ -483,18 +683,19 @@ class JobManager {
     return true;
   }
 
-  /** Reply to an awaiting_input job → creates a continuation job */
+  /** Reply to an awaiting_input or done job → creates a continuation job */
   replyToJob(id: string, response: string, responderRole?: string): Job | null {
     const job = this.jobs.get(id);
-    if (!job || job.status !== 'awaiting_input') return null;
+    if (!job || (job.status !== 'awaiting_input' && job.status !== 'done')) return null;
 
+    const isFollowUp = job.status === 'done';
     const effectiveResponder = responderRole ?? job.targetRole ?? 'ceo';
 
     // Mark previous job as done (don't emit job:done — the stream stays open
     // for the continuation job which will emit its own job:done when finished)
     job.status = 'done';
-    completeActivity(job.roleId);
-    job.stream.emit('job:reply', job.roleId, { response, responderRole: effectiveResponder });
+    if (!isFollowUp) completeActivity(job.roleId);
+    job.stream.emit('job:reply', job.roleId, { response, responderRole: effectiveResponder, isFollowUp });
 
     // Build continuation prompt with previous context
     const prevOutput = job.result?.output ?? '';
@@ -504,16 +705,21 @@ class JobManager {
 
     // Use the actual responder role name in the prompt
     const responderLabel = effectiveResponder === 'ceo' ? 'CEO' : effectiveResponder.toUpperCase();
-    const continuationTask = `[Continuation — previous output follows]\n${contextSummary}\n\n[${responderLabel} Response]\n${response}`;
+    const continuationTask = isFollowUp
+      ? `[CEO Follow-up Directive]\n${response}\n\n[Previous context — your earlier report follows]\n${contextSummary}`
+      : `[Continuation — previous output follows]\n${contextSummary}\n\n[${responderLabel} Response]\n${response}`;
 
-    // Create new job for same role (mark as continuation to skip question detection)
+    // Create new job for same role
+    // Follow-ups (from done state) should allow question detection since they're fresh directives
+    // Continuations (from awaiting_input) skip question detection to avoid infinite loops
     const newJob = this.startJob({
       type: job.type,
       roleId: job.roleId,
       task: continuationTask,
       sourceRole: effectiveResponder,
       parentJobId: job.id,
-      isContinuation: true,
+      isContinuation: !isFollowUp,
+      sessionId: job.sessionId,
     });
 
     job.childJobIds.push(newJob.id);
@@ -528,6 +734,26 @@ class JobManager {
       }
     }
     return undefined;
+  }
+
+  /** SCA-011: Find the most recent job linked to a session */
+  getJobBySessionId(sessionId: string): Job | undefined {
+    let active: Job | undefined;
+    let latest: Job | undefined;
+    for (const job of this.jobs.values()) {
+      if (job.sessionId === sessionId) {
+        // Prefer running or awaiting_input jobs
+        if (job.status === 'running' || job.status === 'awaiting_input') {
+          if (!active || job.createdAt > active.createdAt) {
+            active = job;
+          }
+        }
+        if (!latest || job.createdAt > latest.createdAt) {
+          latest = job;
+        }
+      }
+    }
+    return active ?? latest;
   }
 }
 

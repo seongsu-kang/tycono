@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 import os from 'node:os';
-import { scaffold, getAvailableTeams, loadTeam } from '../services/scaffold.js';
+import { scaffold, getAvailableTeams, loadTeam, getRequiredTools, installSkillTools } from '../services/scaffold.js';
 import type { ScaffoldConfig } from '../services/scaffold.js';
 import { importKnowledge } from '../services/knowledge-importer.js';
 import { gitInit } from '../services/git-save.js';
@@ -190,6 +190,32 @@ setupRouter.post('/browse', (req, res) => {
 });
 
 /**
+ * POST /api/setup/mkdir
+ * Create a new directory inside the browsed location.
+ */
+setupRouter.post('/mkdir', (req, res) => {
+  const { path: parentPath, name } = req.body;
+  if (!parentPath || !name || typeof parentPath !== 'string' || typeof name !== 'string') {
+    res.status(400).json({ error: 'path and name are required' });
+    return;
+  }
+  // Sanitize name — no path separators or dots-only
+  const sanitized = name.trim().replace(/[/\\]/g, '');
+  if (!sanitized || sanitized === '.' || sanitized === '..') {
+    res.status(400).json({ error: 'Invalid folder name' });
+    return;
+  }
+  const target = path.join(path.resolve(parentPath), sanitized);
+  try {
+    fs.mkdirSync(target, { recursive: true });
+    res.json({ ok: true, path: target });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
  * POST /api/setup/connect-akb
  * Connect an existing AKB directory.
  */
@@ -341,4 +367,71 @@ setupRouter.get('/teams', (_req, res) => {
     roles: loadTeam(t).map(r => ({ id: r.id, name: r.name, level: r.level })),
   }));
   res.json(result);
+});
+
+/**
+ * POST /api/setup/required-tools
+ * Check which tools are needed for a team's skills.
+ */
+setupRouter.post('/required-tools', (req, res) => {
+  const { team } = req.body;
+  if (!team || typeof team !== 'string') {
+    res.json({ tools: [] });
+    return;
+  }
+
+  const roles = loadTeam(team);
+  const skillIds = new Set<string>();
+  for (const role of roles) {
+    if (role.defaultSkills) {
+      for (const s of role.defaultSkills) skillIds.add(s);
+    }
+  }
+
+  const tools = getRequiredTools(Array.from(skillIds));
+  res.json({ tools });
+});
+
+/**
+ * POST /api/setup/install-tools (SSE)
+ * Install CLI tools required by team skills with progress streaming.
+ */
+setupRouter.post('/install-tools', (req, res) => {
+  const { team } = req.body;
+  if (!team || typeof team !== 'string') {
+    res.status(400).json({ error: 'team is required' });
+    return;
+  }
+
+  const roles = loadTeam(team);
+  const skillIds = new Set<string>();
+  for (const role of roles) {
+    if (role.defaultSkills) {
+      for (const s of role.defaultSkills) skillIds.add(s);
+    }
+  }
+
+  // SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+
+  const sendSSE = (event: string, data: unknown) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  installSkillTools(Array.from(skillIds), {
+    onChecking: (tool) => sendSSE('checking', { tool }),
+    onInstalling: (tool) => sendSSE('installing', { tool }),
+    onInstalled: (tool) => sendSSE('installed', { tool }),
+    onSkipped: (tool, reason) => sendSSE('skipped', { tool, reason }),
+    onError: (tool, error) => sendSSE('error', { tool, error }),
+    onDone: (stats) => {
+      sendSSE('done', stats);
+      res.end();
+    },
+  });
 });

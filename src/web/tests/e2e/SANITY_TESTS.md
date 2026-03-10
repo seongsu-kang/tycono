@@ -1,10 +1,10 @@
 # Web Sanity Tests
 
 > Playwright 기반 UI 동작 검증 체크리스트
-> 최종 검증: 2026-03-08 (6명 Preset M + 13명 Preset L 전환 검증)
+> 최종 검증: 2026-03-10 (8명 Preset M, agent-browser CLI 기반 검증)
 
 **실행 환경**: Vite dev server (`npx vite --port 5174`) + 브라우저
-**도구**: Playwright MCP 또는 수동 브라우저
+**도구**: agent-browser CLI 또는 Playwright MCP 또는 수동 브라우저
 
 ---
 
@@ -59,7 +59,7 @@
 | TC-H19 | 연속 고용 | 3회 이상 연속 고용 -> 모두 정상 반영 | PASS |
 | TC-H20 | 고용 후 데스크 카운트 | "Expand: +N desks available" 숫자 감소 | PASS |
 | TC-H21 | Back 버튼 | 각 단계에서 Back -> 이전 단계 복귀, 입력 유지 | - |
-| TC-H22 | Cancel 버튼 | 어느 단계에서든 Cancel -> 모달 닫힘, 고용 안됨 | - |
+| TC-H22 | Cancel 버튼 | 어느 단계에서든 Cancel -> 모달 닫힘, 고용 안됨 | PASS |
 
 ---
 
@@ -86,10 +86,10 @@
 | TC-R02 | 패널 닫기 | X 버튼 -> 패널 닫힘 | PASS |
 | TC-R03 | 기본 정보 표시 | Role ID, Name, Level, Status, Reports To | PASS |
 | TC-R04 | 캐릭터 프리뷰 | 패널 상단 캐릭터 픽셀아트 표시 | PASS |
-| TC-R05 | 커스터마이즈 버튼 | 팔레트 아이콘 클릭 -> 캐릭터 에디터 | - |
-| TC-R06 | 인라인 이름 편집 | 이름 옆 편집 아이콘 클릭 -> 편집 모드 | - |
+| TC-R05 | 커스터마이즈 버튼 | 팔레트 아이콘 클릭 -> 캐릭터 에디터 | PASS |
+| TC-R06 | 인라인 이름 편집 | 이름 옆 편집 아이콘 클릭 -> 편집 모드 | PASS |
 | TC-R07 | Talk/Do 탭 | Talk/Do 탭 전환 + 입력 필드 | PASS |
-| TC-R08 | Profile/Authority 접기 | 아코디언 토글 | - |
+| TC-R08 | Profile/Authority 접기 | 아코디언 토글 | PASS |
 | TC-R09 | Fire Role | Fire Role 버튼 표시 | PASS |
 
 ---
@@ -118,6 +118,31 @@
 
 ---
 
+## TC-PRO: Pro View (Slack-style)
+
+| ID | 테스트 | 검증 항목 | 상태 |
+|----|--------|----------|------|
+| TC-PRO01 | PRO 뷰 진입 | 하단바 PRO 버튼 클릭 -> 전체화면 오버레이 (사이드바 240px + 메인 영역) | PASS |
+| TC-PRO02 | Dashboard 기본 | Dashboard 타이틀 + Quick Actions (New Wave, Knowledge) + Team 카드 + Recent Waves + Knowledge Base | PASS |
+| TC-PRO03 | 사이드바 CHANNELS | general, wave-log, decisions, knowledge 4개 채널 표시 | PASS |
+| TC-PRO04 | 사이드바 TEAM | 전체 Role 목록 (아바타 + 이름 + Lv + 상태 dot) 표시 | PASS |
+| TC-PRO05 | 팀원 클릭 → DM 채팅 | 사이드바 팀원 클릭 -> 메인 영역에 DM 채팅 뷰 (MessageList + Talk/Do + InputBar) | PASS |
+| TC-PRO06 | DM 빈 상태 | 세션 없는 Role 클릭 -> 캐릭터 아바타 + "Start a conversation" + InputBar | PASS |
+| TC-PRO07 | DM 헤더 | 아바타 + Role Name + Level 정보 + Profile 버튼 + Dashboard 버튼 | PASS |
+| TC-PRO08 | Profile 패널 열기 | 헤더 Profile 버튼 클릭 -> 오른쪽 420px 프로필 패널 (기존 SidePanel 재사용) | PASS |
+| TC-PRO09 | Profile 패널 내용 | 큰 아바타 + Role ID + Name + Lv/상태/level/reportsTo + Latest + Talk/Do + Profile/Authority/Relationships/Journal 아코디언 + Cloud Store + Fire Role | PASS |
+| TC-PRO10 | Profile 패널 닫기 | × 버튼 또는 Profile 버튼 재클릭 -> 패널 닫힘, 채팅 유지 | PASS |
+| TC-PRO11 | 팀원 전환 | 다른 팀원 클릭 -> 채팅 + 프로필 모두 해당 Role로 전환 | PASS |
+| TC-PRO12 | 채널 전환 (general) | general 클릭 -> TerminalPanel 렌더링 | - |
+| TC-PRO13 | 채널 전환 (wave-log) | wave-log 클릭 -> WaveCenter 렌더링 | - |
+| TC-PRO14 | 채널 전환 (decisions) | decisions 클릭 -> OperationsPanel 렌더링 | - |
+| TC-PRO15 | 채널 전환 (knowledge) | knowledge 클릭 -> KnowledgePanel 렌더링 | - |
+| TC-PRO16 | Office 복귀 | 하단 Office 버튼 클릭 -> 이전 뷰 모드(CARD/ISO)로 복귀 | PASS |
+| TC-PRO17 | 패널 최대화 → PRO | Office 사이드 패널 ⤢ 버튼 클릭 -> PRO 뷰로 전환 + 해당 채널 활성화 | - |
+| TC-PRO18 | 드래그 최대화 → PRO | Office 사이드 패널을 뷰포트 60% 이상 드래그 -> PRO 뷰 자동 전환 | - |
+
+---
+
 ## TC-S: Save / Persistence
 
 | ID | 테스트 | 검증 항목 | 상태 |
@@ -133,13 +158,14 @@
 |------|------|------|--------|
 | Page Load (TC-P) | 4 | 4 | 0 |
 | View Toggle (TC-V) | 8 | 8 | 0 |
-| Hire (TC-H) | 22 | 20 | 2 |
+| Hire (TC-H) | 22 | 21 | 1 |
 | Office ISO (TC-O) | 8 | 6 | 2 |
-| Role Panel (TC-R) | 9 | 6 | 3 |
+| Role Panel (TC-R) | 9 | 9 | 0 |
 | Terminal (TC-T) | 3 | 3 | 0 |
 | Floor Template (TC-F) | 7 | 7 | 0 |
+| Pro View (TC-PRO) | 18 | 11 | 7 |
 | Save (TC-S) | 2 | 1 | 1 |
-| **합계** | **63** | **55** | **8** |
+| **합계** | **81** | **70** | **11** |
 
 ---
 
@@ -167,5 +193,5 @@ cd src/web && npx vite --port 5174
 
 ---
 
-*작성: CTO | 2026-03-08*
+*작성: CTO | 2026-03-10*
 *관련: [test-strategy](../../../knowledge/test-strategy.md) | [floor-template](../../src/components/office/floor-template.ts)*

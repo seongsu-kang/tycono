@@ -13,7 +13,7 @@ const ROLE_COLORS: Record<string, string> = {
 
 interface Props {
   directive: string;
-  rootJobs: Array<{ jobId: string; roleId: string; roleName: string }>;
+  rootJobs: Array<{ sessionId: string; roleId: string; roleName: string; jobId?: string }>;
   orgNodes: Record<string, OrgNode>;
   rootRoleId: string;
   onClose: () => void;
@@ -41,7 +41,7 @@ export default function WaveCommandCenter({
     if (!onSave) return;
     setSaving(true);
     try {
-      const jobIds = rootJobs.map(j => j.jobId);
+      const jobIds = rootJobs.map(j => j.jobId).filter((id): id is string => !!id);
       await onSave(jobIds);
     } catch (err) {
       console.error('Save failed:', err);
@@ -54,14 +54,13 @@ export default function WaveCommandCenter({
   const handleReply = useCallback(async () => {
     if (!selectedRoleId || !replyText.trim()) return;
     const node = nodes.get(selectedRoleId);
-    if (!node?.jobId || node.status !== 'awaiting_input') return;
+    if (!node?.sessionId || (node.status !== 'awaiting_input' && node.status !== 'done')) return;
 
     setReplying(true);
     try {
-      const { jobId: newJobId } = await api.replyToJob(node.jobId, replyText.trim());
+      await api.replyToSession(node.sessionId, replyText.trim());
       setReplyText('');
-      // Connect to the new continuation job stream
-      connectStream(newJobId, selectedRoleId);
+      connectStream(node.sessionId, selectedRoleId);
     } catch (err) {
       console.error('Reply failed:', err);
     } finally {
@@ -71,9 +70,9 @@ export default function WaveCommandCenter({
 
   const handleForceStop = useCallback(async (roleId: string) => {
     const node = nodes.get(roleId);
-    if (!node?.jobId) return;
+    if (!node?.sessionId) return;
     try {
-      await api.abortJob(node.jobId);
+      await api.abortSession(node.sessionId);
     } catch (err) {
       console.error('Abort failed:', err);
     }
@@ -81,8 +80,8 @@ export default function WaveCommandCenter({
 
   const handleStopAll = useCallback(async () => {
     for (const [, node] of nodes) {
-      if ((node.status === 'running' || node.status === 'awaiting_input') && node.jobId) {
-        try { await api.abortJob(node.jobId); } catch { /* ignore */ }
+      if ((node.status === 'running' || node.status === 'awaiting_input') && node.sessionId) {
+        try { await api.abortSession(node.sessionId); } catch { /* ignore */ }
       }
     }
   }, [nodes]);
@@ -122,11 +121,15 @@ export default function WaveCommandCenter({
     }
   }, [nodes]);
 
-  // Fire onDone callback once
+  // Fire onDone callback when all jobs complete (re-fires after follow-ups)
   useEffect(() => {
     if (allDone && !doneFired.current) {
       doneFired.current = true;
       onDone?.();
+    }
+    // Reset doneFired when wave goes back to running (follow-up sent)
+    if (!allDone && doneFired.current) {
+      doneFired.current = false;
     }
   }, [allDone, onDone]);
 
@@ -285,7 +288,7 @@ export default function WaveCommandCenter({
                    selectedNode.status === 'awaiting_input' ? 'Awaiting Reply' :
                    'Not dispatched'}
                 </span>
-                {(selectedNode.status === 'running' || selectedNode.status === 'awaiting_input') && selectedNode.jobId && (
+                {(selectedNode.status === 'running' || selectedNode.status === 'awaiting_input') && selectedNode.sessionId && (
                   <button
                     onClick={() => handleForceStop(selectedNode.roleId)}
                     className="text-[10px] px-2 py-0.5 rounded font-semibold cursor-pointer ml-1"
@@ -317,13 +320,14 @@ export default function WaveCommandCenter({
                   event={event}
                   isThinkingCollapsed={collapsedThinking.has(event.seq)}
                   onToggleThinking={() => toggleThinking(event.seq)}
-                  onNavigateToJob={(childJobId) => {
-                    // Find which role this child job belongs to and select it
-                    for (const [, node] of nodes) {
-                      if (node.jobId === childJobId) {
-                        selectNode(node.roleId);
-                        return;
-                      }
+                  onNavigateToJob={(_childJobId) => {
+                    // Find dispatch event to determine target role
+                    const dispatchEvt = selectedNode?.events.find(e =>
+                      e.type === 'dispatch:start' && e.data.childJobId === _childJobId
+                    );
+                    const targetRole = dispatchEvt?.data.targetRoleId as string | undefined;
+                    if (targetRole && nodes.has(targetRole)) {
+                      selectNode(targetRole);
                     }
                   }}
                   onOpenKnowledgeDoc={onOpenKnowledgeDoc}
@@ -362,6 +366,40 @@ export default function WaveCommandCenter({
                     style={{ background: '#F59E0B', color: '#000' }}
                   >
                     {replying ? '...' : 'Reply'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Follow-up directive for completed roles */}
+            {selectedNode?.status === 'done' && selectedNode.sessionId && (
+              <div className="px-4 py-3 border-t border-[var(--terminal-border)] shrink-0"
+                   style={{ background: '#1565C00A' }}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[11px] font-semibold" style={{ color: '#64B5F6' }}>
+                    Follow-up to {selectedNode.roleName}
+                  </span>
+                  <span className="text-[10px] text-[var(--terminal-text-muted)]">
+                    Send a follow-up directive
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleReply(); } }}
+                    placeholder="e.g., 좋아 KB-3 진행해, Engineer에게 시켜..."
+                    disabled={replying}
+                    className="flex-1 px-3 py-1.5 text-xs rounded border bg-[var(--terminal-bg)] text-[var(--terminal-text)] border-[var(--terminal-border)] outline-none focus:border-[#64B5F6]"
+                  />
+                  <button
+                    onClick={handleReply}
+                    disabled={replying || !replyText.trim()}
+                    className="px-4 py-1.5 text-xs rounded font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    style={{ background: '#1565C0', color: '#fff' }}
+                  >
+                    {replying ? '...' : 'Send'}
                   </button>
                 </div>
               </div>

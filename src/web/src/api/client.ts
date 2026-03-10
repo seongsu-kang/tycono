@@ -1,4 +1,4 @@
-import type { Company, Role, RoleDetail, Project, ProjectDetail, Standup, Wave, Decision, Session, CreateRoleInput, JobInfo, CompanyStatus, EngineDetection, PathValidation, ScaffoldInput, ScaffoldResult, TeamTemplate, BrowseResult, ConnectAkbResult, KnowledgeDoc, KnowledgeDocDetail, OrgTreeResponse, TrackedRole, CompanyStats, GitStatus } from '../types';
+import type { Company, Role, RoleDetail, Project, ProjectDetail, Standup, Wave, Decision, Session, CreateRoleInput, CompanyStatus, EngineDetection, PathValidation, ScaffoldInput, ScaffoldResult, TeamTemplate, BrowseResult, ConnectAkbResult, KnowledgeDoc, KnowledgeDocDetail, OrgTreeResponse, TrackedRole, CompanyStats, GitStatus, ActiveSessionsResponse, ActiveSession } from '../types';
 import type { SpeechSettings } from '../types/speech';
 
 const BASE = '/api';
@@ -49,6 +49,8 @@ export const api = {
   getProject: (id: string) => get<ProjectDetail>(`/projects/${id}`),
   getStandups: () => get<Standup[]>('/operations/standups'),
   getWaves: () => get<Wave[]>('/operations/waves'),
+  getWaveDetail: (id: string) => get<{ id: string; timestamp: string; replay: import('../types').WaveReplay }>(`/operations/waves/${id}`),
+  patchWave: (id: string, data: { commitSha: string; commitMessage: string }) => patch_<{ ok: boolean }>(`/operations/waves/${id}`, data),
   getDecisions: () => get<Decision[]>('/operations/decisions'),
 
   // Engine
@@ -65,7 +67,7 @@ export const api = {
   // Roles (Engine)
   createRole: (input: CreateRoleInput) =>
     post<{ ok: boolean; roleId: string }>('/engine/roles', input),
-  updateRole: (id: string, changes: { name?: string }) =>
+  updateRole: (id: string, changes: { name?: string; persona?: string }) =>
     patch_<{ ok: boolean; roleId: string }>(`/engine/roles/${id}`, changes),
   deleteRole: (id: string) =>
     del<{ ok: boolean; removed: string }>(`/engine/roles/${id}`),
@@ -80,22 +82,20 @@ export const api = {
   deleteEmptySessions: () => del<{ deleted: number; ids: string[] }>('/sessions?empty=true'),
   updateSession: (id: string, patch: { title?: string; mode?: 'talk' | 'do' }) =>
     patch_<Session>(`/sessions/${id}`, patch),
+  /** D-014: Send a message to a session (returns SSE EventSource URL) */
+  sendSessionMessage: (sessionId: string, content: string, mode: 'talk' | 'do' = 'talk') =>
+    post<Record<string, unknown>>(`/exec/session/${sessionId}/message`, { content, mode }),
+  /** SCA-011: Abort the active job linked to a session */
+  abortSession: (sessionId: string) =>
+    post<{ ok: boolean; jobId: string }>(`/sessions/${sessionId}/abort`, {}),
+  /** SCA-011: Reply to an awaiting_input job via session */
+  replyToSession: (sessionId: string, message: string) =>
+    post<{ ok: boolean; jobId: string; sessionId: string }>(`/sessions/${sessionId}/reply`, { message }),
 
-  // Jobs
+  // Jobs (start only — monitoring/control via Session API)
   startJob: (params: { type?: string; roleId?: string; task?: string; directive?: string; sourceRole?: string; readOnly?: boolean; targetRole?: string; targetRoles?: string[] }) =>
-    post<{ jobId: string; jobIds?: string[] }>('/jobs', params),
-  getJob: (id: string) => get<JobInfo>(`/jobs/${id}`),
-  listJobs: (filter?: { status?: string; roleId?: string }) => {
-    const params = new URLSearchParams();
-    if (filter?.status) params.set('status', filter.status);
-    if (filter?.roleId) params.set('roleId', filter.roleId);
-    const qs = params.toString();
-    return get<{ jobs: JobInfo[] }>(`/jobs${qs ? '?' + qs : ''}`);
-  },
-  abortJob: (id: string) => del<{ ok: boolean }>(`/jobs/${id}`),
-  replyToJob: (id: string, message: string) =>
-    post<{ jobId: string; roleId: string }>(`/jobs/${id}/reply`, { message }),
-  saveWave: (params: { directive: string; jobIds: string[] }) =>
+    post<{ jobId: string; jobIds?: string[]; waveId?: string; sessionId?: string; sessionIds?: string[] }>('/jobs', params),
+  saveWave: (params: { directive: string; jobIds: string[]; waveId?: string; sessionIds?: string[] }) =>
     post<{ ok: boolean; path: string }>('/waves/save', params),
 
   // Setup / Onboarding
@@ -105,7 +105,39 @@ export const api = {
   scaffold: (input: ScaffoldInput) => post<ScaffoldResult>('/setup/scaffold', input),
   getTeams: () => get<TeamTemplate[]>('/setup/teams'),
   browse: (path?: string) => post<BrowseResult>('/setup/browse', { path }),
+  mkdir: (parentPath: string, name: string) => post<{ ok: boolean; path: string }>('/setup/mkdir', { path: parentPath, name }),
   connectAkb: (path: string) => post<ConnectAkbResult>('/setup/connect-akb', { path }),
+  getRequiredTools: (team: string) => post<{ tools: Array<{ package: string; binary: string; installCmd: string; skillId: string; installed: boolean }> }>('/setup/required-tools', { team }),
+  installTools: (team: string, onEvent: (event: string, data: Record<string, unknown>) => void): Promise<void> => {
+    return fetch(`${BASE}/setup/install-tools`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ team }),
+    }).then(res => {
+      const reader = res.body?.getReader();
+      if (!reader) return;
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      const read = (): Promise<void> => reader.read().then(({ done, value }) => {
+        if (done) return;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        let currentEvent = '';
+        for (const line of lines) {
+          if (line.startsWith('event: ')) currentEvent = line.slice(7);
+          else if (line.startsWith('data: ') && currentEvent) {
+            try { onEvent(currentEvent, JSON.parse(line.slice(6))); } catch { /* ignore */ }
+            currentEvent = '';
+          }
+        }
+        return read();
+      });
+
+      return read();
+    });
+  },
 
   // Knowledge Base
   getKnowledge: () => get<KnowledgeDoc[]>('/knowledge'),
@@ -234,6 +266,14 @@ export const api = {
   getQuestProgress: () => get<{ completedQuests: string[]; activeChapter: number; sideQuestsCompleted: string[]; firstCompletedAt?: string }>('/quests/progress'),
   saveQuestProgress: (data: { completedQuests: string[]; activeChapter: number; sideQuestsCompleted: string[]; firstCompletedAt?: string }) =>
     fetch(`${BASE}/quests/progress`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(r => r.json()),
+
+  // Active Sessions (Port Registry)
+  getActiveSessions: () => get<ActiveSessionsResponse>('/active-sessions'),
+  getActiveSession: (id: string) => get<ActiveSession>(`/active-sessions/${id}`),
+  registerActiveSession: (data: { sessionId: string; roleId: string; task?: string; pid?: number; worktreePath?: string }) =>
+    post<{ ok: boolean; ports: { api: number; vite: number; hmr?: number }; existing: boolean }>('/active-sessions/register', data),
+  deleteActiveSession: (id: string) => del<{ ok: boolean; released: { api: number; vite: number } }>(`/active-sessions/${id}`),
+  cleanupActiveSessions: () => post<{ cleaned: number; remaining: number }>('/active-sessions/cleanup', {}),
 
   // Git Status
   getGitStatus: () => get<GitStatus>('/git/status'),

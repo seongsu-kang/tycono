@@ -46,6 +46,22 @@ function writeCoins(data: CoinsData) {
   writeFileSync(COINS_FILE(), JSON.stringify(data, null, 2) + '\n');
 }
 
+/* ── Internal API (for server-side use) ── */
+
+export function earnCoinsInternal(amount: number, reason: string, ref?: string): { balance: number; skipped: boolean } {
+  const data = readCoins();
+  // Idempotency
+  if (ref && data.transactions.some(t => t.ref === ref && t.amount > 0)) {
+    return { balance: data.balance, skipped: true };
+  }
+  const tx: CoinTransaction = { ts: new Date().toISOString(), amount, reason, ref };
+  data.balance += amount;
+  data.totalEarned += amount;
+  data.transactions.push(tx);
+  writeCoins(data);
+  return { balance: data.balance, skipped: false };
+}
+
 /* ── Routes ── */
 
 // GET /api/coins — current balance + summary
@@ -64,6 +80,11 @@ coinsRouter.post('/earn', (req: Request, res: Response, next: NextFunction) => {
       return;
     }
     const data = readCoins();
+    // Idempotency: skip if same ref already earned (prevents double quest rewards)
+    if (ref && data.transactions.some(t => t.ref === ref && t.amount > 0)) {
+      res.json({ ok: true, balance: data.balance, skipped: true });
+      return;
+    }
     const tx: CoinTransaction = {
       ts: new Date().toISOString(),
       amount,

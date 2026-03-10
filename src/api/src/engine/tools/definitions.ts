@@ -90,6 +90,23 @@ export const DISPATCH_TOOL: ToolDefinition = {
 };
 
 /**
+ * Bash 실행 도구 — 코드 프로젝트에서 시스템 명령 실행 (EG-001)
+ */
+export const BASH_TOOL: ToolDefinition = {
+  name: 'bash_execute',
+  description: 'Execute a shell command in the code project directory. Use for git, npm, tsc, node, test runners, and build tools. Commands run in the codeRoot directory (not company knowledge base). Dangerous commands (rm -rf, sudo, etc.) are blocked.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      command: { type: 'string', description: 'Shell command to execute' },
+      timeout: { type: 'number', description: 'Timeout in milliseconds (default: 30000, max: 120000)' },
+      cwd: { type: 'string', description: 'Working directory relative to codeRoot (default: ".")' },
+    },
+    required: ['command'],
+  },
+};
+
+/**
  * 상담 도구 — 모든 Role에게 제공 (동료/상관/부하에게 질문)
  */
 export const CONSULT_TOOL: ToolDefinition = {
@@ -108,12 +125,16 @@ export const CONSULT_TOOL: ToolDefinition = {
 /**
  * Role에 따른 도구 목록 반환
  */
-export function getToolsForRole(hasSubordinates: boolean, readOnly: boolean): ToolDefinition[] {
+export function getToolsForRole(hasSubordinates: boolean, readOnly: boolean, hasBash = false): ToolDefinition[] {
   if (readOnly) {
     return [...READ_TOOLS];
   }
 
   const tools = [...READ_TOOLS, ...WRITE_TOOLS, CONSULT_TOOL];
+
+  if (hasBash) {
+    tools.push(BASH_TOOL);
+  }
 
   if (hasSubordinates) {
     tools.push(DISPATCH_TOOL);

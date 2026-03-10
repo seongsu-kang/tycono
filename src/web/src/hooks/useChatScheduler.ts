@@ -30,6 +30,11 @@ interface UseChatSchedulerProps {
   hasApiKey?: boolean;
 }
 
+export interface UseChatSchedulerReturn {
+  /** Trigger reactions after CEO sends a message in a channel */
+  triggerCeoReaction: (channelId: string) => void;
+}
+
 export function useChatScheduler({
   roles,
   roleStatuses,
@@ -40,7 +45,7 @@ export function useChatScheduler({
   speechSettings,
   engineType,
   hasApiKey,
-}: UseChatSchedulerProps): void {
+}: UseChatSchedulerProps): UseChatSchedulerReturn {
 
   // Determine if chat is active
   const effectiveMode = speechSettings?.mode === 'auto'
@@ -214,4 +219,19 @@ export function useChatScheduler({
 
     return () => clearInterval(interval);
   }, [chatEnabled, intervalMs, generateChat, triggerReaction]);
+
+  /** CEO sent a message — trigger reactions from idle members */
+  const triggerCeoReaction = useCallback((channelId: string) => {
+    if (!chatEnabled) return;
+    const channel = channelsRef.current.find(c => c.id === channelId);
+    if (!channel) return;
+
+    // Reset chain and trigger immediate reaction
+    chainCount.current = 0;
+    setTimeout(() => {
+      triggerReaction(channel, 'ceo');
+    }, REACTION_DELAY_MS);
+  }, [chatEnabled, triggerReaction]);
+
+  return { triggerCeoReaction };
 }

@@ -5,7 +5,7 @@
     "level": "c-level",
     "reportsTo": "CEO",
     "persona": "Technical leader responsible for architecture, engineering standards, and technology strategy.",
-    "defaultSkills": ["knowledge-gate", "akb-linter"]
+    "defaultSkills": ["knowledge-gate", "akb-linter", "agent-browser"]
   },
   {
     "id": "pm",
@@ -13,7 +13,7 @@
     "level": "team-lead",
     "reportsTo": "CTO",
     "persona": "Product strategist who defines requirements, prioritizes features, and manages the roadmap.",
-    "defaultSkills": ["knowledge-gate", "akb-linter"]
+    "defaultSkills": ["knowledge-gate", "akb-linter", "agent-browser"]
   },
   {
     "id": "engineer",
@@ -21,6 +21,6 @@
     "level": "member",
     "reportsTo": "CTO",
     "persona": "Full-stack developer who implements features, fixes bugs, and writes tests.",
-    "defaultSkills": ["knowledge-gate"]
+    "defaultSkills": ["knowledge-gate", "agent-browser"]
   }
 ]

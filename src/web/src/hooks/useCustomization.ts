@@ -26,10 +26,21 @@ function loadTheme(): OfficeTheme {
   return 'default';
 }
 
+/** All possible CSS variable keys across all themes — used to clean up stale vars on switch */
+const ALL_THEME_KEYS = new Set<string>();
+for (const t of Object.values(OFFICE_THEMES)) {
+  for (const key of Object.keys(t.vars)) ALL_THEME_KEYS.add(key);
+}
+
 function applyThemeVars(theme: OfficeTheme): void {
   const vars = OFFICE_THEMES[theme]?.vars;
   if (!vars) return;
   const root = document.documentElement;
+  // Remove all theme vars first (cleans up vars from previous theme that new theme doesn't define)
+  for (const key of ALL_THEME_KEYS) {
+    if (!(key in vars)) root.style.removeProperty(key);
+  }
+  // Apply new theme vars
   for (const [key, value] of Object.entries(vars)) {
     root.style.setProperty(key, value);
   }

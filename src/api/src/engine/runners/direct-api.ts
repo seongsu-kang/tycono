@@ -35,6 +35,7 @@ export class DirectApiRunner implements ExecutionRunner {
       orgTree: config.orgTree,
       readOnly: config.readOnly,
       maxTurns: config.maxTurns,
+      codeRoot: config.codeRoot,
       llm: this.llm,
       abortSignal: abortController.signal,
       jobId: config.jobId,

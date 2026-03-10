@@ -144,6 +144,67 @@ export const MASCOT_IDLE_TONGUE: Pixel[] = [
   { x: 4, y: 5, w: 1, h: 1, c: K },
 ];
 
+/* ── Belly-up (발라당) — top-down view: belly facing up, 4 paws spread ~9×10 ── */
+const B = '#FFD4D4';  // belly pink
+const P = '#FFCCD5';  // paw pad pink
+
+//  Top-down belly-up: like the down-facing sprite but belly exposed
+//  Head at top (y=0-4), belly in center, paws spread to sides
+export const MASCOT_BELLY_UP: Pixel[] = [
+  // Head fluff top (wider)
+  { x: 2, y: 0, w: 1, h: 1, c: D }, { x: 3, y: 0, w: 1, h: 1, c: C }, { x: 4, y: 0, w: 1, h: 1, c: W }, { x: 5, y: 0, w: 1, h: 1, c: H }, { x: 6, y: 0, w: 1, h: 1, c: C }, { x: 7, y: 0, w: 1, h: 1, c: D },
+  // Head upper
+  { x: 1, y: 1, w: 1, h: 1, c: D }, { x: 2, y: 1, w: 1, h: 1, c: C }, { x: 3, y: 1, w: 1, h: 1, c: W }, { x: 4, y: 1, w: 1, h: 1, c: H }, { x: 5, y: 1, w: 1, h: 1, c: W }, { x: 6, y: 1, w: 1, h: 1, c: H }, { x: 7, y: 1, w: 1, h: 1, c: C }, { x: 8, y: 1, w: 1, h: 1, c: D },
+  // Eyes row (wider face)
+  { x: 1, y: 2, w: 1, h: 1, c: C }, { x: 2, y: 2, w: 1, h: 1, c: W }, { x: 3, y: 2, w: 1, h: 1, c: E }, { x: 4, y: 2, w: 1, h: 1, c: W }, { x: 5, y: 2, w: 1, h: 1, c: W }, { x: 6, y: 2, w: 1, h: 1, c: E }, { x: 7, y: 2, w: 1, h: 1, c: W }, { x: 8, y: 2, w: 1, h: 1, c: C },
+  // Nose + tongue
+  { x: 2, y: 3, w: 1, h: 1, c: C }, { x: 3, y: 3, w: 1, h: 1, c: W }, { x: 4, y: 3, w: 1, h: 1, c: N }, { x: 5, y: 3, w: 1, h: 1, c: K }, { x: 6, y: 3, w: 1, h: 1, c: W }, { x: 7, y: 3, w: 1, h: 1, c: C },
+  // Neck/chest
+  { x: 2, y: 4, w: 1, h: 1, c: D }, { x: 3, y: 4, w: 1, h: 1, c: C }, { x: 4, y: 4, w: 1, h: 1, c: W }, { x: 5, y: 4, w: 1, h: 1, c: W }, { x: 6, y: 4, w: 1, h: 1, c: C }, { x: 7, y: 4, w: 1, h: 1, c: D },
+  // Front paws + belly top
+  { x: 0, y: 5, w: 1, h: 1, c: C }, { x: 1, y: 5, w: 1, h: 1, c: P },
+  { x: 2, y: 5, w: 1, h: 1, c: W }, { x: 3, y: 5, w: 1, h: 1, c: B }, { x: 4, y: 5, w: 1, h: 1, c: B }, { x: 5, y: 5, w: 1, h: 1, c: B }, { x: 6, y: 5, w: 1, h: 1, c: B }, { x: 7, y: 5, w: 1, h: 1, c: W },
+  { x: 8, y: 5, w: 1, h: 1, c: P }, { x: 9, y: 5, w: 1, h: 1, c: C },
+  // Belly center (big pink!)
+  { x: 1, y: 6, w: 1, h: 1, c: C }, { x: 2, y: 6, w: 1, h: 1, c: W }, { x: 3, y: 6, w: 1, h: 1, c: B }, { x: 4, y: 6, w: 1, h: 1, c: P }, { x: 5, y: 6, w: 1, h: 1, c: P }, { x: 6, y: 6, w: 1, h: 1, c: B }, { x: 7, y: 6, w: 1, h: 1, c: W }, { x: 8, y: 6, w: 1, h: 1, c: C },
+  // Belly bottom
+  { x: 2, y: 7, w: 1, h: 1, c: W }, { x: 3, y: 7, w: 1, h: 1, c: B }, { x: 4, y: 7, w: 1, h: 1, c: B }, { x: 5, y: 7, w: 1, h: 1, c: B }, { x: 6, y: 7, w: 1, h: 1, c: B }, { x: 7, y: 7, w: 1, h: 1, c: W },
+  // Back paws + body sides
+  { x: 0, y: 8, w: 1, h: 1, c: C }, { x: 1, y: 8, w: 1, h: 1, c: P },
+  { x: 2, y: 8, w: 1, h: 1, c: D }, { x: 3, y: 8, w: 1, h: 1, c: C }, { x: 4, y: 8, w: 1, h: 1, c: W }, { x: 5, y: 8, w: 1, h: 1, c: W }, { x: 6, y: 8, w: 1, h: 1, c: C }, { x: 7, y: 8, w: 1, h: 1, c: D },
+  { x: 8, y: 8, w: 1, h: 1, c: P }, { x: 9, y: 8, w: 1, h: 1, c: C },
+  // Tail (2px)
+  { x: 4, y: 9, w: 1, h: 1, c: W }, { x: 5, y: 9, w: 1, h: 1, c: H },
+];
+
+// Frame B: happy eyes (^_^) + tail wags right
+export const MASCOT_BELLY_UP_B: Pixel[] = [
+  // Head fluff top
+  { x: 2, y: 0, w: 1, h: 1, c: D }, { x: 3, y: 0, w: 1, h: 1, c: C }, { x: 4, y: 0, w: 1, h: 1, c: W }, { x: 5, y: 0, w: 1, h: 1, c: H }, { x: 6, y: 0, w: 1, h: 1, c: C }, { x: 7, y: 0, w: 1, h: 1, c: D },
+  // Head upper
+  { x: 1, y: 1, w: 1, h: 1, c: D }, { x: 2, y: 1, w: 1, h: 1, c: C }, { x: 3, y: 1, w: 1, h: 1, c: W }, { x: 4, y: 1, w: 1, h: 1, c: H }, { x: 5, y: 1, w: 1, h: 1, c: W }, { x: 6, y: 1, w: 1, h: 1, c: H }, { x: 7, y: 1, w: 1, h: 1, c: C }, { x: 8, y: 1, w: 1, h: 1, c: D },
+  // Happy eyes ^_^ (C instead of E = closed/squinting)
+  { x: 1, y: 2, w: 1, h: 1, c: C }, { x: 2, y: 2, w: 1, h: 1, c: W }, { x: 3, y: 2, w: 1, h: 1, c: C }, { x: 4, y: 2, w: 1, h: 1, c: W }, { x: 5, y: 2, w: 1, h: 1, c: W }, { x: 6, y: 2, w: 1, h: 1, c: C }, { x: 7, y: 2, w: 1, h: 1, c: W }, { x: 8, y: 2, w: 1, h: 1, c: C },
+  // Nose + tongue
+  { x: 2, y: 3, w: 1, h: 1, c: C }, { x: 3, y: 3, w: 1, h: 1, c: W }, { x: 4, y: 3, w: 1, h: 1, c: N }, { x: 5, y: 3, w: 1, h: 1, c: K }, { x: 6, y: 3, w: 1, h: 1, c: W }, { x: 7, y: 3, w: 1, h: 1, c: C },
+  // Neck/chest
+  { x: 2, y: 4, w: 1, h: 1, c: D }, { x: 3, y: 4, w: 1, h: 1, c: C }, { x: 4, y: 4, w: 1, h: 1, c: W }, { x: 5, y: 4, w: 1, h: 1, c: W }, { x: 6, y: 4, w: 1, h: 1, c: C }, { x: 7, y: 4, w: 1, h: 1, c: D },
+  // Front paws + belly top
+  { x: 0, y: 5, w: 1, h: 1, c: C }, { x: 1, y: 5, w: 1, h: 1, c: P },
+  { x: 2, y: 5, w: 1, h: 1, c: W }, { x: 3, y: 5, w: 1, h: 1, c: B }, { x: 4, y: 5, w: 1, h: 1, c: B }, { x: 5, y: 5, w: 1, h: 1, c: B }, { x: 6, y: 5, w: 1, h: 1, c: B }, { x: 7, y: 5, w: 1, h: 1, c: W },
+  { x: 8, y: 5, w: 1, h: 1, c: P }, { x: 9, y: 5, w: 1, h: 1, c: C },
+  // Belly center
+  { x: 1, y: 6, w: 1, h: 1, c: C }, { x: 2, y: 6, w: 1, h: 1, c: W }, { x: 3, y: 6, w: 1, h: 1, c: B }, { x: 4, y: 6, w: 1, h: 1, c: P }, { x: 5, y: 6, w: 1, h: 1, c: P }, { x: 6, y: 6, w: 1, h: 1, c: B }, { x: 7, y: 6, w: 1, h: 1, c: W }, { x: 8, y: 6, w: 1, h: 1, c: C },
+  // Belly bottom
+  { x: 2, y: 7, w: 1, h: 1, c: W }, { x: 3, y: 7, w: 1, h: 1, c: B }, { x: 4, y: 7, w: 1, h: 1, c: B }, { x: 5, y: 7, w: 1, h: 1, c: B }, { x: 6, y: 7, w: 1, h: 1, c: B }, { x: 7, y: 7, w: 1, h: 1, c: W },
+  // Back paws + body sides
+  { x: 0, y: 8, w: 1, h: 1, c: C }, { x: 1, y: 8, w: 1, h: 1, c: P },
+  { x: 2, y: 8, w: 1, h: 1, c: D }, { x: 3, y: 8, w: 1, h: 1, c: C }, { x: 4, y: 8, w: 1, h: 1, c: W }, { x: 5, y: 8, w: 1, h: 1, c: W }, { x: 6, y: 8, w: 1, h: 1, c: C }, { x: 7, y: 8, w: 1, h: 1, c: D },
+  { x: 8, y: 8, w: 1, h: 1, c: P }, { x: 9, y: 8, w: 1, h: 1, c: C },
+  // Tail wagged right (2px)
+  { x: 5, y: 9, w: 1, h: 1, c: W }, { x: 6, y: 9, w: 1, h: 1, c: H },
+];
+
 /* ── Shadow (wider for side views, but we use a generic one) ── */
 export const MASCOT_SHADOW: Pixel[] = [
   { x: 1, y: 9, w: 7, h: 1, c: '#100A06', a: 0.12 },
@@ -152,4 +213,9 @@ export const MASCOT_SHADOW: Pixel[] = [
 /* ── Side-view shadow (wider) ── */
 export const MASCOT_SHADOW_SIDE: Pixel[] = [
   { x: 2, y: 6, w: 9, h: 1, c: '#100A06', a: 0.12 },
+];
+
+/* ── Belly-up shadow (wider body spread) ── */
+export const MASCOT_SHADOW_BELLY: Pixel[] = [
+  { x: 1, y: 10, w: 8, h: 1, c: '#100A06', a: 0.12 },
 ];

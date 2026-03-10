@@ -43,7 +43,37 @@ export interface Standup {
 export interface Wave {
   id: string;
   timestamp: string;
-  content: string;
+  directive: string;
+  rolesCount: number;
+  startedAt: string;
+  commit?: { sha: string; message: string; committedAt: string };
+}
+
+export interface WaveReplay {
+  id: string;
+  directive: string;
+  startedAt: string;
+  duration: number;
+  roles: WaveReplayRole[];
+  /** D-014: Server-generated wave ID */
+  waveId?: string;
+  /** D-014: Session IDs created for this wave (one per role) */
+  sessionIds?: string[];
+}
+
+export interface WaveReplayRole {
+  roleId: string;
+  roleName: string;
+  jobId: string;
+  status: string;
+  events: ActivityEvent[];
+  childJobs: Array<{
+    roleId: string;
+    roleName: string;
+    jobId: string;
+    status: string;
+    events: ActivityEvent[];
+  }>;
 }
 
 export interface Decision {
@@ -91,9 +121,18 @@ export interface Message {
   thinking?: string;
   streamEvents?: StreamEvent[];
   type: 'conversation' | 'directive' | 'system';
-  status?: 'streaming' | 'done' | 'error';
+  status?: 'streaming' | 'done' | 'error' | 'awaiting_input';
   timestamp: string;
   attachments?: ImageAttachment[];
+
+  /* D-014: Session-Centric extensions */
+  events?: ActivityEvent[];
+  dispatches?: Array<{ sessionId: string; roleId: string }>;
+  jobId?: string;
+  readOnly?: boolean;
+  turns?: number;
+  tokens?: { input: number; output: number };
+  knowledgeDebt?: Array<{ type: string; file?: string; message: string }>;
 }
 
 export interface RoleSource {
@@ -213,8 +252,10 @@ export interface Session {
   status: 'active' | 'closed';
   createdAt: string;
   updatedAt: string;
-  source?: 'chat' | 'wave';
+  source?: 'chat' | 'wave' | 'dispatch';
   jobId?: string;
+  parentSessionId?: string;
+  waveId?: string;
 }
 
 /* ─── Onboarding / Setup Types ──────────── */
@@ -345,4 +386,31 @@ export interface GitStatus {
     mergedAt: string;
     roleId: string;
   };
+}
+
+/* ─── Active Session Types ──────────────────── */
+
+export interface PortAllocation {
+  api: number;
+  vite: number;
+  hmr?: number;
+}
+
+export interface ActiveSession {
+  sessionId: string;
+  roleId: string;
+  task: string;
+  ports: PortAllocation;
+  worktreePath?: string;
+  pid?: number;
+  startedAt: string;
+  status: 'active' | 'idle' | 'dead';
+  jobStatus?: string | null;
+  roleName?: string;
+  alive?: boolean | null;
+}
+
+export interface ActiveSessionsResponse {
+  sessions: ActiveSession[];
+  summary: { active: number; totalPorts: number };
 }

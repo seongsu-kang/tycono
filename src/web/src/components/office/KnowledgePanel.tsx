@@ -1777,15 +1777,19 @@ const DEFAULT_WIDTH = 500;
 const MIN_WIDTH = 360;
 const MAX_WIDTH = 700;
 
-function usePanelResize(terminalWidth: number) {
-  const [panelW, setPanelW] = useState(DEFAULT_WIDTH);
+function usePanelResize(terminalWidth: number, defaultWidth?: number, onMaximize?: () => void) {
+  const initW = defaultWidth ?? DEFAULT_WIDTH;
+  const [panelW, setPanelW] = useState(initW);
   const [isResizing, setIsResizing] = useState(false);
   const startXRef = useRef(0);
   const startWidthRef = useRef(0);
+  const maximizeRef = useRef(onMaximize);
+  maximizeRef.current = onMaximize;
 
   const hasTerminal = terminalWidth > 0;
   const panelRight = hasTerminal ? terminalWidth : 0;
-  const maxAvailable = hasTerminal ? Math.max(MIN_WIDTH, window.innerWidth - terminalWidth - 100) : MAX_WIDTH;
+  const maxW = Math.max(MAX_WIDTH, initW);
+  const maxAvailable = hasTerminal ? Math.max(MIN_WIDTH, window.innerWidth - terminalWidth - 100) : maxW;
   const panelWidth = Math.min(panelW, maxAvailable);
 
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -1794,16 +1798,23 @@ function usePanelResize(terminalWidth: number) {
     startWidthRef.current = panelWidth;
     setIsResizing(true);
 
-    const onMove = (ev: MouseEvent) => {
-      const delta = startXRef.current - ev.clientX;
-      const newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startWidthRef.current + delta));
-      setPanelW(newWidth);
-    };
-
     const onUp = () => {
       setIsResizing(false);
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
+    };
+
+    const onMove = (ev: MouseEvent) => {
+      const delta = startXRef.current - ev.clientX;
+      // Auto-maximize: if dragged past 60% of viewport width, switch to Pro View
+      const rawWidth = startWidthRef.current + delta;
+      if (rawWidth >= window.innerWidth * 0.6 && maximizeRef.current) {
+        onUp();
+        maximizeRef.current();
+        return;
+      }
+      const newWidth = Math.min(maxW, Math.max(MIN_WIDTH, rawWidth));
+      setPanelW(newWidth);
     };
 
     document.addEventListener('mousemove', onMove);
@@ -1821,9 +1832,10 @@ interface Props {
   onRefresh: () => void;
   terminalWidth?: number;
   initialDocId?: string;
+  onMaximize?: () => void;
 }
 
-export default function KnowledgePanel({ docs, onClose, onRefresh: _onRefresh, terminalWidth = 0, initialDocId: _initialDocId }: Props) {
+export default function KnowledgePanel({ docs, onClose, onRefresh: _onRefresh, terminalWidth = 0, initialDocId: _initialDocId, onMaximize }: Props) {
   // Load view mode from localStorage, default to 'graph'
   const [view, setView] = useState<'graph' | 'tree' | 'list'>(() => {
     const saved = localStorage.getItem('kb-view-mode');
@@ -1895,7 +1907,7 @@ export default function KnowledgePanel({ docs, onClose, onRefresh: _onRefresh, t
     });
   };
 
-  const { panelRight, panelWidth, isResizing, handleResizeStart } = usePanelResize(terminalWidth);
+  const { panelRight, panelWidth, isResizing, handleResizeStart } = usePanelResize(terminalWidth, undefined, onMaximize);
 
   const handleGraphNodeClick = (doc: KnowledgeDoc) => {
     setGraphSelectedDocId(doc.id);
@@ -1922,12 +1934,23 @@ export default function KnowledgePanel({ docs, onClose, onRefresh: _onRefresh, t
 
         {/* Header */}
         <div className="p-5 text-white relative" style={{ background: '#16a34a' }}>
-          <button
-            onClick={onClose}
-            className="absolute top-3 right-3 w-7 h-7 rounded-full bg-white/20 text-white flex items-center justify-center text-lg hover:bg-white/30 cursor-pointer"
-          >
-            {'\u00d7'}
-          </button>
+          <div className="absolute top-3 right-3 flex items-center gap-1">
+            {onMaximize && (
+              <button
+                onClick={onMaximize}
+                className="w-7 h-7 rounded-full bg-white/20 text-white flex items-center justify-center text-sm hover:bg-white/30 cursor-pointer"
+                title="Maximize (Pro View)"
+              >
+                {'\u2922'}
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="w-7 h-7 rounded-full bg-white/20 text-white flex items-center justify-center text-lg hover:bg-white/30 cursor-pointer"
+            >
+              {'\u00d7'}
+            </button>
+          </div>
           <div className="text-lg font-bold">{'\u{1F4DA}'} Knowledge Base</div>
           <div className="text-xs opacity-80 mt-0.5">{docs.length} documents</div>
         </div>

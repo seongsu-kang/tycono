@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { COMPANY_ROOT } from './file-reader.js';
+import type { ActivityEvent } from './activity-stream.js';
 
 /* ─── Types ─────────────────────────────── */
 
@@ -11,15 +12,39 @@ export interface ImageAttachment {
   mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp';
 }
 
+/** Dispatch link — reference to a child session created via dispatch */
+export interface DispatchLink {
+  sessionId: string;
+  roleId: string;
+}
+
 export interface Message {
   id: string;
   from: 'ceo' | 'role';
   content: string;
   type: 'conversation' | 'directive' | 'system';
-  status?: 'streaming' | 'done' | 'error';
+  status?: 'streaming' | 'done' | 'error' | 'awaiting_input';
   timestamp: string;
   attachments?: ImageAttachment[];
+
+  /* ─── D-014: Session-Centric extensions ─── */
+  /** Execution events embedded in this message (replaces separate JSONL) */
+  events?: ActivityEvent[];
+  /** Child sessions spawned by dispatch during this message's execution */
+  dispatches?: DispatchLink[];
+  /** Internal job ID for runtime tracking (not exposed to UI) */
+  jobId?: string;
+  /** True for consult/ask messages (read-only execution) */
+  readOnly?: boolean;
+  /** Execution stats */
+  turns?: number;
+  tokens?: { input: number; output: number };
+  /** KP-006: Knowledge debt warnings from Post-K check */
+  knowledgeDebt?: Array<{ type: string; file?: string; message: string }>;
 }
+
+/** How this session was created */
+export type SessionSource = 'chat' | 'wave' | 'dispatch';
 
 export interface Session {
   id: string;
@@ -30,6 +55,14 @@ export interface Session {
   status: 'active' | 'closed';
   createdAt: string;
   updatedAt: string;
+
+  /* ─── D-014: Session-Centric extensions ─── */
+  /** How this session was created */
+  source?: SessionSource;
+  /** Parent session ID (when created via dispatch) */
+  parentSessionId?: string;
+  /** Wave ID (when created via wave) */
+  waveId?: string;
 }
 
 /* ─── Session directory ─────────────────── */
@@ -99,7 +132,15 @@ function ensureLoaded(): void {
 
 /* ─── Public API ────────────────────────── */
 
-export function createSession(roleId: string, mode: 'talk' | 'do' = 'talk'): Session {
+/** Options for creating a session with D-014 extensions */
+export interface CreateSessionOptions {
+  mode?: 'talk' | 'do';
+  source?: SessionSource;
+  parentSessionId?: string;
+  waveId?: string;
+}
+
+export function createSession(roleId: string, opts: CreateSessionOptions = {}): Session {
   ensureLoaded();
   const id = `ses-${roleId}-${Date.now()}`;
   const now = new Date().toISOString();
@@ -107,11 +148,14 @@ export function createSession(roleId: string, mode: 'talk' | 'do' = 'talk'): Ses
     id,
     roleId,
     title: `New ${roleId.toUpperCase()} session`,
-    mode,
+    mode: opts.mode ?? 'talk',
     messages: [],
     status: 'active',
     createdAt: now,
     updatedAt: now,
+    ...(opts.source && { source: opts.source }),
+    ...(opts.parentSessionId && { parentSessionId: opts.parentSessionId }),
+    ...(opts.waveId && { waveId: opts.waveId }),
   };
   cache.set(id, session);
   writeImmediate(session);
@@ -150,7 +194,10 @@ export function addMessage(sessionId: string, msg: Message, streaming = false): 
   return session;
 }
 
-export function updateMessage(sessionId: string, messageId: string, updates: Partial<Pick<Message, 'content' | 'status'>>): Session | undefined {
+/** Fields that can be updated on a message */
+export type MessageUpdate = Partial<Pick<Message, 'content' | 'status' | 'turns' | 'tokens' | 'dispatches' | 'readOnly' | 'knowledgeDebt'>>;
+
+export function updateMessage(sessionId: string, messageId: string, updates: MessageUpdate): Session | undefined {
   const session = cache.get(sessionId);
   if (!session) return undefined;
 
@@ -159,6 +206,11 @@ export function updateMessage(sessionId: string, messageId: string, updates: Par
 
   if (updates.content !== undefined) msg.content = updates.content;
   if (updates.status !== undefined) msg.status = updates.status;
+  if (updates.turns !== undefined) msg.turns = updates.turns;
+  if (updates.tokens !== undefined) msg.tokens = updates.tokens;
+  if (updates.dispatches !== undefined) msg.dispatches = updates.dispatches;
+  if (updates.readOnly !== undefined) msg.readOnly = updates.readOnly;
+  if (updates.knowledgeDebt !== undefined) msg.knowledgeDebt = updates.knowledgeDebt;
   session.updatedAt = new Date().toISOString();
 
   if (updates.status === 'done' || updates.status === 'error') {
@@ -169,12 +221,33 @@ export function updateMessage(sessionId: string, messageId: string, updates: Par
   return session;
 }
 
-export function updateSession(id: string, updates: Partial<Pick<Session, 'title' | 'mode'>>): Session | undefined {
+/** Append an execution event to a message (D-014: events embedded in message) */
+export function appendMessageEvent(sessionId: string, messageId: string, event: ActivityEvent): boolean {
+  const session = cache.get(sessionId);
+  if (!session) return false;
+
+  const msg = session.messages.find((m) => m.id === messageId);
+  if (!msg) return false;
+
+  if (!msg.events) msg.events = [];
+  msg.events.push(event);
+  session.updatedAt = new Date().toISOString();
+
+  // Debounce during streaming — events come in fast
+  debouncedWrite(session);
+  return true;
+}
+
+export function updateSession(id: string, updates: Partial<Pick<Session, 'title' | 'mode' | 'status' | 'source' | 'parentSessionId' | 'waveId'>>): Session | undefined {
   const session = cache.get(id);
   if (!session) return undefined;
 
   if (updates.title !== undefined) session.title = updates.title;
   if (updates.mode !== undefined) session.mode = updates.mode;
+  if (updates.status !== undefined) session.status = updates.status;
+  if (updates.source !== undefined) session.source = updates.source;
+  if (updates.parentSessionId !== undefined) session.parentSessionId = updates.parentSessionId;
+  if (updates.waveId !== undefined) session.waveId = updates.waveId;
   session.updatedAt = new Date().toISOString();
   writeImmediate(session);
   return session;

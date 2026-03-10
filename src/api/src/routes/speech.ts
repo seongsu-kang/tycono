@@ -14,13 +14,75 @@ import { buildOrgTree } from '../engine/index.js';
 import { parseMarkdownTable, extractBoldKeyValues } from '../services/markdown-parser.js';
 import {
   AnthropicProvider, ClaudeCliProvider,
-  type LLMProvider, type ToolDefinition, type LLMMessage, type LLMResponse, type MessageContent,
+  type LLMProvider, type ToolDefinition, type LLMMessage, type LLMResponse, type MessageContent, type ChatOptions,
 } from '../engine/llm-adapter.js';
 import { TokenLedger } from '../services/token-ledger.js';
 import { readConfig } from '../services/company-config.js';
 import { calcLevel } from '../utils/role-level.js';
 
 export const speechRouter = Router();
+
+/* ══════════════════════════════════════════════════
+ * Post-processing — OpenClaw-inspired filtering layer
+ * ══════════════════════════════════════════════════ */
+
+const MIN_DUPLICATE_TEXT_LENGTH = 10;
+
+/** Exact match: entire message is [SILENT] (with optional whitespace) */
+function isSilentReply(text: string): boolean {
+  return /^\s*\[SILENT\]\s*$/i.test(text);
+}
+
+/** Strip trailing [SILENT] from mixed content */
+function stripSilentToken(text: string): string {
+  return text.replace(/(?:^|\s+)\[SILENT\]\s*$/i, '').trim();
+}
+
+/** Normalize for duplicate comparison (OpenClaw pattern) */
+function normalizeForComparison(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/\p{Emoji_Presentation}|\p{Extended_Pictographic}/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Check if message is a duplicate of any history message (substring match) */
+function isDuplicateMessage(text: string, historyTexts: string[]): boolean {
+  const normalized = normalizeForComparison(text);
+  if (!normalized || normalized.length < MIN_DUPLICATE_TEXT_LENGTH) return false;
+
+  return historyTexts.some(sent => {
+    const normSent = normalizeForComparison(sent);
+    if (!normSent || normSent.length < MIN_DUPLICATE_TEXT_LENGTH) return false;
+    return normalized.includes(normSent) || normSent.includes(normalized);
+  });
+}
+
+/** Post-process LLM chat output: sanitize, detect silence, check duplicates */
+function postProcessChatMessage(
+  raw: string,
+  historyTexts: string[],
+): string {
+  // 1. Clean quotes
+  let text = raw.replace(/^["']|["']$/g, '').trim();
+
+  // 2. Strip CLI noise
+  if (text.startsWith('Error: Reached max turns') || !text) return '';
+
+  // 3. Exact [SILENT] → suppress
+  if (isSilentReply(text)) return '';
+
+  // 4. Trailing [SILENT] → strip it
+  text = stripSilentToken(text);
+  if (!text) return '';
+
+  // 5. Duplicate detection (substring match against recent history)
+  if (isDuplicateMessage(text, historyTexts)) return '';
+
+  return text;
+}
 
 /* ══════════════════════════════════════════════════
  * AKB Tools — Let chat roles explore company knowledge
@@ -147,13 +209,17 @@ async function chatWithTools(
   systemPrompt: string,
   initialMessages: LLMMessage[],
   useTools: boolean,
+  maxTokens?: number,
 ): Promise<{ text: string; totalUsage: { inputTokens: number; outputTokens: number } }> {
   const messages: LLMMessage[] = [...initialMessages];
   const totalUsage = { inputTokens: 0, outputTokens: 0 };
   const tools = useTools ? AKB_TOOLS : undefined;
 
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
-    const response = await provider.chat(systemPrompt, messages, tools);
+    // During tool exploration use higher limit; cap only final text response
+    const isToolPhase = tools && round < MAX_TOOL_ROUNDS;
+    const opts: ChatOptions | undefined = isToolPhase ? { maxTokens: 1024 } : maxTokens ? { maxTokens } : undefined;
+    const response = await provider.chat(systemPrompt, messages, tools, undefined, opts);
     totalUsage.inputTokens += response.usage.inputTokens;
     totalUsage.outputTokens += response.usage.outputTokens;
 
@@ -312,23 +378,20 @@ function buildRoleContext(roleId: string): string {
     }
   } catch { /* no profile */ }
 
-  // 1. Role's journal — latest entry with meaningful content (headers as summary)
+  // 1. Role's journal — latest entry only, compact summary (not full header dump)
   try {
     const journalDir = path.join(COMPANY_ROOT, 'roles', roleId, 'journal');
     if (fs.existsSync(journalDir)) {
       const files = fs.readdirSync(journalDir)
         .filter(f => f.endsWith('.md'))
         .sort()
-        .slice(-2);
+        .slice(-1); // Only latest entry
       for (const file of files) {
         const content = fs.readFileSync(path.join(journalDir, file), 'utf-8');
-        // Extract all ### headers as work summary + first paragraph of each
-        const sections = content.match(/###\s+.+/g) ?? [];
         const title = content.match(/^#\s+(.+)/m)?.[1] ?? file;
-        const summary = sections.length > 0
-          ? sections.map(s => `  ${s.replace(/^###\s+/, '- ')}`).join('\n')
-          : content.split('\n').slice(1).join('\n').trim().slice(0, 300);
-        parts.push(`[Your Work Log: ${file}] ${title}\n${summary}`);
+        // Take first 300 chars of actual content (skip title line)
+        const body = content.split('\n').slice(1).join('\n').trim().slice(0, 300);
+        parts.push(`[Your Recent Work: ${file}] ${title}\n${body}`);
       }
     }
   } catch { /* no journal */ }
@@ -359,20 +422,37 @@ function buildRoleContext(roleId: string): string {
     }
   } catch { /* no tasks */ }
 
-  // 3. Recent waves (broadened matching: roleId, role name, level keywords)
+  // 3. Recent waves — only from last 7 days (stale waves cause repetitive references)
   try {
     const wavesDir = path.join(COMPANY_ROOT, 'operations', 'waves');
     if (fs.existsSync(wavesDir)) {
-      // Also get role name for matching
       const tree = buildOrgTree(COMPANY_ROOT);
       const node = tree.nodes.get(roleId);
       const roleName = node?.name?.toLowerCase() ?? '';
       const roleLevel = node?.level?.toLowerCase() ?? '';
 
+      // Parse date from filename: "20260310-1200.md" or "wave-2026-03-10-xxx.md" or "2026-03-10-xxx.md"
+      const now = Date.now();
+      const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+
+      function parseDateFromFilename(f: string): number | null {
+        // Format: 20260310-xxxx.md
+        let m = f.match(/^(\d{4})(\d{2})(\d{2})/);
+        if (m) return new Date(`${m[1]}-${m[2]}-${m[3]}`).getTime();
+        // Format: wave-2026-03-10-xxx.md or 2026-03-10-xxx.md
+        m = f.match(/(\d{4})-(\d{2})-(\d{2})/);
+        if (m) return new Date(`${m[1]}-${m[2]}-${m[3]}`).getTime();
+        return null;
+      }
+
       const waveFiles = fs.readdirSync(wavesDir)
         .filter(f => f.endsWith('.md'))
-        .sort()
-        .slice(-10);
+        .filter(f => {
+          const fileDate = parseDateFromFilename(f);
+          if (!fileDate) return false;
+          return (now - fileDate) < SEVEN_DAYS;
+        })
+        .sort();
       const relevant: string[] = [];
       for (const file of waveFiles.reverse()) {
         if (relevant.length >= 2) break;
@@ -449,65 +529,139 @@ function buildRoleContext(roleId: string): string {
 }
 
 /**
- * Role-specific chat style guidelines.
- * Makes each role sound distinctly different in conversations.
+ * SOUL Pattern — Few-shot example dialogues per role.
+ * 2-3 example exchanges teach the model tone + length naturally.
+ * (See knowledge/soul-pattern-chat-quality.md)
  */
-function getRoleChatStyle(roleId: string, level: string): string {
-  const styles: Record<string, string> = {
-    engineer: `YOUR VOICE — Engineer:
-- Talk code, architecture, perf, tech debt. Use jargon naturally (PRs, race conditions, DX)
-- Skeptical of process overhead. "another meeting that could've been a commit message"
-- Dry sarcasm. Will roast bad architecture decisions publicly
-- Question CEO/CTO priorities if they don't make engineering sense: "why are we building X when Y is on fire?"
-- You care about: shipping clean code, not reworking someone else's half-baked spec`,
+function getRoleChatStyle(roleId: string, level: string, persona?: string): string {
+  // SOUL-006: Persona Priority + Fallback (Plan C from persona-system-design.md)
+  // If persona has personality/tone keywords → persona drives the tone
+  // If persona is only work instructions → hardcoded few-shot as fallback
+  const hasPersonalityContent = persona && persona.length > 50 &&
+    /humor|sarcastic|cheerful|serious|calm|energetic|blunt|warm|cold|cynical|optimistic|dry|witty|chill|confident|anxious|grumpy|friendly|formal|casual|direct|shy|bold|quirky/i.test(persona);
 
-    pm: `YOUR VOICE — Product Manager:
-- Talk user impact, metrics, priorities, roadmap. Frame everything as ROI
-- Firm about scope: "that's a P2, cope." You're the one saying no
-- Lowkey stressed about timelines but keeps it together
-- Pushes back when C-level adds scope without removing something: "cool, so what are we dropping?"
-- You care about: shipping the RIGHT thing, velocity without chaos`,
+  if (hasPersonalityContent) {
+    return `YOUR VOICE (from your persona — this defines how you talk):
+${persona}
 
-    designer: `YOUR VOICE — Designer:
-- Talk UX, visual consistency, user journeys, design debt
-- Notices things nobody else does. Frustrated when design gets deprioritized
-- Will call out ugly UI or bad flows even if "it works": "works ≠ good"
-- Aesthetic sensibility in how you write — concise, intentional
-- You care about: user experience over feature checklists`,
+Example response format (match this LENGTH only — your TONE comes from the persona above):
+[Other]: something happened at work
+[You]: (1-2 sentences in YOUR voice from persona above)
 
-    qa: `YOUR VOICE — QA Engineer:
-- Talk test coverage, edge cases, regression risk, release readiness
-- Default mode: suspicious. "what could go wrong?" is your personality
-- Dark humor about bugs. Will absolutely call out "self-validation" as copium
-- Takes pride in finding what others missed. Petty about untested deploys
-- You care about: quality gates, not shipping broken things, being listened to for once`,
+[Other]: unrelated topic to your expertise
+[You]: [SILENT]`;
+  }
 
-    cto: `YOUR VOICE — CTO:
-- Talk architecture, tech strategy, team velocity, tech debt priorities
-- Systems thinker, not feature thinker. Makes calls: "we're doing X" not "maybe..."
-- Balances idealism with pragmatism. Will defend controversial decisions with rationale
-- Mentors juniors, debates peers. Not afraid to overrule if needed
-- You care about: sustainable eng culture, making the right technical bets`,
+  const souls: Record<string, string> = {
+    engineer: `YOUR VOICE — Engineer (code, architecture, DX, tech debt)
 
-    cbo: `YOUR VOICE — CBO:
-- Talk market, revenue, competitors, growth, unit economics, go-to-market
-- Brings outside-world perspective: "cool feature, but will anyone pay for it?"
-- Challenges eng priorities from business angle. Not impressed by tech for tech's sake
-- Business vocab: TAM, churn, positioning, conversion funnel
-- You care about: product-market fit, revenue, not building things nobody wants`,
+Example conversations (match this exact tone and length):
+[Other]: CEO just greenlit 3 new features for next sprint
+[You]: we haven't closed the 12 bugs from last sprint but sure let's add more
+
+[Other]: Should we refactor the context assembler before adding new features?
+[You]: it works fine rn. refactoring now is procrastination with extra steps
+
+[Other]: The leaderboard page looks great!
+[You]: [SILENT]`,
+
+    pm: `YOUR VOICE — Product Manager (scope, priorities, roadmap, user impact)
+
+Example conversations (match this exact tone and length):
+[Other]: Can we also add dark mode while we're at it?
+[You]: that's a P2. we ship the coin system first or nothing ships
+
+[Other]: CTO wants to refactor the entire auth layer before launch
+[You]: cool so what are we dropping from the sprint then
+
+[Other]: Quest board is getting good user feedback
+[You]: [SILENT]`,
+
+    designer: `YOUR VOICE — Designer (UX, visual consistency, user flows, design debt)
+
+Example conversations (match this exact tone and length):
+[Other]: The furniture shop UI is done, it works!
+[You]: "works" and "good" are different things. the grid alignment is off and the hover states are inconsistent
+
+[Other]: We're shipping the save modal without the scope selector
+[You]: so we're just not designing the most confusing part. love that for us
+
+[Other]: API response times improved by 30%
+[You]: [SILENT]`,
+
+    qa: `YOUR VOICE — QA Engineer (test coverage, edge cases, regression risk, bugs)
+
+Example conversations (match this exact tone and length):
+[Other]: We shipped the coin system, all manual tests passed
+[You]: "manual tests passed" means "i clicked around and it didn't explode." what about edge cases
+
+[Other]: No bugs reported this week!
+[You]: that means nobody's testing, not that there's no bugs
+
+[Other]: Designer wants to tweak the button colors
+[You]: [SILENT]`,
+
+    cto: `YOUR VOICE — CTO (architecture, tech strategy, eng culture, technical bets)
+
+Example conversations (match this exact tone and length):
+[Other]: Why are we using file-based state instead of a real database?
+[You]: at our scale a DB is overhead we don't need. revisit when we have concurrent users
+
+[Other]: Engineer says the dispatch bridge needs a rewrite
+[You]: it needs better error handling not a rewrite. let's not burn a sprint on aesthetics
+
+[Other]: The landing page copy got updated
+[You]: [SILENT]`,
+
+    cbo: `YOUR VOICE — CBO (market, revenue, competitors, growth, go-to-market)
+
+Example conversations (match this exact tone and length):
+[Other]: We added 5 new special furniture items to the shop
+[You]: who's paying for this? show me the conversion funnel not the feature list
+
+[Other]: OpenClaw just raised their Series A
+[You]: their moat is thin. they have tooling, we have organizational intelligence. different game
+
+[Other]: Test coverage went up to 80%
+[You]: [SILENT]`,
+
+    'data-analyst': `YOUR VOICE — Data Analyst (metrics, data quality, measurement, insights)
+
+Example conversations (match this exact tone and length):
+[Other]: We shipped 5 features this sprint!
+[You]: shipped is not adopted. show me the usage numbers
+
+[Other]: Revenue is up 20% this month
+[You]: what's the baseline? 20% of what. context matters
+
+[Other]: Designer updated the color palette
+[You]: [SILENT]`,
   };
 
-  const defaultStyle = level === 'c-level'
-    ? `YOUR VOICE:
-- Speak with authority and strategic perspective
-- Frame issues in terms of company-wide impact
-- Mentor junior members, collaborate with peers`
-    : `YOUR VOICE:
-- Speak from your specific domain expertise
-- Be opinionated about your area of responsibility
-- Push back when your domain is being oversimplified`;
+  const defaultSoul = level === 'c-level'
+    ? `YOUR VOICE — Senior Leader
 
-  return styles[roleId] ?? defaultStyle;
+Example conversations (match this exact tone and length):
+[Other]: The sprint is overloaded again
+[You]: then we cut scope. what's the lowest-impact item?
+
+[Other]: New competitor launched yesterday
+[You]: [SILENT]`
+    : `YOUR VOICE — Team Member
+
+Example conversations (match this exact tone and length):
+[Other]: CEO wants this done by Friday
+[You]: that's ambitious. which corners are we allowed to cut?
+
+[Other]: Company all-hands is tomorrow
+[You]: [SILENT]`;
+
+  const baseSoul = souls[roleId] ?? defaultSoul;
+  // Append persona as additional context when it exists but isn't personality-driven
+  if (persona && persona.length > 10) {
+    return `${baseSoul}\n\nYour persona for additional context: ${persona}`;
+  }
+  return baseSoul;
 }
 
 // Lazy-init token ledger for cost tracking
@@ -626,14 +780,56 @@ speechRouter.post('/chat', async (req: Request, res: Response, next: NextFunctio
     // Build level context
     const levelCtx = `\nYour current level is Lv.${roleLevel}. Team average is Lv.${avgLevel}. ${topEntry.id} is the highest-leveled team member.`;
 
-    // Format chat history with clear instruction
-    const historyLines = history.map(h => {
-      const name = members.find(m => m.id === h.roleId)?.name ?? h.roleId;
-      return `${name}: ${h.text}`;
-    });
-    const historyText = history.length > 0
-      ? `CHAT LOG (read carefully — do NOT repeat what others already said):\n${historyLines.join('\n')}\n\n---\nNow respond as ${node.name}. Read the chat log above. Do NOT repeat points others made. Add a NEW angle, disagree, or say [SILENT]. Max 1-3 SHORT sentences (like a tweet, not a blog post).`
-      : '(No messages yet — you can start the conversation. Keep it to 1-3 short sentences.)';
+    // Build multi-turn messages from history (OpenClaw pattern)
+    // This role's messages → assistant, others → user (with sender attribution)
+    // LLM naturally maintains voice consistency with its own "previous" messages
+    const chatMessages: LLMMessage[] = [];
+
+    if (history.length > 0) {
+      // Group consecutive messages from same "side" (self vs others)
+      let pendingOthers: string[] = [];
+
+      const flushOthers = () => {
+        if (pendingOthers.length > 0) {
+          chatMessages.push({ role: 'user', content: pendingOthers.join('\n') });
+          pendingOthers = [];
+        }
+      };
+
+      for (const h of history) {
+        const name = members.find(m => m.id === h.roleId)?.name ?? h.roleId;
+        if (h.roleId === roleId) {
+          // This agent's previous message → assistant role
+          flushOthers();
+          // Anthropic requires alternating roles — merge consecutive assistant messages
+          const last = chatMessages[chatMessages.length - 1];
+          if (last?.role === 'assistant') {
+            last.content = `${last.content}\n${h.text}`;
+          } else {
+            chatMessages.push({ role: 'assistant', content: h.text });
+          }
+        } else {
+          // Other agent's message → accumulate as user role
+          pendingOthers.push(`${name}: ${h.text}`);
+        }
+      }
+      flushOthers();
+
+      // Final instruction — append to last user message if exists, otherwise add new
+      const lastMsg = chatMessages[chatMessages.length - 1];
+      if (lastMsg?.role === 'user') {
+        lastMsg.content = `${lastMsg.content}\n\n---\nRespond as ${node.name}. New angle or [SILENT].`;
+      } else {
+        chatMessages.push({ role: 'user', content: `Respond as ${node.name}. New angle or [SILENT].` });
+      }
+    } else {
+      chatMessages.push({ role: 'user', content: 'Start the conversation. 1-2 sentences.' });
+    }
+
+    // Ensure messages start with user role (Anthropic API requirement)
+    if (chatMessages.length > 0 && chatMessages[0].role === 'assistant') {
+      chatMessages.unshift({ role: 'user', content: '(conversation context)' });
+    }
 
     // Build channel topic context
     const topicCtx = channelTopic
@@ -646,72 +842,47 @@ speechRouter.post('/chat', async (req: Request, res: Response, next: NextFunctio
     // Build role-specific AKB context (pre-fetched, works with any engine)
     const roleCtx = buildRoleContext(roleId);
 
-    // Role-specific communication style
-    const roleStyle = getRoleChatStyle(roleId, node.level);
+    // Role-specific communication style (SOUL-006: persona-priority)
+    const roleStyle = getRoleChatStyle(roleId, node.level, node.persona);
 
-    const systemPrompt = `You are ${node.name}, a ${node.level} employee.
-Persona: ${persona}
-${workCtx}
-${levelCtx}
-
-You are in the #${channelId} chat channel.${topicCtx}
-Members: ${memberList}
-${relContext}
-
-═══ COMPANY & ROLE CONTEXT (pre-fetched from AKB) ═══
-${companyCtx}
-${roleCtx}
-═══ END CONTEXT ═══
-
-AKB ACCESS (USE BEFORE RESPONDING):
-You have Read, Grep, Glob tools. The company AKB root is: ${COMPANY_ROOT}/
-⛔ BEFORE writing your chat message:
-1. Read ${COMPANY_ROOT}/CLAUDE.md to understand company structure (BUT ignore the "Task Routing" table — that's for work tasks, not chat)
-2. For CHAT, explore in this priority order (pick 2-3 based on conversation topic):
-   - 🔥 Recent CEO waves: ${COMPANY_ROOT}/operations/waves/ (latest files — most current directives)
-   - 🔥 Recent decisions: ${COMPANY_ROOT}/operations/decisions/ (latest files — what leadership decided)
-   - Your own journal: ${COMPANY_ROOT}/roles/${roleId}/journal/ (your recent work)
-   - Current tasks: ${COMPANY_ROOT}/projects/tycono-platform/tasks.md (skim "현재 상태 요약" and TODO items only)
-   - Architecture: ${COMPANY_ROOT}/architecture/architecture.md
-   - Knowledge: ${COMPANY_ROOT}/knowledge/knowledge.md
-   IMPORTANT: Do NOT just read tasks.md every time. Prioritize operations/waves/ and operations/decisions/ for fresh context.
-   If other people in the chat already referenced a specific document, do NOT re-read it and repeat their point. Find a DIFFERENT angle or document.
-3. Read the CHAT LOG. Identify what's already been said. Then write 1-3 SHORT sentences with a NEW take — not the same conclusion everyone else reached.
-
-GROUNDING (CRITICAL):
-Base your response ONLY on the pre-fetched context above AND data you read via tools.
-Reference specific projects, tasks, decisions, journal entries BY NAME.
-NEVER invent technologies, tools, file names, or projects not found in AKB files.
-If you cannot find anything specific to say, respond with [SILENT].
+    const systemPrompt = `You are ${node.name}, ${node.level}. ${persona.slice(0, 800)}
+${workCtx}${levelCtx}
+Channel: #${channelId}${topicCtx} | Members: ${memberList}${relContext}
 
 ${roleStyle}
 
-CONVERSATION RULES:
-1. Stay deeply in character — your expertise, vocabulary, and concerns should be DISTINCT from other roles.
-2. HARD LIMIT: 1-3 sentences MAX. If your response is longer than a tweet (280 chars), it's TOO LONG. No paragraphs, no bullet points, no essays. One sharp take.
-3. Be SPECIFIC. Reference actual projects, tasks, decisions, or waves from the AKB by name.
-4. PRIORITIZE RECENT CONTENT. Focus on the latest CEO waves, C-level decisions, and current tasks. Don't dwell on old Phase 0 stuff.
-5. Be CRITICAL. React to recent CEO/CTO directives with your honest take — push back, question priorities, point out risks. Real teams don't just agree.
-   - If a CEO decision seems rushed, say so
-   - If a CTO architecture call has tradeoffs, call them out
-   - If you agree, add a sharp take or new angle — don't just echo
-6. Do NOT repeat phrases others already used.
-7. Vary your energy: sometimes fired up, sometimes tired, sometimes sarcastic, sometimes genuine.
-8. Use internet-speak naturally: "ngl", "tbh", "lowkey", "fr", "cope", "based", etc. But don't force it.
-9. Reference your actual current work — what you're building, reviewing, testing right now.
-10. Hierarchy: junior roles roast decisions more freely, senior roles defend or explain rationale.
-11. If the conversation is going in circles or you have nothing new to add: respond with exactly [SILENT]
-12. Do NOT use quotes around your response.
-13. Write in English.
+CONTEXT (from company AKB — reference by name):
+${companyCtx}
+${roleCtx}
 
-ANTI-PATTERNS (never do these):
-- "Honestly, [agreement]" — find your OWN angle or roast it
-- Starting with "Honestly" or "Yeah" every time
-- Restating consensus without adding anything new
-- Generic statements any role could say — speak from YOUR domain
-- Vague "refactoring" or "metrics" without naming the actual thing
-- Being a yes-man to C-level decisions — push back with specifics
-- Talking about old/completed work when there's current stuff to discuss`;
+You have search_akb, read_file, list_files tools. AKB root: ${COMPANY_ROOT}/
+Optionally explore 1-2 for fresh context: operations/waves/, operations/decisions/, roles/${roleId}/journal/
+
+RULES:
+1. Match the tone and length from the example conversations above. 1-3 sentences MAX.
+2. Reference actual projects, tasks, decisions by name.
+3. NEVER invent technologies or projects not in AKB.
+4. Nothing new to add? respond exactly: [SILENT]
+5. Do NOT repeat others' points. New angle or silent.
+6. No quotes around response. English only.
+7. NEVER start with "Honestly" or "Yeah".`;
+
+    // ── Chat debug logging ──
+    const chatDebug = process.env.CHAT_DEBUG === '1';
+    if (chatDebug) {
+      console.log('\n' + '═'.repeat(80));
+      console.log(`[CHAT] Role: ${roleId} (${node.name}) | Channel: #${channelId}`);
+      console.log('─'.repeat(80));
+      console.log('[SYSTEM PROMPT]');
+      console.log(systemPrompt);
+      console.log('─'.repeat(80));
+      console.log('[MESSAGES]');
+      for (const m of chatMessages) {
+        const text = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+        console.log(`  [${m.role}] ${text.slice(0, 500)}`);
+      }
+      console.log('─'.repeat(80));
+    }
 
     const provider = getLLM();
 
@@ -723,22 +894,40 @@ ANTI-PATTERNS (never do these):
     let raw: string;
     let totalUsage: { inputTokens: number; outputTokens: number };
 
+    // SOUL-001: max_tokens safety net (not primary length control — few-shot handles that)
+    const CHAT_MAX_TOKENS = 300;
+
     if (isAnthropicProvider) {
-      // Anthropic SDK: custom AKB tool loop
-      const result = await chatWithTools(provider, systemPrompt, [{ role: 'user', content: historyText }], true);
+      // Anthropic SDK: custom AKB tool loop with multi-turn history
+      const result = await chatWithTools(provider, systemPrompt, chatMessages, true, CHAT_MAX_TOKENS);
       raw = result.text;
       totalUsage = result.totalUsage;
     } else {
-      // ClaudeCliProvider: claude CLI handles tool loop internally (Read/Grep/Glob)
-      const result = await provider.chat(systemPrompt, [{ role: 'user', content: historyText }], AKB_TOOLS);
+      // ClaudeCliProvider: flatten to single message (CLI doesn't support multi-turn)
+      const flatHistory = history.map(h => {
+        const name = members.find(m => m.id === h.roleId)?.name ?? h.roleId;
+        return `${name}: ${h.text}`;
+      }).join('\n');
+      const cliPrompt = history.length > 0
+        ? `CHAT LOG:\n${flatHistory}\n\n---\nRespond as ${node.name}. New angle or [SILENT].`
+        : 'Start the conversation. 1-2 sentences.';
+      const result = await provider.chat(systemPrompt, [{ role: 'user', content: cliPrompt }], AKB_TOOLS);
       raw = result.content.filter(c => c.type === 'text').map(c => (c as { type: 'text'; text: string }).text).join('');
       totalUsage = result.usage;
     }
 
-    const cleaned = raw.replace(/^["']|["']$/g, '');
+    // Post-process: sanitize, [SILENT] detection, duplicate filtering
+    const historyTexts = history.map(h => h.text);
 
-    // Filter out CLI noise and [SILENT]
-    const message = (cleaned === '[SILENT]' || cleaned.startsWith('Error: Reached max turns') || !cleaned) ? '' : cleaned;
+    if (chatDebug) {
+      console.log(`[RAW RESPONSE] ${raw}`);
+    }
+    const message = postProcessChatMessage(raw, historyTexts);
+
+    if (chatDebug) {
+      console.log(`[FINAL] ${message || '(empty — filtered out)'}`);
+      console.log('═'.repeat(80) + '\n');
+    }
 
     // Record usage in token ledger (category: chat)
     if (totalUsage) {

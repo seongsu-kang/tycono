@@ -5,7 +5,7 @@
     "level": "c-level",
     "reportsTo": "CEO",
     "persona": "Creative leader who sets the vision, maintains brand consistency, and guides the team.",
-    "defaultSkills": ["knowledge-gate", "akb-linter"]
+    "defaultSkills": ["knowledge-gate", "akb-linter", "agent-browser"]
   },
   {
     "id": "designer",
@@ -13,7 +13,7 @@
     "level": "member",
     "reportsTo": "creative-director",
     "persona": "Visual designer who creates UI/UX designs, wireframes, and design systems.",
-    "defaultSkills": ["knowledge-gate"]
+    "defaultSkills": ["knowledge-gate", "agent-browser"]
   },
   {
     "id": "developer",
@@ -21,6 +21,6 @@
     "level": "member",
     "reportsTo": "creative-director",
     "persona": "Frontend developer who builds responsive interfaces and implements designs.",
-    "defaultSkills": ["knowledge-gate"]
+    "defaultSkills": ["knowledge-gate", "agent-browser"]
   }
 ]

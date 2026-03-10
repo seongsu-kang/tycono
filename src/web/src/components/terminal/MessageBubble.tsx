@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Message, StreamEvent, ImageAttachment } from '../../types';
+import type { Message, StreamEvent, ActivityEvent, ImageAttachment } from '../../types';
 import MarkdownRenderer from './MarkdownRenderer';
 
 interface Props {
@@ -325,6 +325,22 @@ function ActivityLog({ events, isStreaming }: { events: StreamEvent[]; isStreami
   );
 }
 
+/* ─── D-014: Convert persisted ActivityEvents to StreamEvents ── */
+
+function activityToStreamEvents(events: ActivityEvent[]): StreamEvent[] {
+  return events.map((e) => ({
+    type: e.type === 'tool:start' ? 'tool' as const
+      : e.type === 'dispatch:start' ? 'dispatch' as const
+      : e.type as StreamEvent['type'],
+    timestamp: new Date(e.ts).getTime(),
+    text: e.data.text as string | undefined,
+    toolName: e.data.name as string | undefined,
+    toolInput: e.data.input as Record<string, unknown> | undefined,
+    roleId: e.data.roleId as string | undefined,
+    task: e.data.task as string | undefined,
+  }));
+}
+
 /* ─── MessageBubble ────────────────────── */
 
 export default function MessageBubble({ message, roleId, roleColor }: Props) {
@@ -363,8 +379,9 @@ export default function MessageBubble({ message, roleId, roleColor }: Props) {
     );
   }
 
-  // Role message
-  const hasEvents = (message.streamEvents?.length ?? 0) > 0;
+  // Role message — prefer streamEvents (live), fallback to D-014 events (persisted)
+  const streamEvts = message.streamEvents ?? (message.events ? activityToStreamEvents(message.events) : undefined);
+  const hasEvents = (streamEvts?.length ?? 0) > 0;
   const hasThinking = !!message.thinking;
   const thinkingOnly = hasThinking && !message.content && isStreaming && !hasEvents;
 
@@ -381,7 +398,7 @@ export default function MessageBubble({ message, roleId, roleColor }: Props) {
 
         {/* Activity log — stream events */}
         {hasEvents && (
-          <ActivityLog events={message.streamEvents!} isStreaming={isStreaming} />
+          <ActivityLog events={streamEvts!} isStreaming={isStreaming} />
         )}
 
         {/* Legacy thinking indicator (when no stream events) */}
@@ -414,6 +431,28 @@ export default function MessageBubble({ message, roleId, roleColor }: Props) {
         </div>
         {message.status === 'error' && (
           <div className="text-[10px] text-red-400 mt-1">Error occurred</div>
+        )}
+        {/* D-014: Message execution stats */}
+        {message.status === 'done' && (message.turns || message.tokens) && (
+          <div className="text-[9px] text-[var(--terminal-text-muted)] mt-1 flex gap-2">
+            {message.turns && <span>{message.turns} turns</span>}
+            {message.tokens && <span>{(message.tokens.input + message.tokens.output).toLocaleString()} tokens</span>}
+            {message.readOnly && <span className="text-blue-400/60">read-only</span>}
+          </div>
+        )}
+        {/* KP-006: Knowledge debt warnings */}
+        {message.knowledgeDebt && message.knowledgeDebt.length > 0 && (
+          <div className="mt-1.5 px-3 py-2 rounded-lg text-[10px]" style={{ background: '#FFA72615', border: '1px solid #FFA72630' }}>
+            <div className="font-bold mb-1" style={{ color: '#FFA726' }}>
+              Knowledge Debt ({message.knowledgeDebt.length})
+            </div>
+            {message.knowledgeDebt.map((d, i) => (
+              <div key={i} className="flex gap-1.5 mb-0.5" style={{ color: 'var(--terminal-text-muted)' }}>
+                <span style={{ color: '#FFA726' }}>{d.type === 'orphan' ? '\u26A0' : d.type === 'no-hub' ? '\u{1F4C1}' : '\u{1F517}'}</span>
+                <span>{d.message}{d.file ? ` (${d.file})` : ''}</span>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>

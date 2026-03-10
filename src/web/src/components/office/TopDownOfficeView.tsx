@@ -2,13 +2,13 @@ import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import type { Role, Project, Wave, Standup, Decision } from '../../types/index';
 import type { CharacterAppearance } from '../../types/appearance';
 import { getDefaultAppearance } from '../../types/appearance';
-import { getCharacterBlueprint, renderPixelsAt, getAccessoryForDirection } from './sprites/engine';
+import { getCharacterBlueprint, renderPixelsAt, getAccessoryForDirection, mirrorPixels } from './sprites/engine';
 import type { Direction } from './sprites/engine';
 import { applyStyles } from './TopDownCharCanvas';
 import './sprites/data'; // trigger blueprint registration
 import { WALK_FRAMES } from './sprites/data/walk-frames-mini';
 import type { WalkDirection } from './sprites/data/walk-frames-mini';
-import { MASCOT_FRAMES, MASCOT_IDLE_TONGUE, MASCOT_SHADOW, MASCOT_SHADOW_SIDE } from './sprites/data/mascot-bichon';
+import { MASCOT_FRAMES, MASCOT_IDLE_TONGUE, MASCOT_SHADOW, MASCOT_SHADOW_SIDE, MASCOT_SHADOW_BELLY, MASCOT_BELLY_UP, MASCOT_BELLY_UP_B } from './sprites/data/mascot-bichon';
 import type { MascotDirection } from './sprites/data/mascot-bichon';
 import { generateFloorLayout, selectPreset, applyFurnitureOverrides, applyDeskOverrides, applyFurnitureRemovals, applyAddedFurniture } from './floor-template';
 import type { FloorLayout, DeskDef, RoomDef } from './floor-template';
@@ -60,6 +60,8 @@ interface TopDownOfficeViewProps {
   coinBalance?: number;
   onCoinsSpent?: (newBalance: number) => void;
   onFurniturePlaced?: (type: string, price: number) => void;
+  purchasedPreset?: 'M' | 'L';
+  onExpansionPurchased?: (preset: 'L') => void;
 }
 
 /* ─── Canvas constants ──────────────────── */
@@ -83,6 +85,73 @@ const ROLE_COLORS: Record<string, string> = {
   cto: '#1565C0', cbo: '#E65100', pm: '#2E7D32',
   engineer: '#4A148C', designer: '#AD1457', qa: '#00695C',
   'data-analyst': '#0277BD',
+};
+
+/* ─── Role dialogue (REACT-006) ─────────── */
+
+const ROLE_DIALOGUES: Record<string, string[]> = {
+  ceo: [
+    "대표님?",
+    "무슨 일이신가요?",
+    "회의 시간이신가요?",
+    "좋은 아이디어 있으시면 말씀해주세요.",
+    "다들 잘하고 있나요?",
+  ],
+  cto: [
+    "뭐 필요하신 거 있으세요?",
+    "기술 관련 질문이신가요?",
+    "아키텍처 리뷰 중이에요.",
+    "배포는 조금만 기다려주세요.",
+    "코드 봐드릴까요?",
+  ],
+  cbo: [
+    "비즈니스 관련 얘기신가요?",
+    "수익 모델 검토 중이에요.",
+    "시장 조사 결과 보실래요?",
+    "경쟁사 분석 중입니다.",
+    "뭔가 도와드릴까요?",
+  ],
+  pm: [
+    "프로젝트 진행 상황 궁금하신가요?",
+    "로드맵 업데이트 중이에요.",
+    "태스크 할당 중입니다.",
+    "우선순위 조정이 필요할까요?",
+    "스프린트 리뷰 준비 중이에요.",
+  ],
+  engineer: [
+    "일하고 있어요!",
+    "버그 수정 중입니다.",
+    "코드 리뷰 필요하신가요?",
+    "테스트 작성 중이에요.",
+    "PR 올리고 있어요.",
+  ],
+  designer: [
+    "디자인 피드백 있으신가요?",
+    "목업 작업 중이에요.",
+    "UI 개선안 생각 중입니다.",
+    "컬러 팔레트 고민 중이에요.",
+    "프로토타입 보여드릴까요?",
+  ],
+  qa: [
+    "테스트 중이에요.",
+    "버그 발견했어요!",
+    "테스트 케이스 작성 중입니다.",
+    "회귀 테스트 진행 중이에요.",
+    "품질 체크 중입니다.",
+  ],
+  'data-analyst': [
+    "데이터 분석 중이에요.",
+    "리포트 준비 중입니다.",
+    "대시보드 확인해보실래요?",
+    "지표 추적 중이에요.",
+    "인사이트 발견했어요!",
+  ],
+  default: [
+    "안녕하세요!",
+    "무엇을 도와드릴까요?",
+    "열심히 일하고 있어요.",
+    "좋은 하루 되세요!",
+  ],
 };
 
 /* ─── Facility zones (built from furniture data) ─── */
@@ -121,10 +190,12 @@ let _hoverFacility: string | null = null;
 let _editMode = false;
 let _hoverFurniture: string | null = null;
 let _selectedFurniture: string | null = null;   // furniture id or 'desk:roleId'
+let _mouseX = 0;  // Track mouse X position for gaze direction (REACT-005)
 let _dragging: { defId: string; startMx: number; startMy: number; origOffX: number; origOffY: number } | null = null;
 let _draggingDesk: { roleId: string; startMx: number; startMy: number; origDx: number; origDy: number } | null = null;
 let _placingType: FurnitureType | null = null;   // furniture type being placed
 let _placingZone: 'wall' | 'floor' | null = null;
+let _stretchCooldown = 900;  // 15s @ 60fps — triggers random stretch animation
 
 
 /* ═══════════════════════════════════════════
@@ -300,25 +371,31 @@ function drawFrame() {
 
 const _seatedPixelsCache = new Map<string, import('./sprites/engine/blueprint').Pixel[]>();
 
-function getSeatedPixels(ap: CharacterAppearance): import('./sprites/engine/blueprint').Pixel[] {
-  const key = `${ap.hairStyle ?? ''}|${ap.outfitStyle ?? ''}|${ap.accessory ?? ''}`;
+function getSeatedPixels(ap: CharacterAppearance, lookDir: 'left' | 'right' = 'right'): import('./sprites/engine/blueprint').Pixel[] {
+  const key = `${ap.hairStyle ?? ''}|${ap.outfitStyle ?? ''}|${ap.accessory ?? ''}|${lookDir}`;
   let cached = _seatedPixelsCache.get(key);
   if (!cached) {
     const base = getCharacterBlueprint('mini-seated:default');
     const bp = applyStyles(base, ap);
-    cached = bp ? bp.layers.flatMap(l => l.pixels) : [];
+    let pixels = bp ? bp.layers.flatMap(l => l.pixels) : [];
+    // Mirror pixels if looking left (REACT-005)
+    if (lookDir === 'left' && pixels.length > 0) {
+      const width = 12;  // mini-seated width
+      pixels = mirrorPixels(pixels, width);
+    }
+    cached = pixels;
     _seatedPixelsCache.set(key, cached);
   }
   return cached;
 }
 
-function drawSeatedChar(x: number, y: number, ap: CharacterAppearance) {
-  renderPixelsAt(_ctx, getSeatedPixels(ap), x, y, ap);
+function drawSeatedChar(x: number, y: number, ap: CharacterAppearance, lookDir: 'left' | 'right' = 'right') {
+  renderPixelsAt(_ctx, getSeatedPixels(ap, lookDir), x, y, ap);
 }
 
-function drawDeskUnit(dx: number, dy: number, ap: CharacterAppearance, bobY: number, empty: boolean) {
+function drawDeskUnit(dx: number, dy: number, ap: CharacterAppearance, bobY: number, empty: boolean, lookDir: 'left' | 'right' = 'right') {
   drawChair(dx + 8, dy + 20, 'up');
-  if (!empty) drawSeatedChar(dx + 8, dy + 0 + bobY, ap);
+  if (!empty) drawSeatedChar(dx + 8, dy + 0 + bobY, ap, lookDir);
   drawDesk(dx, dy + 14);
 }
 
@@ -353,7 +430,23 @@ interface CharState {
   dir: string; walkFrame: number; walkTimer: number;
   bobY: number; bobOff: number;
   stateTimer: number;
+  sittingTime: number;  // frames spent sitting (for zzz)
+  lookDir: 'left' | 'right';  // Which way seated character looks (REACT-005)
+  isStretching: boolean;  // currently stretching
+  stretchTimer: number;   // frames remaining for stretch animation
 }
+
+/* ── Interaction Particles ── */
+interface Particle {
+  x: number; y: number;
+  vx: number; vy: number;
+  life: number; maxLife: number;
+  char: string;  // emoji/symbol to render
+  color?: string;
+}
+let _particles: Particle[] = [];
+let _hoverMascot = false;
+let _mascotHoverTime = 0;  // frames hovered on mascot
 
 /* ── Mascot (office pet) ── */
 interface MascotState {
@@ -365,6 +458,7 @@ interface MascotState {
   state: 'walking' | 'idle';
   stateTimer: number;
   tongueTimer: number;  // tongue animation while idle
+  idleTime: number;     // frames spent idle (for zzz)
 }
 
 function createMascot(): MascotState {
@@ -379,14 +473,28 @@ function createMascot(): MascotState {
     state: 'walking',
     stateTimer: 0,
     tongueTimer: 0,
+    idleTime: 0,
   };
 }
 
 function updateMascot(m: MascotState) {
   m.stateTimer--;
 
+  // Mascot freezes and faces CEO when hovered
+  if (_hoverMascot) {
+    _mascotHoverTime++;
+    m.dir = 'down';
+    m.walkFrame = 0;
+    m.tongueTimer++;
+    m.idleTime = 0;  // wake up from zzz
+    return;  // skip all movement
+  } else {
+    _mascotHoverTime = 0;
+  }
+
   if (m.state === 'idle') {
     m.tongueTimer++;
+    m.idleTime++;
     if (m.stateTimer <= 0) {
       m.state = 'walking';
       m.tongueTimer = 0;
@@ -416,6 +524,7 @@ function updateMascot(m: MascotState) {
       m.walkTimer = 0;
     }
   } else if (m.state === 'walking') {
+    m.idleTime = 0;
     if (m.path.length === 0) {
       m.state = 'idle'; m.dir = 'down';
       m.stateTimer = 120 + Math.floor(Math.random() * 240);
@@ -443,9 +552,18 @@ function updateMascot(m: MascotState) {
 }
 
 function drawMascot(m: MascotState) {
+  const mx = Math.round(m.x), my = Math.round(m.y);
+
+  // Belly-up mode: after hovering for ~1.5 seconds (90 frames)
+  if (_hoverMascot && _mascotHoverTime > 90) {
+    const bellyFrame = (Math.floor(_mascotHoverTime / 12) % 2 === 0) ? MASCOT_BELLY_UP : MASCOT_BELLY_UP_B;
+    renderPixelsAt(_ctx, MASCOT_SHADOW_BELLY, mx, my);
+    renderPixelsAt(_ctx, bellyFrame, mx, my);
+    return;
+  }
+
   const frame = m.state === 'walking' ? m.walkFrame : 0;
   const pixels = MASCOT_FRAMES[m.dir][frame];
-  const mx = Math.round(m.x), my = Math.round(m.y);
   const isSide = m.dir === 'left' || m.dir === 'right';
   // shadow (wider for side views)
   renderPixelsAt(_ctx, isSide ? MASCOT_SHADOW_SIDE : MASCOT_SHADOW, mx, my);
@@ -472,7 +590,11 @@ function createChars(roleIds: string[]): Record<string, CharState> {
       room: d.room,
       dir: 'down', walkFrame: 0, walkTimer: 0,
       bobY: 0, bobOff: idx * 17,
-      stateTimer: 600 + Math.floor(Math.random() * 900),
+      stateTimer: 1200 + Math.floor(Math.random() * 1800),  // sit 20-50s
+      sittingTime: 0,
+      lookDir: 'right',  // Default facing right
+      isStretching: false,
+      stretchTimer: 0,
     };
     idx++;
   }
@@ -543,17 +665,53 @@ function buildReturnPath(ch: CharState) {
 }
 
 function updateChars(chars: Record<string, CharState>, frame: number) {
-  for (const [, ch] of Object.entries(chars)) {
+  // Stretch cooldown: every 30s, pick a random sitting character to stretch
+  _stretchCooldown--;
+  if (_stretchCooldown <= 0) {
+    const sittingChars = Object.entries(chars).filter(([, ch]) => ch.state === 'sitting' && !ch.isStretching);
+    if (sittingChars.length > 0) {
+      const [, ch] = sittingChars[Math.floor(Math.random() * sittingChars.length)];
+      ch.isStretching = true;
+      ch.stretchTimer = 120;  // 2 seconds @ 60fps
+    }
+    _stretchCooldown = 900;  // reset to 15s
+  }
+
+  for (const [id, ch] of Object.entries(chars)) {
     ch.stateTimer--;
 
+    // Handle stretching timer countdown
+    if (ch.isStretching && ch.stretchTimer > 0) {
+      ch.stretchTimer--;
+      if (ch.stretchTimer <= 0) {
+        ch.isStretching = false;
+      }
+    }
+
     if (ch.state === 'sitting') {
-      ch.bobY = ((frame + ch.bobOff) % 60) < 30 ? 1 : 0;
+      ch.sittingTime++;
+      // Hover reaction: character startles when moused over
+      const isHovered = _hoverRole === id;
+      if (isHovered) {
+        ch.sittingTime = 0;  // wake up from zzz
+        ch.bobY = -3;  // jump up (visible at 2x zoom = 6 screen px)
+        // REACT-005: Character looks toward cursor (left/right)
+        const d = DESKS[id];
+        if (d) {
+          const charCenterX = d.dx + 13;  // Center of desk unit
+          ch.lookDir = _mouseX < charCenterX ? 'left' : 'right';
+        }
+      } else {
+        ch.bobY = ((frame + ch.bobOff) % 60) < 30 ? 1 : 0;
+        // Reset to default when not hovered
+        ch.lookDir = 'right';
+      }
       if (ch.stateTimer <= 0) {
         ch.state = 'walking';
         ch.x = ch.homeX; ch.y = ch.homeY;
         ch.room = ch.homeRoom;
         const allRooms = Object.keys(_layout.rooms);
-        if (Math.random() < 0.25 && allRooms.length > 1) {
+        if (Math.random() < 0.15 && allRooms.length > 1) {  // rarely cross rooms
           const rooms = allRooms.filter(r => r !== ch.room);
           const targetRoom = rooms[Math.floor(Math.random() * rooms.length)];
           const crossPath = buildCrossRoomPath(ch, targetRoom);
@@ -577,10 +735,18 @@ function updateChars(chars: Record<string, CharState>, frame: number) {
         }
       }
     } else if (ch.state === 'walking' || ch.state === 'returning') {
+      ch.sittingTime = 0;
+      // Hover freeze: character stops and looks startled when moused over
+      const isWalkHovered = _hoverRole === id;
+      if (isWalkHovered) {
+        ch.dir = 'down';  // face forward (toward CEO)
+        ch.walkFrame = 0;  // stand still
+        continue;  // skip movement — frozen in place
+      }
       if (ch.path.length === 0) {
         if (ch.state === 'returning') {
           ch.state = 'sitting'; ch.room = ch.homeRoom;
-          ch.stateTimer = 800 + Math.floor(Math.random() * 1200);
+          ch.stateTimer = 1200 + Math.floor(Math.random() * 1800);  // sit 20-50s
         } else {
           ch.state = 'idle'; ch.dir = 'down';
           ch.stateTimer = 180 + Math.floor(Math.random() * 360);
@@ -606,8 +772,13 @@ function updateChars(chars: Record<string, CharState>, frame: number) {
         ch.walkFrame = Math.floor(ch.walkTimer / 12) % 4;
       }
     } else if (ch.state === 'idle') {
+      // Idle characters also freeze on hover
+      if (_hoverRole === id) {
+        ch.dir = 'down';
+        continue;
+      }
       if (ch.stateTimer <= 0) {
-        if (Math.random() < 0.3) {
+        if (Math.random() < 0.15) {  // rarely wander again — usually head back
           ch.state = 'walking';
           const pts = _layout.waypoints[ch.room];
           if (pts && pts.length > 0) {
@@ -697,10 +868,15 @@ function drawScene(
     const sit = ch.state === 'sitting';
     const ap = getAp(id);
     const isWorking = roleStatuses[id] === 'working';
+    // Stretch animation: 1px up/down bounce when stretching
+    const stretchBounce = ch.isStretching && ch.stretchTimer > 0
+      ? Math.sin(ch.stretchTimer * 0.15) * 1
+      : 0;
     entities.push({
       y: d.dy + 14,
       draw: () => {
-        drawDeskUnit(d.dx, d.dy, ap, sit ? ch.bobY : 0, !sit);
+        const bobOffset = sit ? ch.bobY + stretchBounce : 0;
+        drawDeskUnit(d.dx, d.dy, ap, bobOffset, !sit, ch.lookDir);
         // Working indicator: glowing monitor
         if (sit && isWorking) {
           const color = ROLE_COLORS[id] ?? '#388bfd';
@@ -776,7 +952,7 @@ function drawScene(
     }
   }
 
-  // Draw hover highlight
+  // Draw hover highlight + startled "!" for non-sitting characters
   if (_hoverRole) {
     const d = DESKS[_hoverRole];
     const ch = chars[_hoverRole];
@@ -789,8 +965,116 @@ function drawScene(
       } else {
         _ctx.fillRect(Math.round(ch.x) - 1, Math.round(ch.y) - 1, 14, 24);
       }
+      // "!" startled indicator above character (any state)
+      _ctx.globalAlpha = 0.95;
+      _ctx.fillStyle = '#FBBF24';
+      _ctx.font = 'bold 8px monospace';
+      _ctx.textAlign = 'center';
+      const exX = ch.state === 'sitting' ? d.dx + 13 : Math.round(ch.x) + 6;
+      const exY = ch.state === 'sitting' ? d.dy - 1 : Math.round(ch.y) - 5;
+      _ctx.fillText('!', exX, exY);
       _ctx.restore();
     }
+  }
+
+  // ── Zzz animation for long-idle characters ──
+  const ZZZ_THRESHOLD = 3600;  // ~60 seconds at 60fps
+  for (const [, ch] of Object.entries(chars)) {
+    if (ch.state === 'sitting' && ch.sittingTime > ZZZ_THRESHOLD && !ch.isStretching) {
+      const d = Object.values(DESKS).find(dk => dk.dx + 8 === ch.homeX && dk.dy + 34 === ch.homeY);
+      if (!d) continue;
+      const cx = d.dx + 13, cy = d.dy;
+      const phase = Math.floor(ch.sittingTime / 40) % 3;  // cycle through z positions
+      _ctx.save();
+      _ctx.font = '5px monospace';
+      _ctx.textAlign = 'center';
+      // Three "z" at different heights and sizes, cycling
+      const alphas = [0.7, 0.5, 0.3];
+      const offsets = [
+        { x: 3, y: -2 - phase },
+        { x: 6, y: -5 - ((phase + 1) % 3) },
+        { x: 4, y: -8 - ((phase + 2) % 3) },
+      ];
+      for (let i = 0; i < 3; i++) {
+        _ctx.globalAlpha = alphas[i];
+        _ctx.fillStyle = '#93C5FD';
+        _ctx.font = `${4 + i}px monospace`;
+        _ctx.fillText('z', cx + offsets[i].x, cy + offsets[i].y);
+      }
+      _ctx.restore();
+    }
+  }
+
+  // ── Reaction particles ──
+  _particles = _particles.filter(p => p.life > 0);
+  for (const p of _particles) {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life--;
+    _ctx.save();
+    _ctx.globalAlpha = Math.min(1, p.life / (p.maxLife * 0.3));
+    _ctx.fillStyle = p.color ?? '#FF6B8A';
+    _ctx.font = '8px serif';
+    _ctx.fillText(p.char, Math.round(p.x), Math.round(p.y));
+    _ctx.restore();
+  }
+
+  // ── Mascot "!" on hover (only before belly-up) ──
+  if (_hoverMascot && mascot && _mascotHoverTime <= 90) {
+    const mx = Math.round(mascot.x), my = Math.round(mascot.y);
+    _ctx.save();
+    _ctx.globalAlpha = 0.9;
+    _ctx.fillStyle = '#FBBF24';
+    _ctx.font = 'bold 5px monospace';
+    _ctx.textAlign = 'center';
+    _ctx.fillText('!', mx + 4, my - 2);
+    _ctx.restore();
+  }
+
+  // ── Mascot zzz when idle long enough ──
+  if (mascot && !_hoverMascot && mascot.state === 'idle' && mascot.idleTime > 600) {
+    const mx = Math.round(mascot.x), my = Math.round(mascot.y);
+    const phase = Math.floor(mascot.idleTime / 40) % 3;
+    _ctx.save();
+    const offsets = [
+      { x: 3, y: -2 - phase },
+      { x: 5, y: -5 - ((phase + 1) % 3) },
+      { x: 4, y: -8 - ((phase + 2) % 3) },
+    ];
+    for (let i = 0; i < 3; i++) {
+      _ctx.globalAlpha = [0.7, 0.5, 0.3][i];
+      _ctx.fillStyle = '#93C5FD';
+      _ctx.font = `${3 + i}px monospace`;
+      _ctx.textAlign = 'center';
+      _ctx.fillText('z', mx + offsets[i].x, my + offsets[i].y);
+    }
+    _ctx.restore();
+  }
+
+  // ── Mascot tail wag on hover (before belly-up) ──
+  if (_hoverMascot && mascot && _mascotHoverTime <= 90) {
+    const mx = Math.round(mascot.x), my = Math.round(mascot.y);
+    const wagOffset = (Math.floor(Date.now() / 150) % 2 === 0) ? -1 : 1;
+    if (mascot.dir === 'down') {
+      _ctx.fillStyle = '#FAFAF7';
+      _ctx.fillRect(mx + 4 + wagOffset, my - 1, 2, 2);  // original position (top)
+    }
+  }
+}
+
+/* ── Spawn heart particles (mascot click) ── */
+function spawnHearts(cx: number, cy: number) {
+  for (let i = 0; i < 4; i++) {
+    _particles.push({
+      x: cx + (Math.random() - 0.5) * 8,
+      y: cy,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: -0.3 - Math.random() * 0.2,
+      life: 60 + Math.floor(Math.random() * 30),
+      maxLife: 80,
+      char: i % 2 === 0 ? '♥' : '♡',
+      color: '#FF6B8A',
+    });
   }
 }
 
@@ -803,6 +1087,7 @@ export default function TopDownOfficeView({
   onRoleClick, onProjectClick, onBulletinClick, onDecisionsClick, onKnowledgeClick, onSettingsClick, onThemeClick, onStatsClick,
   getRoleSpeech, getAppearance, onHireClick, onMascotClick, roleLevels,
   coinBalance = 0, onCoinsSpent, onFurniturePlaced,
+  purchasedPreset, onExpansionPurchased,
 }: TopDownOfficeViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -812,6 +1097,7 @@ export default function TopDownOfficeView({
   const frameRef = useRef(0);
   const zoomRef = useRef(DEFAULT_ZOOM);
   const [editMode, setEditMode] = useState(false);
+  const [editTab, setEditTab] = useState<'furniture' | 'expand'>('furniture');
   const [placingType, setPlacingType] = useState<FurnitureType | null>(null);
   const [placingZone, setPlacingZone] = useState<'wall' | 'floor' | null>(null);
   const overridesRef = useRef<Record<string, { offsetX: number; offsetY: number }>>({});
@@ -859,6 +1145,14 @@ export default function TopDownOfficeView({
   const propsRef = useRef({ roleStatuses, activeExecs, getRoleSpeech, getAppearance });
   propsRef.current = { roleStatuses, activeExecs, getRoleSpeech, getAppearance };
 
+  // Hover speech bubble state (REACT-006)
+  const hoverStateRef = useRef<Record<string, {
+    hoverStartTime: number | null;
+    lastSpeechTime: number | null;
+    currentSpeech: string | null;
+    speechDismissTime: number | null;
+  }>>({});
+
   // All role IDs — layout adapts to count
   const assignedRoleIds = useMemo(() => roles.map(r => r.id), [roles]);
 
@@ -866,7 +1160,8 @@ export default function TopDownOfficeView({
   const layoutRef = useRef<FloorLayout>(_layout);
   useEffect(() => {
     const count = assignedRoleIds.length;
-    const newPreset = selectPreset(count, layoutRef.current.preset);
+    const newPreset = selectPreset(count, layoutRef.current.preset, purchasedPreset);
+    const presetChanged = layoutRef.current.preset !== newPreset;
     let newLayout = generateFloorLayout(count, newPreset);
     if (removedRef.current.length > 0) newLayout = applyFurnitureRemovals(newLayout, removedRef.current);
     if (addedRef.current.length > 0) newLayout = applyAddedFurniture(newLayout, addedRef.current);
@@ -881,14 +1176,19 @@ export default function TopDownOfficeView({
     charsRef.current = createChars(assignedRoleIds);
     mascotRef.current = createMascot();
 
-    // Update canvas dimensions
+    // Update canvas dimensions + transition animation on preset change
     const canvas = canvasRef.current;
     if (canvas) {
       canvas.width = newLayout.canvasW;
       canvas.height = newLayout.canvasH;
+      if (presetChanged) {
+        canvas.style.opacity = '0';
+        canvas.style.transition = 'opacity 0.3s';
+        setTimeout(() => { canvas.style.opacity = '1'; }, 50);
+      }
     }
     updateZoom();
-  }, [assignedRoleIds]);
+  }, [assignedRoleIds, purchasedPreset]);
 
   // Get appearance helper
   const getAp = useCallback((roleId: string): CharacterAppearance => {
@@ -1006,6 +1306,11 @@ export default function TopDownOfficeView({
       lbl.className = 'td-facility-label';
       lbl.dataset.facility = fz.id;
       if (fz.id === 'meeting') lbl.dataset.questTarget = 'meeting-room';
+      if (fz.id === 'knowledge') lbl.dataset.questTarget = 'knowledge-hub';
+      if (fz.id === 'bulletin') lbl.dataset.questTarget = 'bulletin-board';
+      if (fz.id === 'stats') lbl.dataset.questTarget = 'stats-btn';
+      if (fz.id === 'settings') lbl.dataset.questTarget = 'settings-btn';
+      if (fz.id === 'theme') lbl.dataset.questTarget = 'theme-btn';
       lbl.textContent = `${fz.icon} ${fz.label}`;
       lbl.style.borderColor = `${fz.color}44`;
       const handler = facilityHandlers[fz.id];
@@ -1065,13 +1370,50 @@ export default function TopDownOfficeView({
         }
       }
 
-      // Speech bubble
+      // Speech bubble (with REACT-006 hover dialogue)
       const bub = overlay.querySelector(`.td-bubble[data-role="${id}"]`) as HTMLElement;
       if (bub) {
+        const now = Date.now();
         const isWorking = rs[id] === 'working';
         const activeTask = ae.find(e => e.roleId === id)?.task;
         const speech = gs(id);
-        const text = isWorking && activeTask ? activeTask.slice(0, 60) : speech ? speech.slice(0, 60) : '';
+
+        // REACT-006: Hover speech bubble logic
+        let hoverSpeech = '';
+        const hState = hoverStateRef.current[id];
+        if (hState) {
+          // Check if speech should be dismissed
+          if (hState.speechDismissTime && now >= hState.speechDismissTime) {
+            hState.currentSpeech = null;
+            hState.speechDismissTime = null;
+          }
+
+          // Trigger new speech if hovering for 2+ seconds and cooldown passed
+          if (hState.hoverStartTime && !hState.currentSpeech) {
+            const hoverDuration = now - hState.hoverStartTime;
+            const cooldownPassed = !hState.lastSpeechTime || (now - hState.lastSpeechTime) >= 5000;
+
+            if (hoverDuration >= 2000 && cooldownPassed) {
+              // Pick random dialogue
+              const dialogues = ROLE_DIALOGUES[id] || ROLE_DIALOGUES.default;
+              const randomDialogue = dialogues[Math.floor(Math.random() * dialogues.length)];
+              hState.currentSpeech = randomDialogue;
+              hState.lastSpeechTime = now;
+              hState.speechDismissTime = now + 3000; // Dismiss after 3 seconds
+            }
+          }
+
+          hoverSpeech = hState.currentSpeech || '';
+        }
+
+        // Priority: activeTask > hoverSpeech > regular speech
+        const text = isWorking && activeTask
+          ? activeTask.slice(0, 60)
+          : hoverSpeech
+            ? hoverSpeech.slice(0, 60)
+            : speech
+              ? speech.slice(0, 60)
+              : '';
 
         if (text && ch.state === 'sitting') {
           bub.style.display = '';
@@ -1208,10 +1550,11 @@ export default function TopDownOfficeView({
     saveOverrides({ addedFurniture: newAdded });
     // Notify parent (quest triggers)
     onFurniturePlaced?.(_placingType, price);
-    // Deduct coins
+    // Deduct coins (capture type before async — _placingType may be cleared)
     if (price > 0) {
+      const furnitureType = newDef.type;
       import('../../api/client').then(({ api }) => {
-        api.spendCoins(price, `furniture: ${_placingType}`, newDef.id)
+        api.spendCoins(price, `furniture: ${furnitureType}`, newDef.id)
           .then(r => onCoinsSpent?.(r.balance))
           .catch(() => {});
       });
@@ -1276,11 +1619,38 @@ export default function TopDownOfficeView({
     }
 
     const hit = hitTest(e);
+    const prevHoverRole = _hoverRole;
     _hoverRole = hit?.type === 'role' ? hit.id : null;
     _hoverFacility = hit?.type === 'facility' ? hit.id : null;
-    // mascot hover detection (nametag always visible)
+    _hoverMascot = hit?.type === 'mascot';
     _hoverFurniture = null;
     if (canvas) canvas.style.cursor = hit ? 'pointer' : 'default';
+
+    // Track mouse X position for gaze direction (REACT-005)
+    const { mx } = canvasCoords(e);
+    _mouseX = mx;
+
+    // Update hover state for speech bubbles (REACT-006)
+    const now = Date.now();
+    if (_hoverRole && _hoverRole !== prevHoverRole) {
+      // New hover started
+      if (!hoverStateRef.current[_hoverRole]) {
+        hoverStateRef.current[_hoverRole] = {
+          hoverStartTime: null,
+          lastSpeechTime: null,
+          currentSpeech: null,
+          speechDismissTime: null,
+        };
+      }
+      const state = hoverStateRef.current[_hoverRole];
+      state.hoverStartTime = now;
+    } else if (!_hoverRole && prevHoverRole) {
+      // Hover ended
+      const state = hoverStateRef.current[prevHoverRole];
+      if (state) {
+        state.hoverStartTime = null;
+      }
+    }
   }, [hitTest, canvasCoords]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1390,7 +1760,7 @@ export default function TopDownOfficeView({
     }
     _hoverRole = null;
     _hoverFacility = null;
-    // mascot hover cleared on mouse leave
+    _hoverMascot = false;
     _hoverFurniture = null;
     if (canvasRef.current) canvasRef.current.style.cursor = 'default';
   }, []);
@@ -1400,8 +1770,25 @@ export default function TopDownOfficeView({
     if (_editMode) return; // clicks handled by mouseDown/Up in edit mode
     const hit = hitTest(e);
     if (!hit) return;
-    if (hit.type === 'role') { onRoleClick(hit.id); return; }
-    if (hit.type === 'mascot') { onMascotClick?.(); return; }
+    if (hit.type === 'role') {
+      // Spawn heart particles (CEO shows appreciation!)
+      const ch = charsRef.current[hit.id];
+      const d = DESKS[hit.id];
+      if (ch && d) {
+        const cx = ch.state === 'sitting' ? d.dx + 13 : Math.round(ch.x) + 6;
+        const cy = ch.state === 'sitting' ? d.dy + 2 : Math.round(ch.y) - 2;
+        spawnHearts(cx, cy);
+      }
+      onRoleClick(hit.id);
+      return;
+    }
+    if (hit.type === 'mascot') {
+      // Spawn hearts for mascot too
+      const mc = mascotRef.current;
+      if (mc) spawnHearts(Math.round(mc.x) + 4, Math.round(mc.y) - 2);
+      onMascotClick?.();
+      return;
+    }
     // Facility clicks
     switch (hit.id) {
       case 'meeting': {
@@ -1417,6 +1804,19 @@ export default function TopDownOfficeView({
       case 'stats': onStatsClick?.(); break;
     }
   }, [hitTest, onRoleClick, onProjectClick, onBulletinClick, onDecisionsClick, onKnowledgeClick, onSettingsClick, onThemeClick, onStatsClick]);
+
+  const handleExpansionPurchase = useCallback(async () => {
+    if ((coinBalance ?? 0) < 15000) return;
+    const confirmed = window.confirm('Upgrade to Large Office for 15,000 coins?');
+    if (!confirmed) return;
+    try {
+      const r = await api.spendCoins(15000, 'office-expansion: preset-L', 'expansion-preset-L');
+      if (r.ok) {
+        onCoinsSpent?.(r.balance);
+        onExpansionPurchased?.('L');
+      }
+    } catch { /* ignore */ }
+  }, [coinBalance, onCoinsSpent, onExpansionPurchased]);
 
   return (
     <div className={`td-scene${editMode ? ' td-scene--editing' : ''}`}>
@@ -1442,6 +1842,7 @@ export default function TopDownOfficeView({
       )}
       <button
         className={`td-edit-btn${editMode ? ' td-edit-btn--active' : ''}`}
+        data-quest-target="edit-btn"
         onClick={() => {
           setEditMode(m => {
             const next = !m;
@@ -1456,30 +1857,57 @@ export default function TopDownOfficeView({
         <span className="td-edit-btn__label">{editMode ? 'DONE' : 'EDIT'}</span>
       </button>
       {editMode && (
-        <div className="td-palette">
-          {FURNITURE_CATALOG.map(entry => {
-            const canAfford = entry.price === 0 || coinBalance >= entry.price;
-            const priceLabel = entry.price === 0 ? 'Free' : `${entry.price >= 1000 ? `${(entry.price / 1000).toFixed(entry.price % 1000 === 0 ? 0 : 1)}K` : entry.price}`;
-            return (
-              <button
-                key={entry.type}
-                className={`td-palette__item${placingType === entry.type ? ' td-palette__item--active' : ''}${!canAfford ? ' td-palette__item--locked' : ''}`}
-                onClick={() => {
-                  if (!canAfford) return;
-                  if (placingType === entry.type) { setPlacingType(null); setPlacingZone(null); }
-                  else { setPlacingType(entry.type); setPlacingZone(entry.zone); }
-                }}
-                title={`${entry.label} — ${priceLabel}`}
-                style={!canAfford ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
-              >
-                <span>{entry.icon}</span>
-                <span className="td-palette__price" style={{ fontSize: '7px', color: entry.price === 0 ? '#4CAF50' : canAfford ? '#FFD54F' : '#EF5350' }}>
-                  {priceLabel}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        <>
+          <div className="td-edit-tabs">
+            <button className={`td-edit-tabs__btn${editTab === 'furniture' ? ' td-edit-tabs__btn--active' : ''}`} onClick={() => { setEditTab('furniture'); setPlacingType(null); setPlacingZone(null); }}>FURNITURE</button>
+            <button className={`td-edit-tabs__btn${editTab === 'expand' ? ' td-edit-tabs__btn--active' : ''}`} onClick={() => { setEditTab('expand'); setPlacingType(null); setPlacingZone(null); }}>EXPAND</button>
+          </div>
+          {editTab === 'furniture' ? (
+            <div className="td-palette">
+              {FURNITURE_CATALOG.map(entry => {
+                const canAfford = entry.price === 0 || coinBalance >= entry.price;
+                const priceLabel = entry.price === 0 ? 'Free' : `${entry.price >= 1000 ? `${(entry.price / 1000).toFixed(entry.price % 1000 === 0 ? 0 : 1)}K` : entry.price}`;
+                return (
+                  <button
+                    key={entry.type}
+                    className={`td-palette__item${placingType === entry.type ? ' td-palette__item--active' : ''}${!canAfford ? ' td-palette__item--locked' : ''}`}
+                    onClick={() => {
+                      if (!canAfford) return;
+                      if (placingType === entry.type) { setPlacingType(null); setPlacingZone(null); }
+                      else { setPlacingType(entry.type); setPlacingZone(entry.zone); }
+                    }}
+                    title={`${entry.label} — ${priceLabel}`}
+                    style={!canAfford ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+                  >
+                    <span>{entry.icon}</span>
+                    <span className="td-palette__price" style={{ fontSize: '7px', color: entry.price === 0 ? '#4CAF50' : canAfford ? '#FFD54F' : '#EF5350' }}>
+                      {priceLabel}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="td-expand-panel">
+              {purchasedPreset === 'L' ? (
+                <div className="td-expand-item td-expand-item--purchased">
+                  <span>&#x2713; Large Office</span>
+                  <span className="td-expand-item__status">Purchased</span>
+                </div>
+              ) : (
+                <div className={`td-expand-item${(coinBalance ?? 0) < 15000 ? ' td-expand-item--locked' : ''}`}>
+                  <span>Large Office</span>
+                  <span className="td-expand-item__price">15K</span>
+                  <button
+                    className="td-expand-item__btn"
+                    disabled={(coinBalance ?? 0) < 15000}
+                    onClick={handleExpansionPurchase}
+                  >UPGRADE</button>
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
       {onHireClick && (
         <button className="td-hire-btn" data-quest-target="hire-btn" onClick={onHireClick} title="Hire New Role">

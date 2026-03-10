@@ -9,15 +9,17 @@ interface Props {
   decisions: Decision[];
   mode: 'bulletin' | 'decisions';
   onClose: () => void;
+  onOpenWaveCenter?: () => void;
   terminalWidth?: number;
+  onMaximize?: () => void;
 }
 
-export default function OperationsPanel({ standups, waves, decisions, mode, onClose, terminalWidth = 0 }: Props) {
+export default function OperationsPanel({ standups, waves, decisions, mode, onClose, onOpenWaveCenter, terminalWidth = 0, onMaximize }: Props) {
   const [tab, setTab] = useState<'standups' | 'waves' | 'decisions'>(
     mode === 'decisions' ? 'decisions' : 'standups'
   );
 
-  const { panelRight, panelWidth, isResizing, handleResizeStart } = usePanelResize(terminalWidth);
+  const { panelRight, panelWidth, isResizing, handleResizeStart } = usePanelResize(terminalWidth, undefined, onMaximize);
 
   return (
     <>
@@ -33,12 +35,12 @@ export default function OperationsPanel({ standups, waves, decisions, mode, onCl
         />
         {/* Header */}
         <div className="p-5 bg-[var(--desk-wood)] text-white relative">
-          <button
-            onClick={onClose}
-            className="absolute top-3 right-3 w-7 h-7 rounded-full bg-white/20 text-white flex items-center justify-center text-lg hover:bg-white/30 cursor-pointer"
-          >
-            ×
-          </button>
+          <div className="absolute top-3 right-3 flex items-center gap-1">
+            {onMaximize && (
+              <button onClick={onMaximize} className="w-7 h-7 rounded-full bg-white/20 text-white flex items-center justify-center text-sm hover:bg-white/30 cursor-pointer" title="Maximize (Pro View)">{'\u2922'}</button>
+            )}
+            <button onClick={onClose} className="w-7 h-7 rounded-full bg-white/20 text-white flex items-center justify-center text-lg hover:bg-white/30 cursor-pointer">×</button>
+          </div>
           <div className="text-lg font-bold">
             {mode === 'bulletin' ? '\u{1F4CC} Bulletin Board' : '\u{1F4DC} Decision Log'}
           </div>
@@ -49,7 +51,11 @@ export default function OperationsPanel({ standups, waves, decisions, mode, onCl
           {mode === 'bulletin' ? (
             <>
               <TabBtn label={`Standups (${standups.length})`} active={tab === 'standups'} onClick={() => setTab('standups')} />
-              <TabBtn label={`Waves (${waves.length})`} active={tab === 'waves'} onClick={() => setTab('waves')} />
+              {onOpenWaveCenter ? (
+                <TabBtn label={`Waves \u2192`} active={false} onClick={onOpenWaveCenter} />
+              ) : (
+                <TabBtn label={`Waves (${waves.length})`} active={tab === 'waves'} onClick={() => setTab('waves')} />
+              )}
             </>
           ) : (
             <TabBtn label={`Decisions (${decisions.length})`} active={tab === 'decisions'} onClick={() => setTab('decisions')} />
@@ -62,7 +68,7 @@ export default function OperationsPanel({ standups, waves, decisions, mode, onCl
             <ContentCard key={i} title={`Standup ${s.date}`} content={s.content} />
           ))}
           {tab === 'waves' && waves.map((w, i) => (
-            <ContentCard key={i} title={`Wave ${w.id}`} subtitle={w.timestamp} content={w.content} />
+            <ContentCard key={i} title={`Wave ${w.id}`} subtitle={w.startedAt} content={w.directive} />
           ))}
           {tab === 'decisions' && decisions.map((d, i) => (
             <ContentCard key={i} title={`#${d.id} ${d.title}`} subtitle={d.date} content={d.content} />

@@ -3,7 +3,7 @@ import useActivityStream from '../../hooks/useActivityStream';
 import EventRow from '../common/EventRow';
 
 interface ActivityPanelProps {
-  jobId: string;
+  sessionId: string;
   title: string;
   color: string;
   variant: 'modal' | 'inline';
@@ -16,9 +16,9 @@ interface ActivityPanelProps {
 }
 
 export default function ActivityPanel({
-  jobId, title, color, variant, style, onClose, onMinimize, onDone, onNavigateToJob, onOpenKnowledgeDoc,
+  sessionId, title, color, variant, style, onClose, onMinimize, onDone, onNavigateToJob, onOpenKnowledgeDoc,
 }: ActivityPanelProps) {
-  const { events, status, textOutput, childJobIds } = useActivityStream(jobId);
+  const { events, status, textOutput, childJobIds } = useActivityStream(sessionId);
   const [elapsed, setElapsed] = useState(0);
   const [collapsedThinking, setCollapsedThinking] = useState<Set<number>>(new Set());
   const outputRef = useRef<HTMLDivElement>(null);

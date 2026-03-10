@@ -46,6 +46,11 @@ export interface AddedFurniture {
   accent?: string;
 }
 
+export interface OfficeExpansion {
+  preset: 'M' | 'L';
+  purchaseHistory: Array<{ type: string; cost: number; ts: string }>;
+}
+
 export interface Preferences {
   instanceId?: string; // anonymous persistent token — auto-generated on first read
   appearances: Record<string, CharacterAppearance>;
@@ -56,6 +61,7 @@ export interface Preferences {
   deskOverrides?: Record<string, DeskOverride>; // keyed by role id
   removedFurniture?: string[]; // FurnitureDef.id list
   addedFurniture?: AddedFurniture[];
+  officeExpansion?: OfficeExpansion;
 }
 
 const CONFIG_DIR = '.tycono';
@@ -85,6 +91,7 @@ export function readPreferences(companyRoot: string): Preferences {
     deskOverrides: (data.deskOverrides as Record<string, DeskOverride>) ?? undefined,
     removedFurniture: (data.removedFurniture as string[]) ?? undefined,
     addedFurniture: (data.addedFurniture as AddedFurniture[]) ?? undefined,
+    officeExpansion: (data.officeExpansion as OfficeExpansion) ?? undefined,
   };
 
   // Auto-generate instanceId on first access
@@ -128,6 +135,9 @@ export function mergePreferences(companyRoot: string, partial: Partial<Preferenc
     addedFurniture: partial.addedFurniture !== undefined
       ? partial.addedFurniture
       : current.addedFurniture,
+    officeExpansion: partial.officeExpansion !== undefined
+      ? partial.officeExpansion
+      : current.officeExpansion,
   };
   writePreferences(companyRoot, merged);
   return merged;

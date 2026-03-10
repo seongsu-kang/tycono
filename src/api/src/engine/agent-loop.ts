@@ -5,6 +5,7 @@ import { validateDispatch, validateConsult } from './authority-validator.js';
 import { getToolsForRole } from './tools/definitions.js';
 import { executeTool, type ToolExecutorOptions } from './tools/executor.js';
 import { type TokenLedger } from '../services/token-ledger.js';
+import { estimateCost } from '../services/pricing.js';
 import { type ImageAttachment } from './runners/types.js';
 
 /* ─── Types ──────────────────────────────────── */
@@ -17,6 +18,7 @@ export interface AgentConfig {
   orgTree: OrgTree;
   readOnly?: boolean;
   maxTurns?: number;
+  codeRoot?: string;  // EG-001: code project root for bash_execute
   llm?: LLMProvider;
   depth?: number;             // Current dispatch depth (default 0)
   visitedRoles?: Set<string>; // Circular dispatch detection
@@ -41,6 +43,43 @@ export interface AgentResult {
   totalTokens: { input: number; output: number };
   toolCalls: Array<{ name: string; input: Record<string, unknown> }>;
   dispatches: Array<{ roleId: string; task: string; result: string }>;
+}
+
+/* ─── EG-006: Context Compression ────────────── */
+
+/**
+ * Compress older messages to reduce token usage.
+ * Strategy: Keep first 2 messages (initial task) and last 4 messages (recent context).
+ * Middle messages: truncate long tool_result content, collapse text blocks.
+ */
+function compressMessages(messages: LLMMessage[]): void {
+  if (messages.length <= 6) return;
+
+  // Keep first 2 (task setup) and last 4 (recent context)
+  const keepHead = 2;
+  const keepTail = 4;
+  const compressRange = messages.slice(keepHead, messages.length - keepTail);
+
+  for (const msg of compressRange) {
+    if (typeof msg.content === 'string') {
+      // Truncate long text content
+      if (msg.content.length > 500) {
+        msg.content = msg.content.slice(0, 300) + '\n\n[... compressed ...]';
+      }
+    } else if (Array.isArray(msg.content)) {
+      for (let i = 0; i < msg.content.length; i++) {
+        const block = msg.content[i] as Record<string, unknown>;
+        if (block.type === 'tool_result') {
+          const content = typeof block.content === 'string' ? block.content : '';
+          if (content.length > 300) {
+            block.content = content.slice(0, 200) + '\n[... compressed, was ' + content.length + ' chars]';
+          }
+        } else if (block.type === 'text' && typeof block.text === 'string' && block.text.length > 500) {
+          block.text = (block.text as string).slice(0, 300) + '\n[... compressed ...]';
+        }
+      }
+    }
+  }
 }
 
 /* ─── Agent Loop ─────────────────────────────── */
@@ -87,13 +126,15 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
 
   // 2. Determine tools
   const subordinates = getSubordinates(orgTree, roleId);
-  const tools = getToolsForRole(subordinates.length > 0, readOnly);
+  const hasBash = !readOnly && !!config.codeRoot;
+  const tools = getToolsForRole(subordinates.length > 0, readOnly, hasBash);
 
   // 3. Set up tool executor
   const toolExecOptions: ToolExecutorOptions = {
     companyRoot,
     roleId,
     orgTree,
+    codeRoot: config.codeRoot,
     onToolExec,
     onDispatch: async (targetRoleId: string, subTask: string) => {
       // Recursive dispatch — validate, then run sub-agent
@@ -118,6 +159,7 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
         orgTree,
         readOnly: false,
         maxTurns: Math.min(maxTurns, 15), // Limit sub-agent turns
+        codeRoot: config.codeRoot,
         llm,
         depth: depth + 1,
         visitedRoles: new Set(visitedRoles), // Copy for parallel dispatch support
@@ -210,16 +252,33 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
   const dispatches: AgentResult['dispatches'] = [];
   const outputParts: string[] = [];
 
+  // EG-006/007: Context compression + token budget
+  const COMPRESS_THRESHOLD = 100_000;
+  const TOKEN_WARN_THRESHOLD = 200_000; // Warn at 200K total tokens
+  let tokenWarningEmitted = false;
+
   while (turns < maxTurns) {
     // Check abort signal before each turn
     if (abortSignal?.aborted) break;
 
     turns++;
 
+    // EG-006: Compress old messages when token budget exceeded
+    if (totalInput > COMPRESS_THRESHOLD && messages.length > 4) {
+      compressMessages(messages);
+    }
+
     // Call LLM
     const response = await llm.chat(context.systemPrompt, messages, tools, abortSignal);
     totalInput += response.usage.inputTokens;
     totalOutput += response.usage.outputTokens;
+
+    // EG-007: Token budget warning
+    if (!tokenWarningEmitted && (totalInput + totalOutput) > TOKEN_WARN_THRESHOLD) {
+      tokenWarningEmitted = true;
+      const cost = estimateCost(totalInput, totalOutput, config.model ?? 'unknown');
+      onText?.(`\n\n⚠️ [Token Budget Warning] This task has used ${totalInput.toLocaleString()} input + ${totalOutput.toLocaleString()} output tokens (~$${cost.toFixed(3)}). Consider wrapping up.\n\n`);
+    }
 
     // Record token usage
     config.tokenLedger?.record({
@@ -253,17 +312,33 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
       (b): b is MessageContent & { type: 'tool_use' } => b.type === 'tool_use'
     );
 
-    const toolResults: ToolResult[] = [];
+    // EG-004: Parallel tool execution for independent tools
+    // dispatch/consult run sequentially (recursive agent calls)
+    // All other tools run in parallel via Promise.all()
+    const sequentialTools = new Set(['dispatch', 'consult']);
+    const parallelCalls = toolCalls.filter(tc => !sequentialTools.has(tc.name));
+    const sequentialCalls = toolCalls.filter(tc => sequentialTools.has(tc.name));
 
+    // Record all tool calls
     for (const tc of toolCalls) {
       allToolCalls.push({ name: tc.name, input: tc.input });
+    }
 
+    // Run parallel tools concurrently
+    const parallelResults = await Promise.all(
+      parallelCalls.map(tc =>
+        executeTool({ id: tc.id, name: tc.name, input: tc.input }, toolExecOptions)
+      )
+    );
+
+    // Run sequential tools one by one
+    const sequentialResults: ToolResult[] = [];
+    for (const tc of sequentialCalls) {
       const result = await executeTool(
         { id: tc.id, name: tc.name, input: tc.input },
         toolExecOptions,
       );
-
-      toolResults.push(result);
+      sequentialResults.push(result);
 
       // Track dispatches
       if (tc.name === 'dispatch' && !result.is_error) {
@@ -272,6 +347,27 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
           task: String(tc.input.task),
           result: result.content,
         });
+      }
+    }
+
+    // EG-005: Merge results in original tool_use_id order
+    const resultMap = new Map<string, ToolResult>();
+    for (const r of [...parallelResults, ...sequentialResults]) {
+      resultMap.set(r.tool_use_id, r);
+    }
+    const toolResults = toolCalls.map(tc => resultMap.get(tc.id)!);
+
+    // Track dispatches from parallel results too
+    for (const tc of parallelCalls) {
+      if (tc.name === 'dispatch') {
+        const r = resultMap.get(tc.id)!;
+        if (!r.is_error) {
+          dispatches.push({
+            roleId: String(tc.input.roleId),
+            task: String(tc.input.task),
+            result: r.content,
+          });
+        }
       }
     }
 
@@ -300,16 +396,25 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
         `${i + 1}. **${d.roleId}**: "${d.task.slice(0, 80)}"\n   Result: ${d.result.slice(0, 300)}`,
       ).join('\n\n');
 
+      // Build list of already-dispatched tasks to prevent re-dispatch
+      const dispatchedList = dispatches.map(d => `- ${d.roleId}: "${d.task.slice(0, 100)}"`).join('\n');
+
       const supervisionPrompt = [
         '[SUPERVISION LOOP] Your subordinates have completed their tasks. Follow the C-Level Protocol:',
         '',
         '## Subordinate Results',
         dispatchSummary,
         '',
+        '## Already Dispatched (DO NOT re-dispatch these)',
+        dispatchedList,
+        '',
+        '⛔ **Do NOT re-dispatch the same or similar task to the same role.** If a subordinate already completed a task, accept the result and move on.',
+        '⛔ **If the result is satisfactory, do NOT dispatch again.** Only re-dispatch if the result clearly fails acceptance criteria with SPECIFIC feedback on what to fix.',
+        '',
         '## Required Actions (do ALL of these):',
         '',
         '### 1. Review',
-        'Does each result meet the acceptance criteria? If not, re-dispatch with specific feedback.',
+        'Does each result meet the acceptance criteria? If clearly unsatisfactory, re-dispatch with SPECIFIC fix instructions (not the same task again).',
         '',
         '### 2. Knowledge Update (The Loop Step ④)',
         'Record any new decisions, findings, or analysis in appropriate AKB documents:',
@@ -321,10 +426,11 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
         'Update task status in the relevant tasks.md or project documents.',
         'Mark completed items as DONE. Identify the NEXT task to dispatch.',
         '',
-        '### 4. Next Dispatch',
-        'If there are remaining tasks (e.g., QA after Engineer, or the next task in the backlog):',
-        '- Dispatch the next task to the appropriate subordinate',
-        '- If all work is done, synthesize a final report for your superior',
+        '### 4. Next Dispatch (ONLY if there is genuinely NEW work)',
+        'If there are DIFFERENT remaining tasks (e.g., QA after Engineer, or a DIFFERENT backlog item):',
+        '- Dispatch the NEXT DIFFERENT task to the appropriate subordinate',
+        '- If all work from the directive is done, synthesize a final report for your superior',
+        '- **If the subordinate already completed the requested work, report success — do NOT re-dispatch**',
         '',
         'Execute these actions now using your tools (Read, Edit, Bash, dispatch).',
       ].join('\n');
