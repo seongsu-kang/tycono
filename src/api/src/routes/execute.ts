@@ -225,16 +225,53 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
     return;
   }
 
+  // D-014: Create/find session for CEO assigns (not for dispatch child jobs)
+  let sessionId: string | undefined;
+  if (sourceRole === 'ceo' && !parentJobId) {
+    const session = createSession(roleId, {
+      mode: readOnly ? 'talk' : 'do',
+      source: 'dispatch',
+    });
+    sessionId = session.id;
+
+    // Add CEO message
+    const ceoMsg: Message = {
+      id: `msg-${Date.now()}-ceo`,
+      from: 'ceo',
+      content: task,
+      type: readOnly ? 'conversation' : 'directive',
+      status: 'done',
+      timestamp: new Date().toISOString(),
+    };
+    addMessage(session.id, ceoMsg);
+  }
+
   const job = jobManager.startJob({
-    type: 'assign',
+    type: readOnly ? 'consult' : 'assign',
     roleId,
     task,
     sourceRole,
     readOnly,
     parentJobId,
+    sessionId,
   });
 
-  jsonResponse(res, 200, { jobId: job.id });
+  // D-014: Add role message linked to job
+  if (sessionId) {
+    const roleMsg: Message = {
+      id: `msg-${Date.now() + 1}-role`,
+      from: 'role',
+      content: '',
+      type: 'conversation',
+      status: 'streaming',
+      timestamp: new Date().toISOString(),
+      jobId: job.id,
+      readOnly: readOnly || undefined,
+    };
+    addMessage(sessionId, roleMsg, true);
+  }
+
+  jsonResponse(res, 200, { jobId: job.id, ...(sessionId && { sessionId }) });
 }
 
 /* ─── GET /api/jobs ──────────────────────── */
