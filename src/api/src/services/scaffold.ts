@@ -343,11 +343,14 @@ export function scaffold(config: ScaffoldConfig): string[] {
     created.push('.gitignore');
   }
 
-  // Write .tycono/config.json (engine + API key)
+  // Write .tycono/config.json (engine + API key + codeRoot)
+  const slug = config.companyName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'my-company';
+  const defaultCodeRoot = path.join(path.dirname(root), `${slug}-code`);
   if (config.apiKey) {
     const companyConfig: CompanyConfig = {
       engine: 'direct-api',
       apiKey: config.apiKey,
+      codeRoot: defaultCodeRoot,
     };
     writeConfig(root, companyConfig);
     created.push('.tycono/config.json');
@@ -355,10 +358,13 @@ export function scaffold(config: ScaffoldConfig): string[] {
     fs.writeFileSync(path.join(root, '.env'), `ANTHROPIC_API_KEY=${config.apiKey}\n`);
     created.push('.env');
   } else {
-    const companyConfig: CompanyConfig = { engine: 'claude-cli' };
+    const companyConfig: CompanyConfig = { engine: 'claude-cli', codeRoot: defaultCodeRoot };
     writeConfig(root, companyConfig);
     created.push('.tycono/config.json');
   }
+  // Ensure codeRoot directory exists
+  fs.mkdirSync(defaultCodeRoot, { recursive: true });
+  created.push(`(code) ${defaultCodeRoot}`);
 
   // Save language preference (default: English)
   mergePreferences(root, { language: config.language || 'en' });
