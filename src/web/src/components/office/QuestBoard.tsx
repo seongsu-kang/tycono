@@ -62,7 +62,7 @@ export default function QuestBoard({ progress, onQuestAction, onClose, terminalW
             const isLocked = ch.num > progress.activeChapter;
 
             return (
-              <div key={ch.num} className="rounded-lg overflow-hidden" style={{
+              <div key={ch.num} className="rounded-lg" style={{
                 background: isActive ? 'var(--hud-bg-alt)' : 'transparent',
                 border: isActive ? '1px solid var(--accent)' : '1px solid var(--terminal-border)',
                 opacity: isLocked ? 0.4 : 1,
