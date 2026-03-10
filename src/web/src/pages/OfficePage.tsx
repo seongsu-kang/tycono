@@ -2130,11 +2130,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
             handleJobDone();
             setWaveDone(true);
             addToast('Wave complete', '#2E7D32');
-            // Auto-save wave on completion
-            const jobIds = waveState.rootJobs.map((j: { jobId: string }) => j.jobId);
-            api.saveWave({ directive: waveState.directive, jobIds })
-              .then(() => addToast('Wave auto-saved', '#1565C0'))
-              .catch(() => {}); // silent fail — manual save still available
+            // Note: auto-save is handled inside WaveCenter's own useEffect (doneFired)
           }}
           onSave={async (jobIds) => {
             try {

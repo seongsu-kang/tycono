@@ -452,8 +452,22 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
   if (!fs.existsSync(wavesDir)) {
     fs.mkdirSync(wavesDir, { recursive: true });
   }
-  const hhmmss = now.toTimeString().slice(0, 8).replace(/:/g, '');
-  const baseName = `${dateStr.replace(/-/g, '')}-${hhmmss}-wave`;
+
+  // Dedup: if waveId matches an existing file, overwrite instead of creating new
+  let baseName: string;
+  if (waveId) {
+    const existing = fs.readdirSync(wavesDir).find(f => {
+      if (!f.endsWith('.json')) return false;
+      try {
+        const data = JSON.parse(fs.readFileSync(path.join(wavesDir, f), 'utf-8'));
+        return data.waveId === waveId || data.id === waveId;
+      } catch { return false; }
+    });
+    baseName = existing ? existing.replace('.json', '') : waveId;
+  } else {
+    const hhmmss = now.toTimeString().slice(0, 8).replace(/:/g, '');
+    baseName = `${dateStr.replace(/-/g, '')}-${hhmmss}-wave`;
+  }
   const jsonPath = path.join(wavesDir, `${baseName}.json`);
 
   const waveJson = {
