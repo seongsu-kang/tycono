@@ -12,6 +12,7 @@ import {
 } from '../services/session-store.js';
 import { jobManager } from '../services/job-manager.js';
 import { ActivityStream, type ActivityEvent } from '../services/activity-stream.js';
+import { updateFollowUpForReply } from '../services/wave-tracker.js';
 
 export const sessionsRouter = Router();
 
@@ -246,6 +247,12 @@ sessionsRouter.post('/:id/reply', (req, res) => {
     jobId: newJob.id,
   };
   addMessage(req.params.id, roleMsg, true);
+
+  // Update wave JSON if this session belongs to a wave
+  if (session.waveId) {
+    const oldJobId = job?.id;
+    updateFollowUpForReply(session.waveId, session.roleId, oldJobId, newJob.id, req.params.id);
+  }
 
   res.json({ ok: true, jobId: newJob.id, sessionId: req.params.id });
 });

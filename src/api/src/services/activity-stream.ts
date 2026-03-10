@@ -157,4 +157,9 @@ export class ActivityStream {
       .filter(f => f.endsWith('.jsonl'))
       .map(f => f.replace('.jsonl', ''));
   }
+
+  /** Get the streams directory path */
+  static getStreamDir(): string {
+    return streamsDir();
+  }
 }

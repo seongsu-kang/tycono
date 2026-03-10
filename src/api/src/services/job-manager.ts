@@ -208,6 +208,7 @@ class JobManager {
       type: params.type,
       task: params.task,
       sourceRole: params.sourceRole ?? 'ceo',
+      ...(params.sessionId && { sessionId: params.sessionId }),
     });
 
     // If this job has a parent, emit dispatch:start on the parent's stream
@@ -798,7 +799,73 @@ class JobManager {
         }
       }
     }
-    return active ?? latest;
+    if (active ?? latest) return active ?? latest;
+
+    // Fallback: scan activity stream files for historical jobs with this sessionId
+    return this.recoverJobFromStreams(sessionId);
+  }
+
+  /** Recover a minimal Job object from activity stream files (after server restart) */
+  private recoverJobFromStreams(sessionId: string): Job | undefined {
+    try {
+      const jobIds = ActivityStream.listAll();
+      let bestJob: { id: string; roleId: string; task: string; type: JobType; status: JobStatus; createdAt: string; output?: string } | undefined;
+
+      for (const jobId of jobIds) {
+        if (this.jobs.has(jobId)) continue; // already in memory
+
+        const events = ActivityStream.readAll(jobId);
+        const startEvent = events.find(e => e.type === 'job:start');
+        if (!startEvent || (startEvent.data.sessionId as string) !== sessionId) continue;
+
+        const doneEvent = events.find(e => e.type === 'job:done');
+        const errorEvent = events.find(e => e.type === 'job:error');
+        const awaitingEvent = events.find(e => e.type === 'job:awaiting_input');
+        const status: JobStatus = awaitingEvent && !doneEvent ? 'awaiting_input'
+          : doneEvent ? 'done'
+          : errorEvent ? 'error'
+          : 'done';
+
+        const candidate = {
+          id: jobId,
+          roleId: startEvent.roleId,
+          task: startEvent.data.task as string ?? '',
+          type: (startEvent.data.type as string ?? 'assign') as JobType,
+          status,
+          createdAt: startEvent.ts,
+          output: doneEvent?.data?.output as string | undefined,
+        };
+
+        if (!bestJob || candidate.createdAt > bestJob.createdAt) {
+          bestJob = candidate;
+        }
+      }
+
+      if (!bestJob) return undefined;
+
+      // Reconstruct a minimal Job in memory so replyToJob can work
+      const stream = new ActivityStream(bestJob.id, bestJob.roleId);
+      const job: Job = {
+        id: bestJob.id,
+        type: bestJob.type,
+        roleId: bestJob.roleId,
+        task: bestJob.task,
+        status: bestJob.status,
+        stream,
+        abort: () => {},
+        childJobIds: [],
+        createdAt: bestJob.createdAt,
+        sessionId,
+        result: bestJob.output ? { output: bestJob.output, turns: 0, totalTokens: { input: 0, output: 0 }, toolCalls: [], dispatches: [] } : undefined,
+      };
+
+      this.jobs.set(job.id, job);
+      console.log(`[JobManager] Recovered job ${job.id} for session ${sessionId} (status: ${job.status})`);
+      return job;
+    } catch (err) {
+      console.warn(`[JobManager] Failed to recover job from streams:`, err);
+      return undefined;
+    }
   }
 }
 
