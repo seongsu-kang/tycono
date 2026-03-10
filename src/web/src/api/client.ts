@@ -202,7 +202,7 @@ export const api = {
   restoreSave: (sha: string, paths?: string[], repo: 'akb' | 'code' = 'akb') => post<{
     ok: boolean; commitSha: string; restoredFiles: string[];
   }>(`/save/restore?repo=${repo}`, { sha, paths }),
-  initGit: () => post<{ ok: boolean; message: string }>('/save/init', {}),
+  initGit: (repo: 'akb' | 'code' = 'akb') => post<{ ok: boolean; message: string }>(`/save/init?repo=${repo}`, {}),
 
   // Git Sync
   getSyncStatus: (repo: 'akb' | 'code' = 'akb') => get<{

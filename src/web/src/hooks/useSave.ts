@@ -192,7 +192,7 @@ export function useSave(): UseSaveReturn {
 
   const initGit = useCallback(async () => {
     try {
-      await api.initGit();
+      await api.initGit(repoRef.current);
       await fetchStatus();
     } catch {
       setState('error');

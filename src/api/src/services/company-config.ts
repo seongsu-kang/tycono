@@ -52,29 +52,28 @@ function configPath(companyRoot: string): string {
  */
 export function resolveCodeRoot(companyRoot: string): string {
   const config = readConfig(companyRoot);
-  if (config.codeRoot) return config.codeRoot;
+  const codeRoot = config.codeRoot ?? (() => {
+    // Auto-generate: ../{folder-name}-code/
+    const dirName = path.basename(companyRoot);
+    const auto = path.join(path.dirname(companyRoot), `${dirName}-code`);
+    if (!fs.existsSync(auto)) {
+      fs.mkdirSync(auto, { recursive: true });
+    }
+    // Persist so it's stable across restarts
+    writeConfig(companyRoot, { ...config, codeRoot: auto });
+    return auto;
+  })();
 
-  // Auto-generate: ../{folder-name}-code/
-  const dirName = path.basename(companyRoot);
-  const autoCodeRoot = path.join(path.dirname(companyRoot), `${dirName}-code`);
-
-  if (!fs.existsSync(autoCodeRoot)) {
-    fs.mkdirSync(autoCodeRoot, { recursive: true });
-  }
-
-  // Auto-init git if not already a repo
-  const gitDir = path.join(autoCodeRoot, '.git');
-  if (!fs.existsSync(gitDir)) {
+  // Auto-init git if not already a repo (even if codeRoot was already configured)
+  const gitDir = path.join(codeRoot, '.git');
+  if (fs.existsSync(codeRoot) && !fs.existsSync(gitDir)) {
     try {
-      execSync('git init', { cwd: autoCodeRoot, stdio: 'pipe' });
-      execSync('git commit --allow-empty -m "Initial commit by Tycono"', { cwd: autoCodeRoot, stdio: 'pipe' });
+      execSync('git init', { cwd: codeRoot, stdio: 'pipe' });
+      execSync('git commit --allow-empty -m "Initial commit by Tycono"', { cwd: codeRoot, stdio: 'pipe' });
     } catch { /* ignore — git may not be installed */ }
   }
 
-  // Persist so it's stable across restarts
-  writeConfig(companyRoot, { ...config, codeRoot: autoCodeRoot });
-
-  return autoCodeRoot;
+  return codeRoot;
 }
 
 /** Read config from .tycono/config.json. Returns defaults if missing. */

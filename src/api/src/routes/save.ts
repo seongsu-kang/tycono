@@ -51,9 +51,9 @@ saveRouter.get('/history', (req: Request, res: Response, next: NextFunction) => 
 });
 
 // POST /api/save/init — initialize git repo
-saveRouter.post('/init', (_req: Request, res: Response, next: NextFunction) => {
+saveRouter.post('/init', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const result = gitInit(COMPANY_ROOT);
+    const result = gitInit(COMPANY_ROOT, getRepo(req));
     if (!result.ok) {
       res.status(500).json({ error: result.message });
       return;
