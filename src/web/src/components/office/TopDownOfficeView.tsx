@@ -2,7 +2,7 @@ import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import type { Role, Project, Wave, Standup, Decision } from '../../types/index';
 import type { CharacterAppearance } from '../../types/appearance';
 import { getDefaultAppearance } from '../../types/appearance';
-import { getCharacterBlueprint, renderPixelsAt, getAccessoryForDirection } from './sprites/engine';
+import { getCharacterBlueprint, renderPixelsAt, getAccessoryForDirection, mirrorPixels } from './sprites/engine';
 import type { Direction } from './sprites/engine';
 import { applyStyles } from './TopDownCharCanvas';
 import './sprites/data'; // trigger blueprint registration
@@ -85,6 +85,73 @@ const ROLE_COLORS: Record<string, string> = {
   'data-analyst': '#0277BD',
 };
 
+/* ─── Role dialogue (REACT-006) ─────────── */
+
+const ROLE_DIALOGUES: Record<string, string[]> = {
+  ceo: [
+    "대표님?",
+    "무슨 일이신가요?",
+    "회의 시간이신가요?",
+    "좋은 아이디어 있으시면 말씀해주세요.",
+    "다들 잘하고 있나요?",
+  ],
+  cto: [
+    "뭐 필요하신 거 있으세요?",
+    "기술 관련 질문이신가요?",
+    "아키텍처 리뷰 중이에요.",
+    "배포는 조금만 기다려주세요.",
+    "코드 봐드릴까요?",
+  ],
+  cbo: [
+    "비즈니스 관련 얘기신가요?",
+    "수익 모델 검토 중이에요.",
+    "시장 조사 결과 보실래요?",
+    "경쟁사 분석 중입니다.",
+    "뭔가 도와드릴까요?",
+  ],
+  pm: [
+    "프로젝트 진행 상황 궁금하신가요?",
+    "로드맵 업데이트 중이에요.",
+    "태스크 할당 중입니다.",
+    "우선순위 조정이 필요할까요?",
+    "스프린트 리뷰 준비 중이에요.",
+  ],
+  engineer: [
+    "일하고 있어요!",
+    "버그 수정 중입니다.",
+    "코드 리뷰 필요하신가요?",
+    "테스트 작성 중이에요.",
+    "PR 올리고 있어요.",
+  ],
+  designer: [
+    "디자인 피드백 있으신가요?",
+    "목업 작업 중이에요.",
+    "UI 개선안 생각 중입니다.",
+    "컬러 팔레트 고민 중이에요.",
+    "프로토타입 보여드릴까요?",
+  ],
+  qa: [
+    "테스트 중이에요.",
+    "버그 발견했어요!",
+    "테스트 케이스 작성 중입니다.",
+    "회귀 테스트 진행 중이에요.",
+    "품질 체크 중입니다.",
+  ],
+  'data-analyst': [
+    "데이터 분석 중이에요.",
+    "리포트 준비 중입니다.",
+    "대시보드 확인해보실래요?",
+    "지표 추적 중이에요.",
+    "인사이트 발견했어요!",
+  ],
+  default: [
+    "안녕하세요!",
+    "무엇을 도와드릴까요?",
+    "열심히 일하고 있어요.",
+    "좋은 하루 되세요!",
+  ],
+};
+
 /* ─── Facility zones (built from furniture data) ─── */
 
 let _facilityZones: FacilityZone[] = buildFacilityZonesFromFurniture(_layout);
@@ -121,6 +188,7 @@ let _hoverFacility: string | null = null;
 let _editMode = false;
 let _hoverFurniture: string | null = null;
 let _selectedFurniture: string | null = null;   // furniture id or 'desk:roleId'
+let _mouseX = 0;  // Track mouse X position for gaze direction (REACT-005)
 let _dragging: { defId: string; startMx: number; startMy: number; origOffX: number; origOffY: number } | null = null;
 let _draggingDesk: { roleId: string; startMx: number; startMy: number; origDx: number; origDy: number } | null = null;
 let _placingType: FurnitureType | null = null;   // furniture type being placed
@@ -300,25 +368,31 @@ function drawFrame() {
 
 const _seatedPixelsCache = new Map<string, import('./sprites/engine/blueprint').Pixel[]>();
 
-function getSeatedPixels(ap: CharacterAppearance): import('./sprites/engine/blueprint').Pixel[] {
-  const key = `${ap.hairStyle ?? ''}|${ap.outfitStyle ?? ''}|${ap.accessory ?? ''}`;
+function getSeatedPixels(ap: CharacterAppearance, lookDir: 'left' | 'right' = 'right'): import('./sprites/engine/blueprint').Pixel[] {
+  const key = `${ap.hairStyle ?? ''}|${ap.outfitStyle ?? ''}|${ap.accessory ?? ''}|${lookDir}`;
   let cached = _seatedPixelsCache.get(key);
   if (!cached) {
     const base = getCharacterBlueprint('mini-seated:default');
     const bp = applyStyles(base, ap);
-    cached = bp ? bp.layers.flatMap(l => l.pixels) : [];
+    let pixels = bp ? bp.layers.flatMap(l => l.pixels) : [];
+    // Mirror pixels if looking left (REACT-005)
+    if (lookDir === 'left' && pixels.length > 0) {
+      const width = 12;  // mini-seated width
+      pixels = mirrorPixels(pixels, width);
+    }
+    cached = pixels;
     _seatedPixelsCache.set(key, cached);
   }
   return cached;
 }
 
-function drawSeatedChar(x: number, y: number, ap: CharacterAppearance) {
-  renderPixelsAt(_ctx, getSeatedPixels(ap), x, y, ap);
+function drawSeatedChar(x: number, y: number, ap: CharacterAppearance, lookDir: 'left' | 'right' = 'right') {
+  renderPixelsAt(_ctx, getSeatedPixels(ap, lookDir), x, y, ap);
 }
 
-function drawDeskUnit(dx: number, dy: number, ap: CharacterAppearance, bobY: number, empty: boolean) {
+function drawDeskUnit(dx: number, dy: number, ap: CharacterAppearance, bobY: number, empty: boolean, lookDir: 'left' | 'right' = 'right') {
   drawChair(dx + 8, dy + 20, 'up');
-  if (!empty) drawSeatedChar(dx + 8, dy + 0 + bobY, ap);
+  if (!empty) drawSeatedChar(dx + 8, dy + 0 + bobY, ap, lookDir);
   drawDesk(dx, dy + 14);
 }
 
@@ -354,6 +428,7 @@ interface CharState {
   bobY: number; bobOff: number;
   stateTimer: number;
   sittingTime: number;  // frames spent sitting (for zzz)
+  lookDir: 'left' | 'right';  // Which way seated character looks (REACT-005)
 }
 
 /* ── Interaction Particles ── */
@@ -512,6 +587,7 @@ function createChars(roleIds: string[]): Record<string, CharState> {
       bobY: 0, bobOff: idx * 17,
       stateTimer: 1200 + Math.floor(Math.random() * 1800),  // sit 20-50s
       sittingTime: 0,
+      lookDir: 'right',  // Default facing right
     };
     idx++;
   }
@@ -592,8 +668,16 @@ function updateChars(chars: Record<string, CharState>, frame: number) {
       if (isHovered) {
         ch.sittingTime = 0;  // wake up from zzz
         ch.bobY = -3;  // jump up (visible at 2x zoom = 6 screen px)
+        // REACT-005: Character looks toward cursor (left/right)
+        const d = DESKS[id];
+        if (d) {
+          const charCenterX = d.dx + 13;  // Center of desk unit
+          ch.lookDir = _mouseX < charCenterX ? 'left' : 'right';
+        }
       } else {
         ch.bobY = ((frame + ch.bobOff) % 60) < 30 ? 1 : 0;
+        // Reset to default when not hovered
+        ch.lookDir = 'right';
       }
       if (ch.stateTimer <= 0) {
         ch.state = 'walking';
@@ -760,7 +844,7 @@ function drawScene(
     entities.push({
       y: d.dy + 14,
       draw: () => {
-        drawDeskUnit(d.dx, d.dy, ap, sit ? ch.bobY : 0, !sit);
+        drawDeskUnit(d.dx, d.dy, ap, sit ? ch.bobY : 0, !sit, ch.lookDir);
         // Working indicator: glowing monitor
         if (sit && isWorking) {
           const color = ROLE_COLORS[id] ?? '#388bfd';
@@ -1027,6 +1111,14 @@ export default function TopDownOfficeView({
   const propsRef = useRef({ roleStatuses, activeExecs, getRoleSpeech, getAppearance });
   propsRef.current = { roleStatuses, activeExecs, getRoleSpeech, getAppearance };
 
+  // Hover speech bubble state (REACT-006)
+  const hoverStateRef = useRef<Record<string, {
+    hoverStartTime: number | null;
+    lastSpeechTime: number | null;
+    currentSpeech: string | null;
+    speechDismissTime: number | null;
+  }>>({});
+
   // All role IDs — layout adapts to count
   const assignedRoleIds = useMemo(() => roles.map(r => r.id), [roles]);
 
@@ -1238,13 +1330,50 @@ export default function TopDownOfficeView({
         }
       }
 
-      // Speech bubble
+      // Speech bubble (with REACT-006 hover dialogue)
       const bub = overlay.querySelector(`.td-bubble[data-role="${id}"]`) as HTMLElement;
       if (bub) {
+        const now = Date.now();
         const isWorking = rs[id] === 'working';
         const activeTask = ae.find(e => e.roleId === id)?.task;
         const speech = gs(id);
-        const text = isWorking && activeTask ? activeTask.slice(0, 60) : speech ? speech.slice(0, 60) : '';
+
+        // REACT-006: Hover speech bubble logic
+        let hoverSpeech = '';
+        const hState = hoverStateRef.current[id];
+        if (hState) {
+          // Check if speech should be dismissed
+          if (hState.speechDismissTime && now >= hState.speechDismissTime) {
+            hState.currentSpeech = null;
+            hState.speechDismissTime = null;
+          }
+
+          // Trigger new speech if hovering for 2+ seconds and cooldown passed
+          if (hState.hoverStartTime && !hState.currentSpeech) {
+            const hoverDuration = now - hState.hoverStartTime;
+            const cooldownPassed = !hState.lastSpeechTime || (now - hState.lastSpeechTime) >= 5000;
+
+            if (hoverDuration >= 2000 && cooldownPassed) {
+              // Pick random dialogue
+              const dialogues = ROLE_DIALOGUES[id] || ROLE_DIALOGUES.default;
+              const randomDialogue = dialogues[Math.floor(Math.random() * dialogues.length)];
+              hState.currentSpeech = randomDialogue;
+              hState.lastSpeechTime = now;
+              hState.speechDismissTime = now + 3000; // Dismiss after 3 seconds
+            }
+          }
+
+          hoverSpeech = hState.currentSpeech || '';
+        }
+
+        // Priority: activeTask > hoverSpeech > regular speech
+        const text = isWorking && activeTask
+          ? activeTask.slice(0, 60)
+          : hoverSpeech
+            ? hoverSpeech.slice(0, 60)
+            : speech
+              ? speech.slice(0, 60)
+              : '';
 
         if (text && ch.state === 'sitting') {
           bub.style.display = '';
@@ -1450,11 +1579,38 @@ export default function TopDownOfficeView({
     }
 
     const hit = hitTest(e);
+    const prevHoverRole = _hoverRole;
     _hoverRole = hit?.type === 'role' ? hit.id : null;
     _hoverFacility = hit?.type === 'facility' ? hit.id : null;
     _hoverMascot = hit?.type === 'mascot';
     _hoverFurniture = null;
     if (canvas) canvas.style.cursor = hit ? 'pointer' : 'default';
+
+    // Track mouse X position for gaze direction (REACT-005)
+    const { mx } = canvasCoords(e);
+    _mouseX = mx;
+
+    // Update hover state for speech bubbles (REACT-006)
+    const now = Date.now();
+    if (_hoverRole && _hoverRole !== prevHoverRole) {
+      // New hover started
+      if (!hoverStateRef.current[_hoverRole]) {
+        hoverStateRef.current[_hoverRole] = {
+          hoverStartTime: null,
+          lastSpeechTime: null,
+          currentSpeech: null,
+          speechDismissTime: null,
+        };
+      }
+      const state = hoverStateRef.current[_hoverRole];
+      state.hoverStartTime = now;
+    } else if (!_hoverRole && prevHoverRole) {
+      // Hover ended
+      const state = hoverStateRef.current[prevHoverRole];
+      if (state) {
+        state.hoverStartTime = null;
+      }
+    }
   }, [hitTest, canvasCoords]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
