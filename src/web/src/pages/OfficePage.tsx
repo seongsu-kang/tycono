@@ -369,13 +369,18 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   /* Load sessions on mount — restore existing sessions (metadata only) */
   useEffect(() => {
     api.getSessions().then((metas) => {
-      if (metas.length > 0) {
-        const restored: Session[] = metas.map((m) => ({ ...m, messages: [] }));
+      // Filter out stale wave sessions — they can't be resumed after page reload
+      const chatMetas = metas.filter((m) => m.source !== 'wave');
+      if (chatMetas.length > 0) {
+        const restored: Session[] = chatMetas.map((m) => ({ ...m, messages: [] }));
         setSessions(restored);
         const active = restored.find((s) => s.status === 'active') ?? restored[0];
         setActiveSessionId(active.id);
         openTerminal();
       }
+      // Clean up wave sessions from server
+      const waveIds = metas.filter((m) => m.source === 'wave').map((m) => m.id);
+      if (waveIds.length > 0) api.deleteSessions(waveIds).catch(() => {});
     }).catch((err) => {
       console.error('Failed to load sessions', err);
     });
@@ -2015,7 +2020,15 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
               color={current.color}
               variant="modal"
               style={isWave && jobStack.length === 1 ? { marginTop: 28 } : undefined}
-              onClose={() => { setJobStack([]); setWaveJobs([]); setWaveActiveIdx(0); setJobMinimized(false); }}
+              onClose={() => {
+                // Clean up wave sessions from local state and server
+                const waveSessionIds = sessions.filter(s => s.source === 'wave').map(s => s.id);
+                if (waveSessionIds.length > 0) {
+                  setSessions(prev => prev.filter(s => s.source !== 'wave'));
+                  api.deleteSessions(waveSessionIds).catch(() => {});
+                }
+                setJobStack([]); setWaveJobs([]); setWaveActiveIdx(0); setJobMinimized(false);
+              }}
               onMinimize={() => setJobMinimized(true)}
               onDone={() => { handleExecutionDone(); handleJobDone(); }}
               onNavigateToJob={() => {

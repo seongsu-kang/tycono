@@ -330,28 +330,22 @@ export function getDefaultProgress(): QuestProgress {
   return { ...DEFAULT_PROGRESS };
 }
 
-export function getQuestStatus(quest: Quest, progress: QuestProgress): 'active' | 'completed' | 'skipped' {
+export function getQuestStatus(quest: Quest, progress: QuestProgress): 'active' | 'completed' {
   if (progress.completedQuests.includes(quest.id)) return 'completed';
-  // Past-chapter incomplete quests are "skipped" — not actionable
-  if (quest.chapter < progress.activeChapter) return 'skipped';
   return 'active';
 }
 
 export function getActiveQuests(progress: QuestProgress): Quest[] {
-  // Return current chapter active quests + any skipped (past-chapter) quests that can still be completed
-  return QUESTS.filter(q => {
-    const status = getQuestStatus(q, progress);
-    return status === 'active' || status === 'skipped';
-  });
+  // All incomplete quests across all chapters (allows retroactive completion)
+  return QUESTS.filter(q => getQuestStatus(q, progress) === 'active');
 }
 
-/** Get first active quest from current chapter (for hint bar / spotlight) */
+/** Get first active quest (for hint bar / spotlight) — prefers current chapter */
 export function getActiveQuest(progress: QuestProgress): Quest | null {
-  const chapter = CHAPTERS.find(ch => ch.num === progress.activeChapter);
-  if (!chapter) return null;
-  return QUESTS.find(q =>
-    chapter.questIds.includes(q.id) && getQuestStatus(q, progress) === 'active',
-  ) ?? null;
+  const all = getActiveQuests(progress);
+  // Prefer current chapter quest for hint bar
+  const currentCh = all.find(q => q.chapter === progress.activeChapter);
+  return currentCh ?? all[0] ?? null;
 }
 
 export function completeQuest(progress: QuestProgress, questId: string): { progress: QuestProgress; quest: Quest | null } {

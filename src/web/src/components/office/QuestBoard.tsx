@@ -79,19 +79,16 @@ export default function QuestBoard({ progress, onQuestAction, onClose, terminalW
                 <div className="px-3 pb-2 flex flex-col gap-1.5">
                   {quests.map(q => {
                     const status = getQuestStatus(q, progress);
-                    const isDone = status === 'completed';
-                    const isSkipped = status === 'skipped';
                     return (
                       <div key={q.id} className="flex items-start gap-2 pl-2">
                         <span className="text-xs mt-0.5 shrink-0">
-                          {isDone ? '☑' : isSkipped ? '◻' : '☐'}
+                          {status === 'completed' ? '☑' : '☐'}
                         </span>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="text-xs" style={{
-                              color: isDone || isSkipped ? 'var(--terminal-text-muted)' : 'var(--terminal-text)',
-                              textDecoration: isDone ? 'line-through' : 'none',
-                              opacity: isSkipped ? 0.5 : 1,
+                              color: status === 'completed' ? 'var(--terminal-text-muted)' : 'var(--terminal-text)',
+                              textDecoration: status === 'completed' ? 'line-through' : 'none',
                             }}>
                               {q.title}
                             </span>

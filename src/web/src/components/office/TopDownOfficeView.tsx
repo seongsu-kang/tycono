@@ -1486,13 +1486,23 @@ export default function TopDownOfficeView({
 
   // Remove furniture by id
   const removeFurnitureById = useCallback((fId: string) => {
-    const newRemoved = [...removedRef.current, fId];
-    removedRef.current = newRemoved;
+    // If it's a user-added furniture, remove from addedFurniture instead of adding to removedFurniture
+    const isUserAdded = addedRef.current.some(f => f.id === fId);
+    const patch: Record<string, unknown> = {};
+    if (isUserAdded) {
+      const newAdded = addedRef.current.filter(f => f.id !== fId);
+      addedRef.current = newAdded;
+      patch.addedFurniture = newAdded;
+    } else {
+      const newRemoved = [...removedRef.current, fId];
+      removedRef.current = newRemoved;
+      patch.removedFurniture = newRemoved;
+    }
     _layout = applyFurnitureRemovals(_layout, [fId]);
     _facilityZones = buildFacilityZonesFromFurniture(_layout);
     _selectedFurniture = null;
     _hoverFurniture = null;
-    saveOverrides({ removedFurniture: newRemoved });
+    saveOverrides(patch);
   }, [saveOverrides]);
 
   // Place new furniture at canvas coords (with coin deduction)
