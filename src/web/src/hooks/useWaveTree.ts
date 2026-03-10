@@ -157,13 +157,19 @@ export default function useWaveTree(
 
   // Connect SSE for a session
   const connectStream = useCallback((sessionId: string, roleId: string) => {
-    console.log(`[WaveTree] connectStream → role=${roleId} session=${sessionId}`);
+    // Skip if already connected to this session and stream is active
     const existing = streamsRef.current.get(sessionId);
+    if (existing && !existing.controller.signal.aborted) {
+      console.log(`[WaveTree] connectStream SKIP (already connected) → role=${roleId} session=${sessionId}`);
+      return;
+    }
     if (existing) {
       existing.controller.abort();
     }
 
-    // Mark node as running
+    console.log(`[WaveTree] connectStream → role=${roleId} session=${sessionId}`);
+
+    // Mark node as running (preserve events if reconnecting)
     setNodes((prev) => {
       const next = new Map(prev);
       const node = next.get(roleId);
@@ -304,18 +310,27 @@ export default function useWaveTree(
   }, []);
 
   // Start SSE streams for root jobs
+  const startedSessionsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (rootJobs.length === 0) return;
 
+    const sessionIds = new Set<string>();
     for (const rj of rootJobs) {
+      sessionIds.add(rj.sessionId);
       connectStream(rj.sessionId, rj.roleId);
     }
+    startedSessionsRef.current = sessionIds;
 
     return () => {
-      for (const [, stream] of streamsRef.current) {
-        stream.controller.abort();
+      // Only abort streams started by this effect
+      for (const sid of startedSessionsRef.current) {
+        const stream = streamsRef.current.get(sid);
+        if (stream) {
+          stream.controller.abort();
+          streamsRef.current.delete(sid);
+        }
       }
-      streamsRef.current.clear();
+      startedSessionsRef.current.clear();
     };
   }, [rootJobs, connectStream]);
 
