@@ -9,10 +9,11 @@ interface Props {
   decisions: Decision[];
   mode: 'bulletin' | 'decisions';
   onClose: () => void;
+  onOpenWaveCenter?: () => void;
   terminalWidth?: number;
 }
 
-export default function OperationsPanel({ standups, waves, decisions, mode, onClose, terminalWidth = 0 }: Props) {
+export default function OperationsPanel({ standups, waves, decisions, mode, onClose, onOpenWaveCenter, terminalWidth = 0 }: Props) {
   const [tab, setTab] = useState<'standups' | 'waves' | 'decisions'>(
     mode === 'decisions' ? 'decisions' : 'standups'
   );
@@ -49,7 +50,11 @@ export default function OperationsPanel({ standups, waves, decisions, mode, onCl
           {mode === 'bulletin' ? (
             <>
               <TabBtn label={`Standups (${standups.length})`} active={tab === 'standups'} onClick={() => setTab('standups')} />
-              <TabBtn label={`Waves (${waves.length})`} active={tab === 'waves'} onClick={() => setTab('waves')} />
+              {onOpenWaveCenter ? (
+                <TabBtn label={`Waves \u2192`} active={false} onClick={onOpenWaveCenter} />
+              ) : (
+                <TabBtn label={`Waves (${waves.length})`} active={tab === 'waves'} onClick={() => setTab('waves')} />
+              )}
             </>
           ) : (
             <TabBtn label={`Decisions (${decisions.length})`} active={tab === 'decisions'} onClick={() => setTab('decisions')} />

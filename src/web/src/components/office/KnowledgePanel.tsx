@@ -1777,15 +1777,17 @@ const DEFAULT_WIDTH = 500;
 const MIN_WIDTH = 360;
 const MAX_WIDTH = 700;
 
-function usePanelResize(terminalWidth: number) {
-  const [panelW, setPanelW] = useState(DEFAULT_WIDTH);
+function usePanelResize(terminalWidth: number, defaultWidth?: number) {
+  const initW = defaultWidth ?? DEFAULT_WIDTH;
+  const [panelW, setPanelW] = useState(initW);
   const [isResizing, setIsResizing] = useState(false);
   const startXRef = useRef(0);
   const startWidthRef = useRef(0);
 
   const hasTerminal = terminalWidth > 0;
   const panelRight = hasTerminal ? terminalWidth : 0;
-  const maxAvailable = hasTerminal ? Math.max(MIN_WIDTH, window.innerWidth - terminalWidth - 100) : MAX_WIDTH;
+  const maxW = Math.max(MAX_WIDTH, initW);
+  const maxAvailable = hasTerminal ? Math.max(MIN_WIDTH, window.innerWidth - terminalWidth - 100) : maxW;
   const panelWidth = Math.min(panelW, maxAvailable);
 
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -1796,7 +1798,7 @@ function usePanelResize(terminalWidth: number) {
 
     const onMove = (ev: MouseEvent) => {
       const delta = startXRef.current - ev.clientX;
-      const newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startWidthRef.current + delta));
+      const newWidth = Math.min(maxW, Math.max(MIN_WIDTH, startWidthRef.current + delta));
       setPanelW(newWidth);
     };
 
