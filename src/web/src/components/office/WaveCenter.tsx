@@ -1024,13 +1024,24 @@ function ReplayView({ replay, orgNodes, rootRoleId, onOpenKnowledgeDoc, onRefres
   const handleReply = useCallback(async () => {
     if (!selectedRoleId || !replyText.trim()) return;
     const node = nodes.get(selectedRoleId);
-    if (!node?.jobId) return;
+    if (!node) return;
     setReplying(true);
     try {
-      await api.replyToJob(node.jobId, replyText.trim());
+      // Try replyToJob first (works if job still in memory)
+      if (node.jobId) {
+        try {
+          await api.replyToJob(node.jobId, replyText.trim());
+          setReplyText('');
+          return;
+        } catch {
+          // Job no longer in server memory — fall through to startJob
+        }
+      }
+      // Fallback: start a new assign job for this role
+      await api.startJob({ type: 'assign', roleId: selectedRoleId, task: replyText.trim() });
       setReplyText('');
     } catch (err) {
-      console.error('Reply failed:', err);
+      console.error('Follow-up failed:', err);
     } finally {
       setReplying(false);
     }
