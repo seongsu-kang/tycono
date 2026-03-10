@@ -207,6 +207,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   const importLogEnd = useRef<HTMLDivElement>(null);
   let logId = useRef(0);
   const prevBadgeIdsRef = useRef<Set<string>>(new Set());
+  const badgeInitCountRef = useRef(0);
 
   const addImportLog = (type: ImportLogEntry['type'], text: string, detail?: string) => {
     const entry: ImportLogEntry = { id: logId.current++, type, text, detail };
@@ -438,8 +439,9 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     }
   };
 
+  const toastIdRef = useRef(0);
   const addToast = (message: string, color: string) => {
-    const id = Date.now();
+    const id = ++toastIdRef.current;
     setToasts((prev) => [...prev, { id, message, color }]);
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000);
   };
@@ -516,14 +518,15 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     };
     const earned = computeBadges(badgeCtx);
     const prevIds = prevBadgeIdsRef.current;
-    for (const badge of earned) {
-      if (!prevIds.has(badge.id)) {
-        // Skip toast on initial load (prevIds is empty)
-        if (prevIds.size > 0) {
+    // Skip toasts during initial data load (first 2 effect cycles)
+    if (badgeInitCountRef.current >= 2) {
+      for (const badge of earned) {
+        if (!prevIds.has(badge.id)) {
           addToast(`${badge.icon} Badge earned: ${badge.name}!`, '#D4A017');
         }
       }
     }
+    badgeInitCountRef.current++;
     prevBadgeIdsRef.current = new Set(earned.map(b => b.id));
   }, [roleLevels, roles.length, questProgress.completedQuests]);
 
