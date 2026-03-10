@@ -606,10 +606,10 @@ function KnowledgeGraph({
                     y={cluster.centerY - cluster.radius - 8}
                     textAnchor="middle"
                     fill={color.text}
-                    fontSize={10}
+                    fontSize={12}
                     fontFamily="monospace"
                     fontWeight="600"
-                    opacity={hasMatchedNode ? 0.6 : 0.2}
+                    opacity={hasMatchedNode ? 0.85 : 0.5}
                     style={{ pointerEvents: 'none', transition: 'opacity 0.3s ease' }}
                   >
                     {cluster.domain} ({cluster.count})
@@ -631,7 +631,7 @@ function KnowledgeGraph({
               const targetId = typeof link.target === 'string' ? link.target : link.target.id;
               const isEdgeInLocalView = localNodesInView === null ||
                 (localNodesInView.has(sourceId) && localNodesInView.has(targetId));
-              const edgeOpacity = isEdgeInLocalView ? 1 : 0.25;
+              const edgeOpacity = isEdgeInLocalView ? 1 : 0.4;
 
               return (
                 <g key={i} style={{ opacity: edgeOpacity, transition: 'opacity 0.3s ease' }}>
@@ -646,7 +646,7 @@ function KnowledgeGraph({
                   />
                   <line
                     x1={s.x} y1={s.y} x2={t.x} y2={t.y}
-                    stroke={isEdgeHovered ? 'rgba(148,163,184,0.7)' : 'rgba(148,163,184,0.3)'}
+                    stroke={isEdgeHovered ? 'rgba(148,163,184,0.7)' : 'rgba(148,163,184,0.6)'}
                     strokeWidth={isEdgeHovered ? 2 : 1.5}
                     strokeDasharray="4 3"
                     pointerEvents="none"
