@@ -468,7 +468,8 @@ function presetL(deskCount: number): FloorLayout {
 
 const HYSTERESIS = 2; // prevent flapping at boundaries
 
-export function selectPreset(count: number, current?: Preset): Preset {
+export function selectPreset(count: number, current?: Preset, purchasedPreset?: Preset): Preset {
+  if (purchasedPreset) return purchasedPreset;
   if (!current) {
     // Minimum is M — 4 rooms needed for facilities (meeting/bulletin/decisions/knowledge)
     if (count <= 12) return 'M';

@@ -60,6 +60,8 @@ interface TopDownOfficeViewProps {
   coinBalance?: number;
   onCoinsSpent?: (newBalance: number) => void;
   onFurniturePlaced?: (type: string, price: number) => void;
+  purchasedPreset?: 'M' | 'L';
+  onExpansionPurchased?: (preset: 'L') => void;
 }
 
 /* ─── Canvas constants ──────────────────── */
@@ -1085,6 +1087,7 @@ export default function TopDownOfficeView({
   onRoleClick, onProjectClick, onBulletinClick, onDecisionsClick, onKnowledgeClick, onSettingsClick, onThemeClick, onStatsClick,
   getRoleSpeech, getAppearance, onHireClick, onMascotClick, roleLevels,
   coinBalance = 0, onCoinsSpent, onFurniturePlaced,
+  purchasedPreset, onExpansionPurchased,
 }: TopDownOfficeViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -1094,6 +1097,7 @@ export default function TopDownOfficeView({
   const frameRef = useRef(0);
   const zoomRef = useRef(DEFAULT_ZOOM);
   const [editMode, setEditMode] = useState(false);
+  const [editTab, setEditTab] = useState<'furniture' | 'expand'>('furniture');
   const [placingType, setPlacingType] = useState<FurnitureType | null>(null);
   const [placingZone, setPlacingZone] = useState<'wall' | 'floor' | null>(null);
   const overridesRef = useRef<Record<string, { offsetX: number; offsetY: number }>>({});
@@ -1156,7 +1160,8 @@ export default function TopDownOfficeView({
   const layoutRef = useRef<FloorLayout>(_layout);
   useEffect(() => {
     const count = assignedRoleIds.length;
-    const newPreset = selectPreset(count, layoutRef.current.preset);
+    const newPreset = selectPreset(count, layoutRef.current.preset, purchasedPreset);
+    const presetChanged = layoutRef.current.preset !== newPreset;
     let newLayout = generateFloorLayout(count, newPreset);
     if (removedRef.current.length > 0) newLayout = applyFurnitureRemovals(newLayout, removedRef.current);
     if (addedRef.current.length > 0) newLayout = applyAddedFurniture(newLayout, addedRef.current);
@@ -1171,14 +1176,19 @@ export default function TopDownOfficeView({
     charsRef.current = createChars(assignedRoleIds);
     mascotRef.current = createMascot();
 
-    // Update canvas dimensions
+    // Update canvas dimensions + transition animation on preset change
     const canvas = canvasRef.current;
     if (canvas) {
       canvas.width = newLayout.canvasW;
       canvas.height = newLayout.canvasH;
+      if (presetChanged) {
+        canvas.style.opacity = '0';
+        canvas.style.transition = 'opacity 0.3s';
+        setTimeout(() => { canvas.style.opacity = '1'; }, 50);
+      }
     }
     updateZoom();
-  }, [assignedRoleIds]);
+  }, [assignedRoleIds, purchasedPreset]);
 
   // Get appearance helper
   const getAp = useCallback((roleId: string): CharacterAppearance => {
@@ -1795,6 +1805,19 @@ export default function TopDownOfficeView({
     }
   }, [hitTest, onRoleClick, onProjectClick, onBulletinClick, onDecisionsClick, onKnowledgeClick, onSettingsClick, onThemeClick, onStatsClick]);
 
+  const handleExpansionPurchase = useCallback(async () => {
+    if ((coinBalance ?? 0) < 15000) return;
+    const confirmed = window.confirm('Upgrade to Large Office for 15,000 coins?');
+    if (!confirmed) return;
+    try {
+      const r = await api.spendCoins(15000, 'office-expansion: preset-L', 'expansion-preset-L');
+      if (r.ok) {
+        onCoinsSpent?.(r.balance);
+        onExpansionPurchased?.('L');
+      }
+    } catch { /* ignore */ }
+  }, [coinBalance, onCoinsSpent, onExpansionPurchased]);
+
   return (
     <div className={`td-scene${editMode ? ' td-scene--editing' : ''}`}>
       <div ref={wrapRef} className="td-wrap">
@@ -1834,30 +1857,57 @@ export default function TopDownOfficeView({
         <span className="td-edit-btn__label">{editMode ? 'DONE' : 'EDIT'}</span>
       </button>
       {editMode && (
-        <div className="td-palette">
-          {FURNITURE_CATALOG.map(entry => {
-            const canAfford = entry.price === 0 || coinBalance >= entry.price;
-            const priceLabel = entry.price === 0 ? 'Free' : `${entry.price >= 1000 ? `${(entry.price / 1000).toFixed(entry.price % 1000 === 0 ? 0 : 1)}K` : entry.price}`;
-            return (
-              <button
-                key={entry.type}
-                className={`td-palette__item${placingType === entry.type ? ' td-palette__item--active' : ''}${!canAfford ? ' td-palette__item--locked' : ''}`}
-                onClick={() => {
-                  if (!canAfford) return;
-                  if (placingType === entry.type) { setPlacingType(null); setPlacingZone(null); }
-                  else { setPlacingType(entry.type); setPlacingZone(entry.zone); }
-                }}
-                title={`${entry.label} — ${priceLabel}`}
-                style={!canAfford ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
-              >
-                <span>{entry.icon}</span>
-                <span className="td-palette__price" style={{ fontSize: '7px', color: entry.price === 0 ? '#4CAF50' : canAfford ? '#FFD54F' : '#EF5350' }}>
-                  {priceLabel}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        <>
+          <div className="td-edit-tabs">
+            <button className={`td-edit-tabs__btn${editTab === 'furniture' ? ' td-edit-tabs__btn--active' : ''}`} onClick={() => { setEditTab('furniture'); setPlacingType(null); setPlacingZone(null); }}>FURNITURE</button>
+            <button className={`td-edit-tabs__btn${editTab === 'expand' ? ' td-edit-tabs__btn--active' : ''}`} onClick={() => { setEditTab('expand'); setPlacingType(null); setPlacingZone(null); }}>EXPAND</button>
+          </div>
+          {editTab === 'furniture' ? (
+            <div className="td-palette">
+              {FURNITURE_CATALOG.map(entry => {
+                const canAfford = entry.price === 0 || coinBalance >= entry.price;
+                const priceLabel = entry.price === 0 ? 'Free' : `${entry.price >= 1000 ? `${(entry.price / 1000).toFixed(entry.price % 1000 === 0 ? 0 : 1)}K` : entry.price}`;
+                return (
+                  <button
+                    key={entry.type}
+                    className={`td-palette__item${placingType === entry.type ? ' td-palette__item--active' : ''}${!canAfford ? ' td-palette__item--locked' : ''}`}
+                    onClick={() => {
+                      if (!canAfford) return;
+                      if (placingType === entry.type) { setPlacingType(null); setPlacingZone(null); }
+                      else { setPlacingType(entry.type); setPlacingZone(entry.zone); }
+                    }}
+                    title={`${entry.label} — ${priceLabel}`}
+                    style={!canAfford ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+                  >
+                    <span>{entry.icon}</span>
+                    <span className="td-palette__price" style={{ fontSize: '7px', color: entry.price === 0 ? '#4CAF50' : canAfford ? '#FFD54F' : '#EF5350' }}>
+                      {priceLabel}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="td-expand-panel">
+              {purchasedPreset === 'L' ? (
+                <div className="td-expand-item td-expand-item--purchased">
+                  <span>&#x2713; Large Office</span>
+                  <span className="td-expand-item__status">Purchased</span>
+                </div>
+              ) : (
+                <div className={`td-expand-item${(coinBalance ?? 0) < 15000 ? ' td-expand-item--locked' : ''}`}>
+                  <span>Large Office</span>
+                  <span className="td-expand-item__price">15K</span>
+                  <button
+                    className="td-expand-item__btn"
+                    disabled={(coinBalance ?? 0) < 15000}
+                    onClick={handleExpansionPurchase}
+                  >UPGRADE</button>
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
       {onHireClick && (
         <button className="td-hire-btn" data-quest-target="hire-btn" onClick={onHireClick} title="Hire New Role">
