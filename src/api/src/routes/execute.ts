@@ -7,6 +7,7 @@ import { buildOrgTree, canDispatchTo, getSubordinates } from '../engine/org-tree
 import { createRunner, type RunnerResult } from '../engine/runners/index.js';
 import {
   getSession,
+  createSession,
   addMessage,
   updateMessage,
   type Message,
@@ -159,8 +160,31 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
     // Include both the C-level roles AND any sub-roles from targetRoles
     const fullTargetScope = targetRoles && targetRoles.length > 0 ? targetRoles : undefined;
 
+    // D-014: Create Wave meta + Sessions for each target role
+    const waveId = `wave-${Date.now()}`;
     const jobIds: string[] = [];
+    const sessionIds: string[] = [];
+
     for (const cRole of cLevelRoles) {
+      // Create a Session for this role (D-014: Wave = Session batch creation)
+      const session = createSession(cRole, {
+        mode: 'do',
+        source: 'wave',
+        waveId,
+      });
+      sessionIds.push(session.id);
+
+      // Add CEO directive as the first message in the session
+      const ceoMsg: Message = {
+        id: `msg-${Date.now()}-ceo-${cRole}`,
+        from: 'ceo',
+        content: directive,
+        type: 'directive',
+        status: 'done',
+        timestamp: new Date().toISOString(),
+      };
+      addMessage(session.id, ceoMsg);
+
       const job = jobManager.startJob({
         type: 'wave',
         roleId: cRole,
@@ -168,11 +192,24 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
         sourceRole: 'ceo',
         parentJobId,
         targetRoles: fullTargetScope,
+        sessionId: session.id,       // D-014: link job to session
       });
       jobIds.push(job.id);
+
+      // Add a role message (will be updated as execution progresses)
+      const roleMsg: Message = {
+        id: `msg-${Date.now() + 1}-role-${cRole}`,
+        from: 'role',
+        content: '',
+        type: 'conversation',
+        status: 'streaming',
+        timestamp: new Date().toISOString(),
+        jobId: job.id,
+      };
+      addMessage(session.id, roleMsg, true);
     }
 
-    jsonResponse(res, 200, { jobIds });
+    jsonResponse(res, 200, { jobIds, waveId, sessionIds });
     return;
   }
 
@@ -935,7 +972,12 @@ function handleSessionMessage(
     .then((result: RunnerResult) => {
       cleanupSSELifecycle();
       cleanupChildSubscriptions();
-      updateMessage(sessionId, roleMsg.id, { content: roleMsg.content, status: 'done' });
+      updateMessage(sessionId, roleMsg.id, {
+        content: roleMsg.content,
+        status: 'done',
+        turns: result.turns,
+        tokens: result.totalTokens,
+      });
       roleStatus.set(roleId, 'idle');
       completeActivity(roleId);
       for (const d of result.dispatches) {

@@ -18,7 +18,7 @@ sessionsRouter.post('/', (req, res) => {
     res.status(400).json({ error: 'roleId is required' });
     return;
   }
-  const session = createSession(roleId, mode ?? 'talk');
+  const session = createSession(roleId, { mode: mode ?? 'talk' });
   res.status(201).json(session);
 });
 

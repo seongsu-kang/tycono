@@ -9,6 +9,7 @@ import type { RunnerResult } from '../engine/runners/types.js';
 import { estimateCost } from './pricing.js';
 import { readConfig, getConversationLimits } from './company-config.js';
 import { postKnowledgingCheck, type KnowledgeDebtItem } from '../engine/knowledge-gate.js';
+import { getSession, updateMessage as updateSessionMessage } from './session-store.js';
 
 /* ─── Types ──────────────────────────────── */
 
@@ -34,6 +35,8 @@ export interface Job {
   targetRoles?: string[];
   /** Knowledge debt items detected by Post-Knowledging check */
   knowledgeDebt?: KnowledgeDebtItem[];
+  /** D-014: Session this job belongs to */
+  sessionId?: string;
 }
 
 export interface JobInfo {
@@ -63,6 +66,8 @@ export interface StartJobParams {
   isContinuation?: boolean;
   /** Selective dispatch: only these roles are allowed as dispatch targets */
   targetRoles?: string[];
+  /** D-014: Link this job to a session (internal tracking) */
+  sessionId?: string;
 }
 
 /* ─── Helpers ────────────────────────────── */
@@ -165,6 +170,7 @@ class JobManager {
       childJobIds: [],
       createdAt: new Date().toISOString(),
       targetRoles: params.targetRoles,
+      sessionId: params.sessionId,
     };
 
     this.jobs.set(jobId, job);
@@ -229,6 +235,10 @@ class JobManager {
         onText: (text) => {
           updateActivity(params.roleId, text);
           stream.emit('text', params.roleId, { text });
+          // D-014: Update linked session message content
+          if (job.sessionId) {
+            this.updateSessionRoleMessage(job, text);
+          }
         },
         onThinking: (text) => {
           stream.emit('thinking', params.roleId, { text });
@@ -404,6 +414,10 @@ class JobManager {
           job.status = 'done';
           completeActivity(params.roleId);
           stream.emit('job:done', params.roleId, doneData);
+          // D-014: Update linked session message with final results
+          if (job.sessionId) {
+            this.finalizeSessionMessage(job, 'done', result);
+          }
           // Cleanup orphaned child jobs (awaiting_input with no parent to respond)
           this.cleanupOrphanedChildren(job.id);
         }
@@ -429,9 +443,58 @@ class JobManager {
         completeActivity(params.roleId);
 
         stream.emit('job:error', params.roleId, { message: err.message });
+        // D-014: Mark linked session message as error
+        if (job.sessionId) {
+          this.finalizeSessionMessage(job, 'error');
+        }
       });
 
     return job;
+  }
+
+  /* ─── D-014: Session ↔ Job bridge ───────── */
+
+  /** Accumulated text content for session messages linked to jobs */
+  private sessionMsgContent = new Map<string, string>();
+
+  /** Update session role message content as text streams in */
+  private updateSessionRoleMessage(job: Job, text: string): void {
+    if (!job.sessionId) return;
+    const session = getSession(job.sessionId);
+    if (!session) return;
+
+    // Find the role message linked to this job
+    const roleMsg = session.messages.find(m => m.jobId === job.id && m.from === 'role');
+    if (!roleMsg) return;
+
+    const key = `${job.sessionId}:${roleMsg.id}`;
+    const current = (this.sessionMsgContent.get(key) ?? '') + text;
+    this.sessionMsgContent.set(key, current);
+
+    updateSessionMessage(job.sessionId, roleMsg.id, { content: current });
+  }
+
+  /** Finalize session message when job completes or errors */
+  private finalizeSessionMessage(job: Job, status: 'done' | 'error', result?: RunnerResult): void {
+    if (!job.sessionId) return;
+    const session = getSession(job.sessionId);
+    if (!session) return;
+
+    const roleMsg = session.messages.find(m => m.jobId === job.id && m.from === 'role');
+    if (!roleMsg) return;
+
+    const key = `${job.sessionId}:${roleMsg.id}`;
+    const finalContent = this.sessionMsgContent.get(key) ?? roleMsg.content;
+    this.sessionMsgContent.delete(key);
+
+    updateSessionMessage(job.sessionId, roleMsg.id, {
+      content: finalContent,
+      status,
+      ...(result && {
+        turns: result.turns,
+        tokens: result.totalTokens,
+      }),
+    });
   }
 
   /** Cleanup orphaned child jobs when parent completes */
