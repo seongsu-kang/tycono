@@ -193,6 +193,7 @@ let _dragging: { defId: string; startMx: number; startMy: number; origOffX: numb
 let _draggingDesk: { roleId: string; startMx: number; startMy: number; origDx: number; origDy: number } | null = null;
 let _placingType: FurnitureType | null = null;   // furniture type being placed
 let _placingZone: 'wall' | 'floor' | null = null;
+let _stretchCooldown = 1800;  // 30s @ 60fps — triggers random stretch animation
 
 
 /* ═══════════════════════════════════════════
@@ -429,6 +430,8 @@ interface CharState {
   stateTimer: number;
   sittingTime: number;  // frames spent sitting (for zzz)
   lookDir: 'left' | 'right';  // Which way seated character looks (REACT-005)
+  isStretching: boolean;  // currently stretching
+  stretchTimer: number;   // frames remaining for stretch animation
 }
 
 /* ── Interaction Particles ── */
@@ -588,6 +591,8 @@ function createChars(roleIds: string[]): Record<string, CharState> {
       stateTimer: 1200 + Math.floor(Math.random() * 1800),  // sit 20-50s
       sittingTime: 0,
       lookDir: 'right',  // Default facing right
+      isStretching: false,
+      stretchTimer: 0,
     };
     idx++;
   }
@@ -658,8 +663,28 @@ function buildReturnPath(ch: CharState) {
 }
 
 function updateChars(chars: Record<string, CharState>, frame: number) {
+  // Stretch cooldown: every 30s, pick a random sitting character to stretch
+  _stretchCooldown--;
+  if (_stretchCooldown <= 0) {
+    const sittingChars = Object.entries(chars).filter(([, ch]) => ch.state === 'sitting' && !ch.isStretching);
+    if (sittingChars.length > 0) {
+      const [, ch] = sittingChars[Math.floor(Math.random() * sittingChars.length)];
+      ch.isStretching = true;
+      ch.stretchTimer = 120;  // 2 seconds @ 60fps
+    }
+    _stretchCooldown = 1800;  // reset to 30s
+  }
+
   for (const [id, ch] of Object.entries(chars)) {
     ch.stateTimer--;
+
+    // Handle stretching timer countdown
+    if (ch.isStretching && ch.stretchTimer > 0) {
+      ch.stretchTimer--;
+      if (ch.stretchTimer <= 0) {
+        ch.isStretching = false;
+      }
+    }
 
     if (ch.state === 'sitting') {
       ch.sittingTime++;
@@ -841,10 +866,15 @@ function drawScene(
     const sit = ch.state === 'sitting';
     const ap = getAp(id);
     const isWorking = roleStatuses[id] === 'working';
+    // Stretch animation: 1px up/down bounce when stretching
+    const stretchBounce = ch.isStretching && ch.stretchTimer > 0
+      ? Math.sin(ch.stretchTimer * 0.15) * 1
+      : 0;
     entities.push({
       y: d.dy + 14,
       draw: () => {
-        drawDeskUnit(d.dx, d.dy, ap, sit ? ch.bobY : 0, !sit, ch.lookDir);
+        const bobOffset = sit ? ch.bobY + stretchBounce : 0;
+        drawDeskUnit(d.dx, d.dy, ap, bobOffset, !sit, ch.lookDir);
         // Working indicator: glowing monitor
         if (sit && isWorking) {
           const color = ROLE_COLORS[id] ?? '#388bfd';
@@ -948,7 +978,7 @@ function drawScene(
   // ── Zzz animation for long-idle characters ──
   const ZZZ_THRESHOLD = 3600;  // ~60 seconds at 60fps
   for (const [, ch] of Object.entries(chars)) {
-    if (ch.state === 'sitting' && ch.sittingTime > ZZZ_THRESHOLD) {
+    if (ch.state === 'sitting' && ch.sittingTime > ZZZ_THRESHOLD && !ch.isStretching) {
       const d = Object.values(DESKS).find(dk => dk.dx + 8 === ch.homeX && dk.dy + 34 === ch.homeY);
       if (!d) continue;
       const cx = d.dx + 13, cy = d.dy;
