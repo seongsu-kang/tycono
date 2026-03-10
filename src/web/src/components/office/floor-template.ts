@@ -235,14 +235,14 @@ function presetM(deskCount: number): FloorLayout {
 
   const corridorY: Record<string, number> = {
     exec: exec.fy + 52, work: work.fy + 48,
-    meet: meet.fy + 56, comm: comm.fy + 42,
+    meet: meet.fy + 56, comm: comm.fy + 54,
   };
 
   const waypoints: Record<string, { x: number; y: number }[]> = {
     exec: [{ x: exec.fx + 6, y: exec.fy + 52 }, { x: exec.fx + 60, y: exec.fy + 54 }, { x: exec.fx + 112, y: exec.fy + 50 }, { x: exec.fx + 50, y: exec.fy + 52 }],
     work: [{ x: work.fx + 14, y: work.fy + 48 }, { x: work.fx + 44, y: work.fy + 48 }, { x: work.fx + 70, y: work.fy + 48 }, { x: work.fx + 100, y: work.fy + 48 }],
     meet: [{ x: meet.fx + 60, y: meet.fy + 56 }, { x: meet.fx + 30, y: meet.fy + 54 }, { x: meet.fx + 110, y: meet.fy + 50 }, { x: meet.fx + 80, y: meet.fy + 56 }],
-    comm: [{ x: comm.fx + 96, y: comm.fy + 8 }, { x: comm.fx + 60, y: comm.fy + 42 }, { x: comm.fx + 40, y: comm.fy + 42 }, { x: comm.fx + 20, y: comm.fy + 42 }],
+    comm: [{ x: comm.fx + 96, y: comm.fy + 8 }, { x: comm.fx + 60, y: comm.fy + 54 }, { x: comm.fx + 40, y: comm.fy + 54 }, { x: comm.fx + 20, y: comm.fy + 54 }],
   };
 
   /* ─── Wall decorations (from original hardcoded coords) ── */
