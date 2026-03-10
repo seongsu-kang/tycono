@@ -5,6 +5,7 @@ import { validateDispatch, validateConsult } from './authority-validator.js';
 import { getToolsForRole } from './tools/definitions.js';
 import { executeTool, type ToolExecutorOptions } from './tools/executor.js';
 import { type TokenLedger } from '../services/token-ledger.js';
+import { estimateCost } from '../services/pricing.js';
 import { type ImageAttachment } from './runners/types.js';
 
 /* ─── Types ──────────────────────────────────── */
@@ -42,6 +43,43 @@ export interface AgentResult {
   totalTokens: { input: number; output: number };
   toolCalls: Array<{ name: string; input: Record<string, unknown> }>;
   dispatches: Array<{ roleId: string; task: string; result: string }>;
+}
+
+/* ─── EG-006: Context Compression ────────────── */
+
+/**
+ * Compress older messages to reduce token usage.
+ * Strategy: Keep first 2 messages (initial task) and last 4 messages (recent context).
+ * Middle messages: truncate long tool_result content, collapse text blocks.
+ */
+function compressMessages(messages: LLMMessage[]): void {
+  if (messages.length <= 6) return;
+
+  // Keep first 2 (task setup) and last 4 (recent context)
+  const keepHead = 2;
+  const keepTail = 4;
+  const compressRange = messages.slice(keepHead, messages.length - keepTail);
+
+  for (const msg of compressRange) {
+    if (typeof msg.content === 'string') {
+      // Truncate long text content
+      if (msg.content.length > 500) {
+        msg.content = msg.content.slice(0, 300) + '\n\n[... compressed ...]';
+      }
+    } else if (Array.isArray(msg.content)) {
+      for (let i = 0; i < msg.content.length; i++) {
+        const block = msg.content[i] as Record<string, unknown>;
+        if (block.type === 'tool_result') {
+          const content = typeof block.content === 'string' ? block.content : '';
+          if (content.length > 300) {
+            block.content = content.slice(0, 200) + '\n[... compressed, was ' + content.length + ' chars]';
+          }
+        } else if (block.type === 'text' && typeof block.text === 'string' && block.text.length > 500) {
+          block.text = (block.text as string).slice(0, 300) + '\n[... compressed ...]';
+        }
+      }
+    }
+  }
 }
 
 /* ─── Agent Loop ─────────────────────────────── */
@@ -214,16 +252,33 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
   const dispatches: AgentResult['dispatches'] = [];
   const outputParts: string[] = [];
 
+  // EG-006/007: Context compression + token budget
+  const COMPRESS_THRESHOLD = 100_000;
+  const TOKEN_WARN_THRESHOLD = 200_000; // Warn at 200K total tokens
+  let tokenWarningEmitted = false;
+
   while (turns < maxTurns) {
     // Check abort signal before each turn
     if (abortSignal?.aborted) break;
 
     turns++;
 
+    // EG-006: Compress old messages when token budget exceeded
+    if (totalInput > COMPRESS_THRESHOLD && messages.length > 4) {
+      compressMessages(messages);
+    }
+
     // Call LLM
     const response = await llm.chat(context.systemPrompt, messages, tools, abortSignal);
     totalInput += response.usage.inputTokens;
     totalOutput += response.usage.outputTokens;
+
+    // EG-007: Token budget warning
+    if (!tokenWarningEmitted && (totalInput + totalOutput) > TOKEN_WARN_THRESHOLD) {
+      tokenWarningEmitted = true;
+      const cost = estimateCost(totalInput, totalOutput, config.model ?? 'unknown');
+      onText?.(`\n\n⚠️ [Token Budget Warning] This task has used ${totalInput.toLocaleString()} input + ${totalOutput.toLocaleString()} output tokens (~$${cost.toFixed(3)}). Consider wrapping up.\n\n`);
+    }
 
     // Record token usage
     config.tokenLedger?.record({
