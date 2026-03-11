@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { ActivityEvent } from '../types';
-
-export type StreamStatus = 'idle' | 'connecting' | 'streaming' | 'done' | 'error';
+import type { ActivityEvent, StreamStatus } from '../types';
+export type { StreamStatus } from '../types';
 
 interface UseActivityStreamResult {
   events: ActivityEvent[];

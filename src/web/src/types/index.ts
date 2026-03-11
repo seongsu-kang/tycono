@@ -1,3 +1,30 @@
+/* ─── Shared Types (re-export from single source of truth) ── */
+
+export {
+  type JobType,
+  type JobStatus,
+  type ActivityEventType,
+  type ActivityEvent,
+  type JobInfo,
+  type RoleStatus,
+  type SessionStatus,
+  type SessionSource,
+  type MessageStatus,
+  type WaveRoleStatus,
+  type WaveNodeStatus,
+  type StreamStatus,
+  isJobActive,
+  isRoleActive,
+  isWaveNodeActive,
+  isMessageTerminal,
+  eventTypeToJobStatus,
+  jobStatusToRoleStatus,
+  canTransition,
+} from '@shared/types';
+import type { ActivityEvent, JobStatus, MessageStatus, SessionStatus, SessionSource, WaveRoleStatus } from '@shared/types';
+
+/* ─── Frontend Types ─────────────────────── */
+
 export interface Role {
   id: string;
   name: string;
@@ -67,13 +94,13 @@ export interface WaveReplayRole {
   roleName: string;
   jobId: string;
   sessionId?: string;
-  status: string;
+  status: WaveRoleStatus;
   events: ActivityEvent[];
   childJobs: Array<{
     roleId: string;
     roleName: string;
     jobId: string;
-    status: string;
+    status: WaveRoleStatus;
     events: ActivityEvent[];
   }>;
   isFollowUp?: boolean;
@@ -125,7 +152,7 @@ export interface Message {
   thinking?: string;
   streamEvents?: StreamEvent[];
   type: 'conversation' | 'directive' | 'system';
-  status?: 'streaming' | 'done' | 'error' | 'awaiting_input';
+  status?: MessageStatus;
   timestamp: string;
   attachments?: ImageAttachment[];
 
@@ -210,41 +237,6 @@ export interface OrgTreeResponse {
   chart: string;
 }
 
-/* ─── Activity Stream Types ──────────────── */
-
-export type ActivityEventType =
-  | 'job:start' | 'job:done' | 'job:error'
-  | 'job:awaiting_input' | 'job:reply'
-  | 'text' | 'thinking'
-  | 'tool:start' | 'tool:result'
-  | 'dispatch:start' | 'dispatch:done'
-  | 'turn:complete'
-  | 'import:scan' | 'import:process' | 'import:created'
-  | 'stderr';
-
-export interface ActivityEvent {
-  seq: number;
-  ts: string;
-  type: ActivityEventType;
-  roleId: string;
-  parentJobId?: string;
-  data: Record<string, unknown>;
-}
-
-export type JobType = 'assign' | 'wave' | 'session-message';
-export type JobStatus = 'running' | 'done' | 'error' | 'awaiting_input';
-
-export interface JobInfo {
-  id: string;
-  type: JobType;
-  roleId: string;
-  task: string;
-  status: JobStatus;
-  parentJobId?: string;
-  childJobIds: string[];
-  createdAt: string;
-}
-
 /* ─── Terminal Session Types ─────────────── */
 
 export interface Session {
@@ -253,10 +245,10 @@ export interface Session {
   title: string;
   mode: 'talk' | 'do';
   messages: Message[];
-  status: 'active' | 'closed';
+  status: SessionStatus;
   createdAt: string;
   updatedAt: string;
-  source?: 'chat' | 'wave' | 'dispatch';
+  source?: SessionSource;
   jobId?: string;
   parentSessionId?: string;
   waveId?: string;
@@ -409,7 +401,7 @@ export interface ActiveSession {
   pid?: number;
   startedAt: string;
   status: 'active' | 'idle' | 'dead';
-  jobStatus?: string | null;
+  jobStatus?: JobStatus | null;
   roleName?: string;
   alive?: boolean | null;
 }

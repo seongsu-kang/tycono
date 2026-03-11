@@ -14,6 +14,7 @@ import {
   type ImageAttachment,
 } from '../services/session-store.js';
 import { jobManager, type Job } from '../services/job-manager.js';
+import { type JobStatus, type RoleStatus, type WaveRoleStatus, type TeamStatus, isJobActive, isRoleActive, jobStatusToRoleStatus, eventTypeToJobStatus } from '../../../shared/types';
 import { ActivityStream, type ActivityEvent, type ActivitySubscriber } from '../services/activity-stream.js';
 import { earnCoinsInternal } from './coins.js';
 import { appendFollowUpToWave } from '../services/wave-tracker.js';
@@ -32,7 +33,7 @@ function getRunner() {
 
 /* ─── Active execution tracking (legacy, kept for /api/exec/status compat) ──── */
 
-const roleStatus = new Map<string, 'idle' | 'working' | 'done'>();
+const roleStatus = new Map<string, RoleStatus>();
 
 /* ─── Raw HTTP handler (Express 5 SSE 호환 문제 우회) ─── */
 
@@ -113,6 +114,21 @@ function handleJobsRequest(url: string, method: string, req: IncomingMessage, re
     const events = ActivityStream.readAll(jobId);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ events }));
+    return;
+  }
+
+  // POST /api/jobs/:id/abort — abort a running job directly by jobId
+  const abortMatch = path.match(/^\/api\/jobs\/([^/]+)\/abort$/);
+  if (method === 'POST' && abortMatch) {
+    const jobId = abortMatch[1];
+    const success = jobManager.abortJob(jobId);
+    if (!success) {
+      res.writeHead(404);
+      res.end(JSON.stringify({ error: 'Job not found or not running' }));
+    } else {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, jobId }));
+    }
     return;
   }
 
@@ -311,9 +327,9 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
     roleId: string;
     roleName: string;
     jobId: string;
-    status: string;
+    status: WaveRoleStatus;
     events: ReturnType<typeof ActivityStream.readAll>;
-    childJobs: Array<{ roleId: string; roleName: string; jobId: string; status: string; events: ReturnType<typeof ActivityStream.readAll> }>;
+    childJobs: Array<{ roleId: string; roleName: string; jobId: string; status: WaveRoleStatus; events: ReturnType<typeof ActivityStream.readAll> }>;
   }
   const rolesData: WaveRoleData[] = [];
 
@@ -323,7 +339,7 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
     const roleId = startEvent?.roleId ?? 'unknown';
     const roleName = (startEvent?.data?.roleName as string) ?? roleId;
     const doneEvent = events.find(e => e.type === 'job:done' || e.type === 'job:awaiting_input' || e.type === 'job:error');
-    const status = doneEvent?.type === 'job:done' ? 'done' : doneEvent?.type === 'job:error' ? 'error' : doneEvent?.type === 'job:awaiting_input' ? 'awaiting_input' : 'unknown';
+    const status: WaveRoleStatus = doneEvent ? eventTypeToJobStatus(doneEvent.type) as WaveRoleStatus : 'unknown';
 
     // Collect child jobs (dispatched sub-roles)
     const childJobs: WaveRoleData['childJobs'] = [];
@@ -333,7 +349,7 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
         const targetRoleId = (e.data.targetRoleId as string) ?? 'unknown';
         const childEvents = ActivityStream.readAll(childJobId);
         const childDone = childEvents.find(ce => ce.type === 'job:done' || ce.type === 'job:error' || ce.type === 'job:awaiting_input');
-        const childStatus = childDone?.type === 'job:done' ? 'done' : childDone?.type === 'job:error' ? 'error' : 'unknown';
+        const childStatus: WaveRoleStatus = childDone ? eventTypeToJobStatus(childDone.type) as WaveRoleStatus : 'unknown';
         childJobs.push({
           roleId: targetRoleId,
           roleName: (childEvents.find(ce => ce.type === 'job:start')?.data?.roleName as string) ?? targetRoleId,
@@ -547,6 +563,9 @@ function handleAssign(body: Record<string, unknown>, req: IncomingMessage, res: 
       case 'stderr':
         sendSSE(res, 'stderr', { message: event.data.message });
         break;
+      case 'job:awaiting_input':
+        sendSSE(res, 'awaiting_input', { question: event.data.question, targetRole: event.data.targetRole, reason: event.data.reason });
+        break;
       case 'job:done':
         cleanupLifecycle();
         sendSSE(res, 'done', event.data);
@@ -568,6 +587,7 @@ function handleAssign(body: Record<string, unknown>, req: IncomingMessage, res: 
   req.on('close', () => {
     cleanupLifecycle();
     job.stream.unsubscribe(subscriber);
+    roleStatus.set(roleId, 'idle');
   });
 }
 
@@ -645,6 +665,9 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
         case 'stderr':
           sendSSE(res, 'stderr', { roleId: rolePrefix, message: event.data.message });
           break;
+        case 'job:awaiting_input':
+          sendSSE(res, 'role:awaiting_input', { roleId: rolePrefix, question: event.data.question, targetRole: event.data.targetRole, reason: event.data.reason });
+          break;
         case 'job:done':
           sendSSE(res, 'role:done', { roleId: rolePrefix, ...event.data });
           doneCount++;
@@ -687,27 +710,31 @@ function handleStatus(res: ServerResponse): void {
     statuses[activity.roleId] = activity.status;
   }
 
-  // 2. JobManager running jobs are the source of truth for "working"
-  const runningJobs = jobManager.listJobs({ status: 'running' });
-  const runningRoles = new Set(runningJobs.map(j => j.roleId));
+  // 2. JobManager active jobs (isJobActive: running | awaiting_input)
+  const activeJobs = jobManager.listJobs({ active: true });
+  const activeRoles = new Set(activeJobs.map(j => j.roleId));
 
   // 2b. In-memory roleStatus (includes chat streaming sessions, not just jobs)
   const memoryWorking = new Set<string>();
   for (const [rid, st] of roleStatus.entries()) {
-    if (st === 'working') memoryWorking.add(rid);
+    if (isRoleActive(st as RoleStatus)) memoryWorking.add(rid);
   }
 
-  // 3. Any role marked "working" in file but NOT in JobManager AND NOT in memory → done
+  // 3. Stale cleanup: active in file but NOT in JobManager AND NOT in memory → done
   for (const roleId of Object.keys(statuses)) {
-    if (statuses[roleId] === 'working' && !runningRoles.has(roleId) && !memoryWorking.has(roleId)) {
+    const s = statuses[roleId];
+    if (isRoleActive(s as RoleStatus) && !activeRoles.has(roleId) && !memoryWorking.has(roleId)) {
       statuses[roleId] = 'done';
       completeActivity(roleId);
     }
   }
 
-  // 4. Running jobs override everything
-  for (const job of runningJobs) {
-    statuses[job.roleId] = 'working';
+  // 4. Active jobs override — use jobStatusToRoleStatus() for canonical mapping
+  for (const job of activeJobs) {
+    const mappedStatus = jobStatusToRoleStatus(job.status as JobStatus);
+    // running job → 'working' always wins over awaiting_input
+    if (statuses[job.roleId] === 'working' && mappedStatus === 'awaiting_input') continue;
+    statuses[job.roleId] = mappedStatus;
   }
 
   // 5. In-memory working (chat streaming) also overrides
@@ -715,7 +742,7 @@ function handleStatus(res: ServerResponse): void {
     statuses[rid] = 'working';
   }
 
-  const activeExecs = runningJobs.map((j) => ({
+  const activeExecs = activeJobs.map((j) => ({
     id: j.id,
     roleId: j.roleId,
     task: j.task,
@@ -885,6 +912,14 @@ function handleSessionMessage(
             input: event.data.input,
           });
           break;
+        case 'job:awaiting_input':
+          sendSSE(res, 'dispatch:progress', {
+            roleId: event.roleId,
+            type: 'awaiting_input',
+            question: event.data.question,
+            targetRole: event.data.targetRole,
+          });
+          break;
         case 'job:done':
           sendSSE(res, 'dispatch:progress', {
             roleId: event.roleId,
@@ -906,15 +941,18 @@ function handleSessionMessage(
     childSubscriptions.push({ job: childJob, subscriber });
   });
 
-  // Build team status from running jobs (same as JobManager pattern)
-  const teamStatus: Record<string, { status: string; task?: string }> = {};
-  for (const j of jobManager.listJobs({ status: 'running' })) {
-    teamStatus[j.roleId] = { status: 'working', task: j.task };
+  // Build team status from active jobs using schema helpers
+  const teamStatus: TeamStatus = {};
+  for (const j of jobManager.listJobs({ active: true })) {
+    const mapped = jobStatusToRoleStatus(j.status as JobStatus);
+    // 'working' takes priority over 'awaiting_input' for same role
+    if (teamStatus[j.roleId]?.status === 'working' && mapped === 'awaiting_input') continue;
+    teamStatus[j.roleId] = { status: mapped, task: j.task };
   }
   // Also include roleStatus for roles working via session (not tracked as jobs)
   for (const [rid, status] of roleStatus) {
-    if (status === 'working' && rid !== roleId && !teamStatus[rid]) {
-      teamStatus[rid] = { status: 'working' };
+    if (isRoleActive(status as RoleStatus) && rid !== roleId && !teamStatus[rid]) {
+      teamStatus[rid] = { status: status as RoleStatus };
     }
   }
 

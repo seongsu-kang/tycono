@@ -42,7 +42,8 @@ export interface AssembledContext {
  * 8. CEO Decisions (전사 공지 — Approved 결정만)
  * 9. Task
  */
-export type TeamStatus = Record<string, { status: string; task?: string }>;
+export type { TeamStatus } from '../../../shared/types';
+import { type RoleStatus, type TeamStatus, isRoleActive } from '../../../shared/types';
 
 export function assembleContext(
   companyRoot: string,
@@ -461,7 +462,7 @@ function buildDispatchSection(orgTree: OrgTree, roleId: string, subordinates: st
 
     // Header: name, id, persona summary
     const st = teamStatus?.[id];
-    const status = st?.status === 'working'
+    const status = st?.status && isRoleActive(st.status)
       ? `🔴 Working${st.task ? ` — "${st.task.slice(0, 60)}"` : ''}`
       : '🟢 Idle';
     lines.push(`### ${sub.name} (\`${id}\`) — ${status}`);

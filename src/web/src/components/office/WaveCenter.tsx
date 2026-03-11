@@ -3,6 +3,7 @@ import useWaveTree, { type WaveNode } from '../../hooks/useWaveTree';
 import OrgTreeLive from './OrgTreeLive';
 import EventRow from '../common/EventRow';
 import type { OrgNode, Wave, WaveReplay, ImageAttachment } from '../../types';
+import { isJobActive, isWaveNodeActive } from '../../types';
 import { api } from '../../api/client';
 import { usePanelResize } from './KnowledgePanel';
 
@@ -61,7 +62,7 @@ export default function WaveCenter({
   const [replayData, setReplayData] = useState<WaveReplay | null>(null);
   const [replayLoading, setReplayLoading] = useState(false);
   const [selectedWaveIdx, setSelectedWaveIdx] = useState(activeWaves.length > 0 ? 0 : -1);
-  const [composingNew, setComposingNew] = useState(false); // true when user clicked "+ New Wave"
+  const [, setComposingNew] = useState(false); // true when user clicked "+ New Wave"
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Active wave tracking
@@ -88,7 +89,7 @@ export default function WaveCenter({
 
       // If any follow-up roles are still running, reconnect their streams
       for (const r of replayData.roles ?? []) {
-        if (r.status === 'running' && r.jobId) {
+        if (isJobActive(r.status as any) && r.jobId) {
           const node = staticNodes.get(r.roleId);
           if (node?.sessionId) {
             setTimeout(() => waveTree.connectStream(node.sessionId, r.roleId), 100);
@@ -105,21 +106,20 @@ export default function WaveCenter({
     }
   }, [rootRoleId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // When new active wave starts, select it (but not if user is composing a new wave)
+  // When new active wave starts, select it (but not if user is composing or viewing replay)
   const prevActiveCount = useRef(activeWaves.length);
   useEffect(() => {
     const grew = activeWaves.length > prevActiveCount.current;
     prevActiveCount.current = activeWaves.length;
     if (grew) {
-      // A new wave just started — select it and exit composing mode
+      // A new wave just started — select it and exit composing/replay mode
       setSelectedWaveIdx(0);
       setReplayData(null);
       setComposingNew(false);
-    } else if (activeWaves.length > 0 && selectedWaveIdx < 0 && !composingNew) {
-      setSelectedWaveIdx(0);
-      setReplayData(null);
     }
-  }, [activeWaves.length, selectedWaveIdx, composingNew]);
+    // Removed auto-snap: don't force back to active wave when user is viewing
+    // replay (replayData/replayLoading) or composing a new wave.
+  }, [activeWaves.length]);
 
   // Code git status
   const [codeGit, setCodeGit] = useState<GitInfo | null>(null);
@@ -362,14 +362,24 @@ export default function WaveCenter({
 
   const handleForceStop = useCallback(async (roleId: string) => {
     const node = waveTree.nodes.get(roleId);
-    if (!node?.sessionId) return;
-    try { await api.abortSession(node.sessionId); } catch { /* ignore */ }
+    if (!node) return;
+    try {
+      if (node.sessionId) await api.abortSession(node.sessionId);
+      else if (node.jobId) await api.abortJob(node.jobId);
+    } catch {
+      // Fallback: try jobId if session abort failed
+      if (node.jobId) try { await api.abortJob(node.jobId); } catch { /* ignore */ }
+    }
   }, [waveTree.nodes]);
 
   const handleStopAll = useCallback(async () => {
     for (const [, node] of waveTree.nodes) {
-      if ((node.status === 'running' || node.status === 'awaiting_input') && node.sessionId) {
-        try { await api.abortSession(node.sessionId); } catch { /* ignore */ }
+      if (!isWaveNodeActive(node.status)) continue;
+      try {
+        if (node.sessionId) await api.abortSession(node.sessionId);
+        else if (node.jobId) await api.abortJob(node.jobId);
+      } catch {
+        if (node.jobId) try { await api.abortJob(node.jobId); } catch { /* ignore */ }
       }
     }
   }, [waveTree.nodes]);
@@ -395,6 +405,9 @@ export default function WaveCenter({
   const doneFired = useRef(false);
   const doneFiredWaveId = useRef<string | null>(null);
   useEffect(() => {
+    // Skip when viewing replay or loading — only fire for actual active wave completion
+    if (replayData || replayLoading) return;
+
     // Reset doneFired when switching to a different wave
     if (currentActiveWave?.id !== doneFiredWaveId.current) {
       doneFired.current = false;
@@ -410,7 +423,7 @@ export default function WaveCenter({
         onSave(currentActiveWave.directive, jobIds, { waveId: currentActiveWave.id, sessionIds: currentActiveWave.sessionIds }).catch(() => {});
       }
     }
-  }, [waveTree.allDone, currentActiveWave, onDone, onSave, fetchCodeGit]);
+  }, [waveTree.allDone, currentActiveWave, onDone, onSave, fetchCodeGit, replayData, replayLoading]);
 
   const handleSave = useCallback(async () => {
     if (!onSave || !currentActiveWave) return;
@@ -447,7 +460,10 @@ export default function WaveCenter({
               Wave Center
             </span>
             {hasRunning && (
-              <span className="text-white/60 text-xs">{waveTree.progress.running} running</span>
+              <span className="text-white/60 text-xs">
+                {waveTree.progress.running + waveTree.progress.awaitingInput} active
+                {waveTree.progress.awaitingInput > 0 && ` (${waveTree.progress.awaitingInput} awaiting)`}
+              </span>
             )}
             <div className="ml-auto flex items-center gap-2">
               {onMaximize && (
@@ -681,7 +697,7 @@ export default function WaveCenter({
                        selectedNode.status === 'done' ? (
                          selectedNode.children.some(cid => {
                            const child = waveTree.nodes.get(cid);
-                           return child && (child.status === 'running' || child.status === 'awaiting_input');
+                           return child && isWaveNodeActive(child.status);
                          }) ? 'Supervising...' : 'Complete'
                        ) :
                        selectedNode.status === 'error' ? 'Error' :
@@ -690,7 +706,7 @@ export default function WaveCenter({
                        'Not dispatched'}
                     </span>
                     <span className="text-[10px] text-[var(--terminal-text-muted)]">{selectedNode.events.length} events</span>
-                    {(selectedNode.status === 'running' || selectedNode.status === 'awaiting_input') && selectedNode.sessionId && (
+                    {isWaveNodeActive(selectedNode.status) && selectedNode.sessionId && (
                       <button
                         onClick={() => handleForceStop(selectedNode.roleId)}
                         className="text-[10px] px-2 py-0.5 rounded font-semibold cursor-pointer ml-1"
@@ -922,7 +938,7 @@ export default function WaveCenter({
                   {activeWaves.map((w, i) => (
                     <button
                       key={w.id}
-                      onClick={() => { setSelectedWaveIdx(i); setReplayData(null); setComposingNew(false); }}
+                      onClick={() => { setSelectedWaveIdx(i); setReplayData(null); setComposingNew(false); waveTree.reset(); }}
                       className="text-left p-2 rounded-lg cursor-pointer transition-colors"
                       style={{
                         background: selectedWaveIdx === i && !replayData ? 'var(--terminal-bg)' : 'transparent',
@@ -1062,7 +1078,7 @@ function buildReplayNodes(
   for (const r of replayRoles) {
     const existing = nodes.get(r.roleId);
     if (existing) {
-      const isRunning = r.status === 'running';
+      const isRunning = isJobActive(r.status as any);
       nodes.set(r.roleId, {
         ...existing,
         sessionId: r.sessionId ?? r.jobId ?? '',

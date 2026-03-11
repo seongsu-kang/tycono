@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { ActivityEvent, OrgNode } from '../types';
-import type { StreamStatus } from './useActivityStream';
+import type { ActivityEvent, OrgNode, StreamStatus } from '../types';
+export type { WaveNodeStatus } from '../types';
+import type { WaveNodeStatus } from '../types';
+import { isWaveNodeActive } from '../types';
 import { useWaveStream } from './useWaveStream';
-
-export type WaveNodeStatus = 'waiting' | 'running' | 'done' | 'error' | 'not-dispatched' | 'awaiting_input';
 
 export interface WaveNode {
   sessionId: string;
+  jobId?: string;
   roleId: string;
   roleName: string;
   children: string[];
@@ -36,7 +37,7 @@ interface StreamState {
 }
 
 export default function useWaveTree(
-  rootJobs: Array<{ sessionId: string; roleId: string; roleName?: string }>,
+  rootJobs: Array<{ sessionId: string; roleId: string; roleName?: string; jobId?: string }>,
   orgNodes: Record<string, OrgNode>,
   rootRoleId: string,
   /** SSE-005: When provided, use multiplexed wave stream instead of per-role SSE */
@@ -114,6 +115,7 @@ export default function useWaveTree(
       const node = initial.get(rj.roleId);
       if (node) {
         node.sessionId = rj.sessionId;
+        node.jobId = rj.jobId;
         node.status = 'running';
         node.streamStatus = 'connecting';
       }
@@ -381,8 +383,10 @@ export default function useWaveTree(
     return { done, total, running, awaitingInput };
   })();
 
-  const allDone = progress.total > 0 && progress.running === 0 && progress.awaitingInput === 0 &&
-    Array.from(nodes.values()).every(n => n.status !== 'running' && n.status !== 'awaiting_input' && n.streamStatus !== 'streaming' && n.streamStatus !== 'connecting');
+  // allDone requires at least one node to have actually been dispatched (done/error),
+  // not just a fresh tree of 'waiting' nodes which would falsely trigger allDone.
+  const allDone = progress.total > 0 && progress.done > 0 && progress.running === 0 && progress.awaitingInput === 0 &&
+    Array.from(nodes.values()).every(n => !isWaveNodeActive(n.status) && n.streamStatus !== 'streaming' && n.streamStatus !== 'connecting');
 
   // When all done, mark remaining 'waiting' as 'not-dispatched'
   useEffect(() => {

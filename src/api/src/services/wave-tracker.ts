@@ -7,6 +7,7 @@ import path from 'node:path';
 import { COMPANY_ROOT } from './file-reader.js';
 import { ActivityStream, type ActivityEvent } from './activity-stream.js';
 import { jobManager } from './job-manager.js';
+import { type WaveRoleStatus, eventTypeToJobStatus } from '../../../shared/types';
 
 /* ─── Find wave file ──────────────────────── */
 
@@ -148,9 +149,7 @@ export function updateFollowUpInWave(waveId: string, jobId: string, roleId: stri
 
     const newEvents = ActivityStream.readAll(jobId);
     const doneEvent = newEvents.find(e => e.type === 'job:done' || e.type === 'job:error' || e.type === 'job:awaiting_input');
-    const status = doneEvent?.type === 'job:done' ? 'done'
-      : doneEvent?.type === 'job:error' ? 'error'
-      : doneEvent?.type === 'job:awaiting_input' ? 'awaiting_input' : 'running';
+    const status: WaveRoleStatus = doneEvent ? eventTypeToJobStatus(doneEvent.type) as WaveRoleStatus : 'running' as any;
 
     // Collect child jobs
     const childJobs: Array<{ roleId: string; roleName: string; jobId: string; status: string; events: ReturnType<typeof ActivityStream.readAll> }> = [];
@@ -159,8 +158,8 @@ export function updateFollowUpInWave(waveId: string, jobId: string, roleId: stri
         const childJobId = e.data.childJobId as string;
         const targetRoleId = (e.data.targetRoleId as string) ?? 'unknown';
         const childEvents = ActivityStream.readAll(childJobId);
-        const childDone = childEvents.find(ce => ce.type === 'job:done' || ce.type === 'job:error');
-        const childStatus = childDone?.type === 'job:done' ? 'done' : childDone?.type === 'job:error' ? 'error' : 'unknown';
+        const childDone = childEvents.find(ce => ce.type === 'job:done' || ce.type === 'job:error' || ce.type === 'job:awaiting_input');
+        const childStatus: WaveRoleStatus = childDone ? eventTypeToJobStatus(childDone.type) as WaveRoleStatus : 'unknown';
         childJobs.push({ roleId: targetRoleId, roleName: targetRoleId, jobId: childJobId, status: childStatus, events: childEvents });
       }
     }

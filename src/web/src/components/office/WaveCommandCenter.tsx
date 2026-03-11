@@ -3,6 +3,7 @@ import useWaveTree from '../../hooks/useWaveTree';
 import OrgTreeLive from './OrgTreeLive';
 import EventRow from '../common/EventRow';
 import type { OrgNode } from '../../types';
+import { isWaveNodeActive } from '../../types';
 import { api } from '../../api/client';
 
 const ROLE_COLORS: Record<string, string> = {
@@ -71,18 +72,23 @@ export default function WaveCommandCenter({
 
   const handleForceStop = useCallback(async (roleId: string) => {
     const node = nodes.get(roleId);
-    if (!node?.sessionId) return;
+    if (!node) return;
     try {
-      await api.abortSession(node.sessionId);
-    } catch (err) {
-      console.error('Abort failed:', err);
+      if (node.sessionId) await api.abortSession(node.sessionId);
+      else if (node.jobId) await api.abortJob(node.jobId);
+    } catch {
+      if (node.jobId) try { await api.abortJob(node.jobId); } catch { /* ignore */ }
     }
   }, [nodes]);
 
   const handleStopAll = useCallback(async () => {
     for (const [, node] of nodes) {
-      if ((node.status === 'running' || node.status === 'awaiting_input') && node.sessionId) {
-        try { await api.abortSession(node.sessionId); } catch { /* ignore */ }
+      if (!isWaveNodeActive(node.status)) continue;
+      try {
+        if (node.sessionId) await api.abortSession(node.sessionId);
+        else if (node.jobId) await api.abortJob(node.jobId);
+      } catch {
+        if (node.jobId) try { await api.abortJob(node.jobId); } catch { /* ignore */ }
       }
     }
   }, [nodes]);
@@ -289,7 +295,7 @@ export default function WaveCommandCenter({
                    selectedNode.status === 'awaiting_input' ? 'Awaiting Reply' :
                    'Not dispatched'}
                 </span>
-                {(selectedNode.status === 'running' || selectedNode.status === 'awaiting_input') && selectedNode.sessionId && (
+                {isWaveNodeActive(selectedNode.status) && selectedNode.sessionId && (
                   <button
                     onClick={() => handleForceStop(selectedNode.roleId)}
                     className="text-[10px] px-2 py-0.5 rounded font-semibold cursor-pointer ml-1"

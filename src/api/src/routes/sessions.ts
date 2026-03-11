@@ -11,6 +11,7 @@ import {
   type Message,
 } from '../services/session-store.js';
 import { jobManager } from '../services/job-manager.js';
+import { isJobActive } from '../../../shared/types';
 import { ActivityStream, type ActivityEvent } from '../services/activity-stream.js';
 import { updateFollowUpForReply } from '../services/wave-tracker.js';
 
@@ -118,7 +119,7 @@ sessionsRouter.get('/:id/stream', (req, res) => {
   }
 
   // If the job is finished or doesn't exist, end
-  if (!job || (job.status !== 'running' && job.status !== 'awaiting_input')) {
+  if (!job || !isJobActive(job.status)) {
     sendEvent('stream:end', { reason: job ? job.status : 'no-job' });
     res.end();
     return;
@@ -159,12 +160,8 @@ sessionsRouter.get('/:id/stream', (req, res) => {
 
 /** POST /api/sessions/:id/abort — abort linked job */
 sessionsRouter.post('/:id/abort', (req, res) => {
-  const session = getSession(req.params.id);
-  if (!session) {
-    res.status(404).json({ error: 'Session not found' });
-    return;
-  }
-
+  // Try session-based lookup first, then fallback to direct job search
+  // (session file may not exist after server restart, but job can still be in-memory)
   const job = jobManager.getJobBySessionId(req.params.id);
   if (!job) {
     res.status(404).json({ error: 'No active job for this session' });

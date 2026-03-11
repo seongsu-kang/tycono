@@ -21,6 +21,7 @@ import { engineRouter } from './routes/engine.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { setupRouter } from './routes/setup.js';
 import { getAllActivities, completeActivity } from './services/activity-tracker.js';
+import { type RoleStatus, isRoleActive } from '../../shared/types';
 import { knowledgeRouter } from './routes/knowledge.js';
 import { preferencesRouter } from './routes/preferences.js';
 import { saveRouter } from './routes/save.js';
@@ -50,7 +51,7 @@ const corsOrigin = isProd ? true : /^http:\/\/localhost:\d+$/;
 function cleanupStaleActivities(): void {
   const activities = getAllActivities();
   for (const activity of activities) {
-    if (activity.status === 'working') {
+    if (isRoleActive(activity.status as RoleStatus)) {
       completeActivity(activity.roleId);
       console.log(`[STARTUP] Cleaned stale activity: ${activity.roleId} (was working on "${activity.currentTask}")`);
     }

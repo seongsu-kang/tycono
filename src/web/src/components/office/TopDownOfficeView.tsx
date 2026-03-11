@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
-import type { Role, Project, Wave, Standup, Decision } from '../../types/index';
+import type { Role, Project, Wave, Standup, Decision, RoleStatus } from '../../types/index';
+import { isRoleActive } from '../../types/index';
 import type { CharacterAppearance } from '../../types/appearance';
 import { getDefaultAppearance } from '../../types/appearance';
 import { getCharacterBlueprint, renderPixelsAt, getAccessoryForDirection, mirrorPixels } from './sprites/engine';
@@ -855,7 +856,7 @@ function drawScene(
     if (!ch) continue;
     const sit = ch.state === 'sitting';
     const ap = getAp(id);
-    const isWorking = roleStatuses[id] === 'working';
+    const isWorking = isRoleActive(roleStatuses[id] as RoleStatus);
     // Stretch animation: 1px up/down bounce when stretching
     const stretchBounce = ch.isStretching && ch.stretchTimer > 0
       ? Math.sin(ch.stretchTimer * 0.15) * 1
@@ -1361,7 +1362,7 @@ export default function TopDownOfficeView({
         // Update status dot
         const dotEl = tag.querySelector('.td-dot') as HTMLElement;
         if (dotEl) {
-          const isWorking = rs[id] === 'working';
+          const isWorking = isRoleActive(rs[id] as RoleStatus);
           dotEl.style.background = isWorking ? '#FBBF24' : (ROLE_COLORS[id] ?? '#8b949e');
           if (isWorking) dotEl.style.animation = 'td-pulse 1s ease-in-out infinite';
           else dotEl.style.animation = '';
@@ -1372,7 +1373,7 @@ export default function TopDownOfficeView({
       const bub = overlay.querySelector(`.td-bubble[data-role="${id}"]`) as HTMLElement;
       if (bub) {
         const now = Date.now();
-        const isWorking = rs[id] === 'working';
+        const isWorking = isRoleActive(rs[id] as RoleStatus);
         const activeTask = ae.find(e => e.roleId === id)?.task;
         const speech = gs(id);
 

@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CONVERSATIONS, GUILT_SPEECH, PERSONALITY_SPEECH } from '../data/ambient-speech';
 import type { ConversationTemplate, RoleRelationship, Speech } from '../types/speech';
+import { type RoleStatus, isRoleActive } from '../types';
 
 /* ─── Constants ─── */
 
@@ -155,7 +156,7 @@ export function useAmbientSpeech({
   useEffect(() => {
     const now = Date.now();
     for (const [id, status] of Object.entries(roleStatuses)) {
-      if (status === 'working') {
+      if (isRoleActive(status as RoleStatus)) {
         lastWorkTime.current[id] = now;
       }
     }
@@ -172,7 +173,7 @@ export function useAmbientSpeech({
     const exec = execsRef.current.find(e => e.roleId === roleId);
 
     // Layer 1: Working → show task (handled in TopDownOfficeView directly)
-    if (status === 'working' && exec?.task) return null;
+    if (isRoleActive(status as RoleStatus) && exec?.task) return null;
 
     // Layer 1: Standup speech
     const standup = standupRef.current(roleId);
@@ -199,7 +200,7 @@ export function useAmbientSpeech({
 
     // Find idle, sitting roles (not working)
     const idleRoles = roles_.filter(r =>
-      statusRef.current[r.id] !== 'working',
+      !isRoleActive(statusRef.current[r.id] as RoleStatus),
     );
     if (idleRoles.length < 2) return false;
 
@@ -314,7 +315,7 @@ export function useAmbientSpeech({
       }
 
       // Otherwise: pick a random idle role for monologue
-      const idleRoles = rs.filter(r => statusRef.current[r.id] !== 'working');
+      const idleRoles = rs.filter(r => !isRoleActive(statusRef.current[r.id] as RoleStatus));
       if (idleRoles.length === 0) return;
 
       const role = pickRandom(idleRoles);

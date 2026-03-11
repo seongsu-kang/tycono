@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { api } from '../api/client';
-import type { Role, RoleDetail, Project, Standup, Wave, Decision, Session, Message, StreamEvent, CreateRoleInput, ImportJob, KnowledgeDoc, OrgNode, GitStatus, ImageAttachment } from '../types';
+import type { Role, RoleDetail, Project, Standup, Wave, Decision, Session, Message, StreamEvent, CreateRoleInput, ImportJob, KnowledgeDoc, OrgNode, GitStatus, ImageAttachment, RoleStatus } from '../types';
+import { isRoleActive } from '../types';
 import SidePanel from '../components/office/SidePanel';
 import OperationsPanel from '../components/office/OperationsPanel';
 import QuestBoard from '../components/office/QuestBoard';
@@ -403,12 +404,13 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     return () => clearInterval(interval);
   }, []);
 
-  /* Merge streaming chat status into roleStatuses so cards show yellow border */
+  /* Merge streaming chat status into roleStatuses so cards show yellow border.
+     Don't override awaiting_input — it's a more specific active state from a job. */
   const effectiveRoleStatuses = useMemo(() => {
     const result = { ...roleStatuses };
     if (streamingSessionId) {
       const streamingSession = sessions.find(s => s.id === streamingSessionId);
-      if (streamingSession) {
+      if (streamingSession && result[streamingSession.roleId] !== 'awaiting_input') {
         result[streamingSession.roleId] = 'working';
       }
     }
@@ -900,7 +902,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     // If role is working, open the ActivityPanel for its active job
     const exec = activeExecsByRole[roleId];
     const jobId = exec?.jobId ?? exec?.id;
-    if (jobId && effectiveRoleStatuses[roleId] === 'working') {
+    if (jobId && isRoleActive(effectiveRoleStatuses[roleId] as RoleStatus)) {
       const role = roles.find(r => r.id === roleId);
       const color = ROLE_COLORS[roleId] ?? '#666';
       const title = `${roleId.toUpperCase()} · ${role?.name ?? roleId}`;
@@ -1723,7 +1725,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           activeJobId={roleExec?.id}
           activeSessionId={jobStack.find(j => j.jobId === roleExec?.jobId)?.sessionId}
           activeTask={roleExec?.task}
-          isWorking={effectiveRoleStatuses[selectedRole.id] === 'working'}
+          isWorking={isRoleActive(effectiveRoleStatuses[selectedRole.id] as RoleStatus)}
           jobStartedAt={roleExec?.startedAt}
           onStopJob={(jobId) => {
             const entry = jobStack.find(j => j.jobId === jobId);
@@ -1812,7 +1814,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
                 activeJobId={roleExec?.id}
           activeSessionId={jobStack.find(j => j.jobId === roleExec?.jobId)?.sessionId}
                 activeTask={roleExec?.task}
-                isWorking={effectiveRoleStatuses[selectedRole.id] === 'working'}
+                isWorking={isRoleActive(effectiveRoleStatuses[selectedRole.id] as RoleStatus)}
                 jobStartedAt={roleExec?.startedAt}
                 onStopJob={(jobId) => {
             const entry = jobStack.find(j => j.jobId === jobId);

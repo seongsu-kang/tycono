@@ -97,6 +97,9 @@ export const api = {
   /** SCA-011: Abort the active job linked to a session */
   abortSession: (sessionId: string) =>
     post<{ ok: boolean; jobId: string }>(`/sessions/${sessionId}/abort`, {}),
+  /** Abort a job directly by jobId (fallback when session is unavailable) */
+  abortJob: (jobId: string) =>
+    post<{ ok: boolean; jobId: string }>(`/jobs/${jobId}/abort`, {}),
   /** SCA-011: Reply to an awaiting_input job via session */
   replyToSession: (sessionId: string, message: string, attachments?: ImageAttachment[]) =>
     post<{ ok: boolean; jobId: string; sessionId: string }>(`/sessions/${sessionId}/reply`, { message, ...(attachments && { attachments }) }),
@@ -167,7 +170,7 @@ export const api = {
   },
   deleteKnowledgeDoc: (id: string) => {
     const encodedPath = id.split('/').map(encodeURIComponent).join('/');
-    return del<{ id: string; status: string }>(`/knowledge/${encodedPath}`);
+    return del<{ id: string; status: 'deleted' }>(`/knowledge/${encodedPath}`);
   },
 
   // Preferences
@@ -282,7 +285,7 @@ export const api = {
   registerActiveSession: (data: { sessionId: string; roleId: string; task?: string; pid?: number; worktreePath?: string }) =>
     post<{ ok: boolean; ports: { api: number; vite: number; hmr?: number }; existing: boolean }>('/active-sessions/register', data),
   deleteActiveSession: (id: string) => del<{ ok: boolean; released: { api: number; vite: number } }>(`/active-sessions/${id}`),
-  cleanupActiveSessions: () => post<{ cleaned: number; remaining: number }>('/active-sessions/cleanup', {}),
+  cleanupActiveSessions: () => post<{ cleaned: number; remaining: number; sessions: Array<{ sessionId: string; ports: { api: number; vite: number } }> }>('/active-sessions/cleanup', {}),
 
   // Git Status
   getGitStatus: () => get<GitStatus>('/git/status'),

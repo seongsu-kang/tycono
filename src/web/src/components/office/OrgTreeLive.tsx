@@ -1,4 +1,5 @@
 import type { WaveNode } from '../../hooks/useWaveTree';
+import { isWaveNodeActive } from '../../types';
 
 const ROLE_COLORS: Record<string, string> = {
   cto: '#1565C0', cbo: '#E65100', pm: '#2E7D32',
@@ -189,9 +190,9 @@ export default function OrgTreeLive({ nodes, rootId, selectedRoleId, onSelectNod
               cx={14} cy={NODE_H / 2}
               r={4}
               fill={color}
-              filter={node.status === 'running' || node.status === 'awaiting_input' ? 'url(#glow)' : undefined}
+              filter={isWaveNodeActive(node.status) ? 'url(#glow)' : undefined}
             >
-              {(node.status === 'running' || node.status === 'awaiting_input') && (
+              {isWaveNodeActive(node.status) && (
                 <animate attributeName="opacity" values="1;0.4;1" dur="1.5s" repeatCount="indefinite" />
               )}
             </circle>
@@ -219,7 +220,7 @@ export default function OrgTreeLive({ nodes, rootId, selectedRoleId, onSelectNod
                node.status === 'done' ? (
                  node.children.some(cid => {
                    const child = nodes.get(cid);
-                   return child && (child.status === 'running' || child.status === 'awaiting_input');
+                   return child && isWaveNodeActive(child.status);
                  }) ? 'Supervising...' : 'Complete'
                ) :
                node.status === 'error' ? 'Error' :

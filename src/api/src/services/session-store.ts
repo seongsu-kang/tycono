@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { COMPANY_ROOT } from './file-reader.js';
-import type { ActivityEvent } from './activity-stream.js';
+import { type ActivityEvent, type SessionSource, type SessionStatus, type MessageStatus, isMessageTerminal } from '../../../shared/types';
 
 /* ─── Types ─────────────────────────────── */
 
@@ -23,7 +23,7 @@ export interface Message {
   from: 'ceo' | 'role';
   content: string;
   type: 'conversation' | 'directive' | 'system';
-  status?: 'streaming' | 'done' | 'error' | 'awaiting_input';
+  status?: MessageStatus;
   timestamp: string;
   attachments?: ImageAttachment[];
 
@@ -43,16 +43,13 @@ export interface Message {
   knowledgeDebt?: Array<{ type: string; file?: string; message: string }>;
 }
 
-/** How this session was created */
-export type SessionSource = 'chat' | 'wave' | 'dispatch';
-
 export interface Session {
   id: string;
   roleId: string;
   title: string;
   mode: 'talk' | 'do';
   messages: Message[];
-  status: 'active' | 'closed';
+  status: SessionStatus;
   createdAt: string;
   updatedAt: string;
 
@@ -213,7 +210,7 @@ export function updateMessage(sessionId: string, messageId: string, updates: Mes
   if (updates.knowledgeDebt !== undefined) msg.knowledgeDebt = updates.knowledgeDebt;
   session.updatedAt = new Date().toISOString();
 
-  if (updates.status === 'done' || updates.status === 'error') {
+  if (updates.status && isMessageTerminal(updates.status)) {
     writeImmediate(session);
   } else {
     debouncedWrite(session);

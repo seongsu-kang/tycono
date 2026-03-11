@@ -202,7 +202,7 @@ function handleRoleAttached(
   setNodes: React.Dispatch<React.SetStateAction<Map<string, WaveNode>>>,
   orgNodes: Record<string, OrgNode>,
 ): void {
-  const { sessionId, roleId } = data;
+  const { sessionId, roleId, jobId } = data;
 
   setNodes((prev) => {
     const next = new Map(prev);
@@ -213,6 +213,7 @@ function handleRoleAttached(
       next.set(roleId, {
         ...existing,
         sessionId,
+        jobId: jobId || existing.jobId,
         status: 'running',
         streamStatus: 'streaming',
       });
@@ -221,6 +222,7 @@ function handleRoleAttached(
       const org = orgNodes[roleId];
       next.set(roleId, {
         sessionId,
+        jobId,
         roleId,
         roleName: org?.name ?? roleId,
         children: org?.children ?? [],

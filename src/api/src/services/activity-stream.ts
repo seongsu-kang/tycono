@@ -2,26 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { COMPANY_ROOT } from './file-reader.js';
 
-/* ─── Types ──────────────────────────────── */
+/* ─── Types (re-export from shared contract) ── */
 
-export type ActivityEventType =
-  | 'job:start' | 'job:done' | 'job:error'
-  | 'job:awaiting_input' | 'job:reply'
-  | 'text' | 'thinking'
-  | 'tool:start' | 'tool:result'
-  | 'dispatch:start' | 'dispatch:done'
-  | 'turn:complete' | 'turn:warning' | 'turn:limit'
-  | 'import:scan' | 'import:process' | 'import:created'
-  | 'stderr';
-
-export interface ActivityEvent {
-  seq: number;
-  ts: string;
-  type: ActivityEventType;
-  roleId: string;
-  parentJobId?: string;
-  data: Record<string, unknown>;
-}
+export { type ActivityEventType, type ActivityEvent } from '../../../shared/types';
+import type { ActivityEventType, ActivityEvent } from '../../../shared/types';
 
 /* ─── Constants ──────────────────────────── */
 
@@ -50,16 +34,19 @@ export class ActivityStream {
   readonly jobId: string;
   readonly roleId: string;
   readonly parentJobId?: string;
+  /** Trace ID for full chain tracking — top-level jobId propagated to all children */
+  readonly traceId?: string;
 
   private seq = 0;
   private subscribers = new Set<ActivitySubscriber>();
   private filePath: string;
   private closed = false;
 
-  constructor(jobId: string, roleId: string, parentJobId?: string) {
+  constructor(jobId: string, roleId: string, parentJobId?: string, traceId?: string) {
     this.jobId = jobId;
     this.roleId = roleId;
     this.parentJobId = parentJobId;
+    this.traceId = traceId;
 
     ensureDir();
     this.filePath = streamPath(jobId);
@@ -75,6 +62,7 @@ export class ActivityStream {
       type,
       roleId,
       parentJobId: this.parentJobId,
+      ...(this.traceId && { traceId: this.traceId }),
       data,
     };
 

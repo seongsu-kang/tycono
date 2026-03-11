@@ -11,6 +11,7 @@ import type { ChatChannel, ChatMessage } from '../types/chat';
 import type { SpeechSettings } from '../types/speech';
 import type { RoleRelationship } from '../types/speech';
 import { api } from '../api/client';
+import { type RoleStatus, isRoleActive } from '../types';
 
 const DEFAULT_INTERVAL_MS = 45_000; // 45s default chat interval
 const REACTION_DELAY_MS = 5_000;    // 5s min before reaction (more natural)
@@ -143,7 +144,7 @@ export function useChatScheduler({
     // Find other idle members
     const otherMembers = channel.members.filter(id =>
       id !== excludeRoleId &&
-      statusRef.current[id] !== 'working',
+      !isRoleActive(statusRef.current[id] as RoleStatus),
     );
     if (otherMembers.length === 0) {
       chainCount.current = 0;
@@ -193,7 +194,7 @@ export function useChatScheduler({
       if (pendingRef.current) return;
 
       // Find idle roles that are members of custom channels
-      const idleRoles = rs.filter(r => statusRef.current[r.id] !== 'working');
+      const idleRoles = rs.filter(r => !isRoleActive(statusRef.current[r.id] as RoleStatus));
       if (idleRoles.length === 0) return;
 
       // Pick a random idle role

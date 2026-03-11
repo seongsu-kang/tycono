@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { ActivityEvent } from '../../types';
+import type { ActivityEvent, JobStatus } from '../../types';
 import EventRow from '../common/EventRow';
 
 const ROLE_COLORS: Record<string, string> = {
@@ -8,7 +8,8 @@ const ROLE_COLORS: Record<string, string> = {
   'data-analyst': '#0277BD',
 };
 
-export type ReportCardStatus = 'done' | 'error' | 'awaiting_input' | 'running';
+/** @deprecated Use JobStatus from shared/types instead */
+export type ReportCardStatus = JobStatus;
 
 export interface WaveReportCardProps {
   roleId: string;

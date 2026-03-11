@@ -23,7 +23,8 @@ export interface ImageAttachment {
 
 /* ─── Config ──────────────────────────────────── */
 
-export type TeamStatus = Record<string, { status: string; task?: string }>;
+export type { TeamStatus } from '../../../../shared/types';
+import type { TeamStatus } from '../../../../shared/types';
 
 export interface RunnerConfig {
   companyRoot: string;
@@ -55,6 +56,8 @@ export interface RunnerCallbacks {
   onConsult?: (roleId: string, question: string) => void;
   onTurnComplete?: (turn: number) => void;
   onError?: (error: string) => void;
+  /** Trace: emitted when system prompt is assembled, for full prompt capture */
+  onPromptAssembled?: (systemPrompt: string, userTask: string) => void;
 }
 
 /* ─── Result ──────────────────────────────────── */

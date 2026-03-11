@@ -35,6 +35,8 @@ export interface AgentConfig {
   onDispatch?: (roleId: string, task: string) => void;
   onConsult?: (roleId: string, question: string) => void;
   onTurnComplete?: (turn: number) => void;
+  /** Trace: emitted when system prompt is assembled */
+  onPromptAssembled?: (systemPrompt: string, userTask: string) => void;
 }
 
 export interface AgentResult {
@@ -123,6 +125,9 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
 
   // 1. Assemble context
   const context = assembleContext(companyRoot, roleId, task, sourceRole, orgTree, { teamStatus: config.teamStatus, targetRoles: config.targetRoles });
+
+  // Trace: capture assembled prompt for debugging
+  config.onPromptAssembled?.(context.systemPrompt, task);
 
   // 2. Determine tools
   const subordinates = getSubordinates(orgTree, roleId);

@@ -267,6 +267,9 @@ export class ClaudeCliRunner implements ExecutionRunner {
     // 1. Context Assembly
     const context = assembleContext(companyRoot, roleId, task, sourceRole, orgTree, { teamStatus, targetRoles });
 
+    // Trace: capture assembled prompt for debugging
+    callbacks.onPromptAssembled?.(context.systemPrompt, task);
+
     // 2. System prompt를 임시 파일로 저장 (CLI arg 길이 제한 대비)
     const tmpDir = path.join(os.tmpdir(), 'tycono-engine');
     fs.mkdirSync(tmpDir, { recursive: true });

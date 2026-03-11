@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
 import { writeConfig } from './company-config.js';
-import { mergePreferences } from './preferences.js';
+import { mergePreferences, type CharacterAppearance } from './preferences.js';
 import type { CompanyConfig } from './company-config.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -415,7 +415,7 @@ export function scaffold(config: ScaffoldConfig): string[] {
   // Set default appearances for team roles
   if (config.team !== 'custom') {
     const roles = loadTeam(config.team);
-    const appearances: Record<string, unknown> = {};
+    const appearances: Record<string, CharacterAppearance> = {};
     for (const role of roles) {
       const def = DEFAULT_ROLE_APPEARANCES[role.id];
       if (def) appearances[role.id] = def;

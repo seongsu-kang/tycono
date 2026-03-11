@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { COMPANY_ROOT } from './file-reader.js';
+import type { RoleStatus } from '../../../shared/types';
 
 function activityDir(): string {
   return path.join(COMPANY_ROOT, 'operations', 'activity');
@@ -8,7 +9,7 @@ function activityDir(): string {
 
 export interface RoleActivity {
   roleId: string;
-  status: 'idle' | 'working' | 'done';
+  status: RoleStatus;
   currentTask: string;
   startedAt: string;
   updatedAt: string;
@@ -45,6 +46,15 @@ export function updateActivity(roleId: string, output: string): void {
   if (!activity) return;
   activity.updatedAt = new Date().toISOString();
   activity.recentOutput = output.slice(-500);
+  fs.writeFileSync(activityPath(roleId), JSON.stringify(activity, null, 2));
+  invalidateCache();
+}
+
+export function markAwaitingInput(roleId: string): void {
+  const activity = getActivity(roleId);
+  if (!activity) return;
+  activity.status = 'awaiting_input';
+  activity.updatedAt = new Date().toISOString();
   fs.writeFileSync(activityPath(roleId), JSON.stringify(activity, null, 2));
   invalidateCache();
 }

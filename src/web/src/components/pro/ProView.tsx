@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import TopDownCharCanvas from '../office/TopDownCharCanvas';
 import type { Role, Session, Wave, KnowledgeDoc, Message, ImageAttachment } from '../../types';
+import { type RoleStatus, isRoleActive } from '../../types';
 import type { CharacterAppearance } from '../../types/appearance';
 import type { RoleLevelData } from '../../utils/role-level';
 import MessageList from '../terminal/MessageList';
@@ -70,7 +71,7 @@ export default function ProView({
     return a.name.localeCompare(b.name);
   });
 
-  const workingCount = roles.filter(r => roleStatuses[r.id] === 'working').length;
+  const workingCount = roles.filter(r => isRoleActive(roleStatuses[r.id] as RoleStatus)).length;
   const activeSessions = sessions.filter(s => s.status === 'active').length;
 
   const channelRole = channel.type === 'role' ? roles.find(r => r.id === channel.roleId) : null;
@@ -197,7 +198,7 @@ export default function ProView({
                   <span
                     className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full"
                     style={{
-                      background: status === 'working' ? '#4CAF50' : status === 'idle' ? '#FFC107' : '#9E9E9E',
+                      background: isRoleActive(status as RoleStatus) ? '#4CAF50' : status === 'idle' ? '#FFC107' : '#9E9E9E',
                       border: '1.5px solid var(--terminal-surface, #1a1510)',
                     }}
                   />
@@ -215,7 +216,7 @@ export default function ProView({
                     </div>
                   )}
                 </div>
-                {status === 'working' && (
+                {isRoleActive(status as RoleStatus) && (
                   <span className="w-1.5 h-1.5 rounded-full animate-pulse shrink-0" style={{ background: color }} />
                 )}
               </button>
@@ -295,7 +296,7 @@ export default function ProView({
               <span
                 className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full"
                 style={{
-                  background: roleStatuses[channelRole.id] === 'working' ? '#4CAF50' : roleStatuses[channelRole.id] === 'idle' ? '#FFC107' : '#9E9E9E',
+                  background: isRoleActive(roleStatuses[channelRole.id] as RoleStatus) ? '#4CAF50' : roleStatuses[channelRole.id] === 'idle' ? '#FFC107' : '#9E9E9E',
                   border: '2px solid var(--terminal-bg, #1C1612)',
                 }}
               />
@@ -469,7 +470,7 @@ export function ProDashboard({ roles, roleStatuses, activeExecs, waves, knowledg
   getAppearance: (roleId: string) => CharacterAppearance | undefined;
   onRoleClick: (roleId: string) => void; onWaveClick: () => void; onKnowledgeClick: () => void;
 }) {
-  const workingRoles = roles.filter(r => roleStatuses[r.id] === 'working');
+  const workingRoles = roles.filter(r => isRoleActive(roleStatuses[r.id] as RoleStatus));
 
   return (
     <div className="h-full overflow-y-auto px-6 py-5">
@@ -514,7 +515,7 @@ export function ProDashboard({ roles, roleStatuses, activeExecs, waves, knowledg
                 <button key={role.id} onClick={() => onRoleClick(role.id)}
                   className="flex items-center gap-2 px-3 py-2 rounded hover:opacity-80 text-left">
                   <span className="w-2 h-2 rounded-full shrink-0" style={{
-                    background: status === 'working' ? '#4CAF50' : status === 'idle' ? '#FFC107' : '#9E9E9E',
+                    background: isRoleActive(status as RoleStatus) ? '#4CAF50' : status === 'idle' ? '#FFC107' : '#9E9E9E',
                   }} />
                   <span className="text-[11px] truncate" style={{ color: 'var(--terminal-text)' }}>{role.name}</span>
                   {level != null && <span className="text-[9px] opacity-40">Lv.{level}</span>}

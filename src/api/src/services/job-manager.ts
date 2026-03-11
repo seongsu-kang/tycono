@@ -4,7 +4,7 @@ import { buildOrgTree } from '../engine/org-tree.js';
 import { validateDispatch, validateConsult } from '../engine/authority-validator.js';
 import { createRunner } from '../engine/runners/index.js';
 import type { ExecutionRunner } from '../engine/runners/types.js';
-import { setActivity, updateActivity, completeActivity } from './activity-tracker.js';
+import { setActivity, updateActivity, completeActivity, markAwaitingInput } from './activity-tracker.js';
 import type { RunnerResult } from '../engine/runners/types.js';
 import { estimateCost } from './pricing.js';
 import { readConfig, getConversationLimits, resolveCodeRoot } from './company-config.js';
@@ -13,10 +13,10 @@ import { earnCoinsInternal } from '../routes/coins.js';
 import { getSession, createSession, addMessage, updateMessage as updateSessionMessage, appendMessageEvent, type Message, type ImageAttachment } from './session-store.js';
 import { portRegistry, type PortAllocation } from './port-registry.js';
 
-/* ─── Types ──────────────────────────────── */
+/* ─── Types (re-export from shared contract) ─── */
 
-export type JobType = 'assign' | 'wave' | 'session-message' | 'consult';
-export type JobStatus = 'running' | 'done' | 'error' | 'awaiting_input';
+export { type JobType, type JobStatus, type JobInfo, isJobActive, canTransition, jobStatusToRoleStatus } from '../../../shared/types';
+import { type JobType, type JobStatus, type JobInfo, isJobActive, canTransition } from '../../../shared/types';
 
 export interface Job {
   id: string;
@@ -41,22 +41,11 @@ export interface Job {
   sessionId?: string;
   /** PSM-003: Allocated ports for this job's dev servers */
   ports?: PortAllocation;
+  /** Trace ID — top-level jobId, inherited by all children for full chain tracking */
+  traceId?: string;
 }
 
-export interface JobInfo {
-  id: string;
-  type: JobType;
-  roleId: string;
-  task: string;
-  status: JobStatus;
-  parentJobId?: string;
-  childJobIds: string[];
-  createdAt: string;
-  /** Which role should respond when status is awaiting_input */
-  targetRole?: string;
-  /** Final output text (available when status is done) */
-  output?: string;
-}
+/* JobInfo — imported from shared/types.ts */
 
 export interface StartJobParams {
   type: JobType;
@@ -162,7 +151,14 @@ class JobManager {
       }
     }
 
-    const stream = new ActivityStream(jobId, params.roleId, params.parentJobId);
+    // Resolve traceId: top-level jobs use their own ID, children inherit from parent
+    let traceId = jobId;
+    if (params.parentJobId) {
+      const parentJob = this.jobs.get(params.parentJobId);
+      traceId = parentJob?.traceId ?? params.parentJobId;
+    }
+
+    const stream = new ActivityStream(jobId, params.roleId, params.parentJobId, traceId);
 
     const job: Job = {
       id: jobId,
@@ -177,6 +173,7 @@ class JobManager {
       createdAt: new Date().toISOString(),
       targetRoles: params.targetRoles,
       sessionId: params.sessionId,
+      traceId,
     };
 
     this.jobs.set(jobId, job);
@@ -207,9 +204,11 @@ class JobManager {
     // Emit job:start
     job.stream.emit('job:start', params.roleId, {
       jobId: job.id,
+      traceId: job.traceId,
       type: params.type,
       task: params.task,
       sourceRole: params.sourceRole ?? 'ceo',
+      ...(params.parentJobId && { parentJobId: params.parentJobId }),
       ...(params.sessionId && { sessionId: params.sessionId }),
     });
 
@@ -241,7 +240,7 @@ class JobManager {
     let hardLimitReached = false;
 
     // Build team status snapshot: which roles are currently busy
-    const teamStatus: Record<string, { status: string; task?: string }> = {};
+    const teamStatus: import('../../../shared/types').TeamStatus = {};
     for (const [, j] of this.jobs) {
       if (j.status === 'running' && j.id !== job.id) {
         teamStatus[j.roleId] = { status: 'working', task: j.task };
@@ -412,6 +411,13 @@ class JobManager {
             handle.abort();
           }
         },
+        onPromptAssembled: (systemPrompt, userTask) => {
+          job.stream.emit('trace:prompt', params.roleId, {
+            systemPrompt,
+            userTask,
+            systemPromptLength: systemPrompt.length,
+          });
+        },
         onError: (error) => {
           job.stream.emit('stderr', params.roleId, { message: error });
         },
@@ -439,6 +445,14 @@ class JobManager {
           model ?? '',
         );
 
+        // Trace: capture full response before truncation
+        job.stream.emit('trace:response', params.roleId, {
+          fullOutput: result.output,
+          outputLength: result.output.length,
+          turns: result.turns,
+          tokens: result.totalTokens,
+        });
+
         const doneData = {
           output: result.output.slice(-1000),
           turns: result.turns,
@@ -454,6 +468,7 @@ class JobManager {
         if (hardLimitReached) {
           job.status = 'awaiting_input';
           job.targetRole = targetRole;
+          markAwaitingInput(params.roleId);
           const question = `[Turn limit] ${harnessTurnCount}턴 도달 (hardLimit: ${limits.hardLimit}). 계속 진행할까요?`;
           job.stream.emit('job:awaiting_input', params.roleId, {
             ...doneData,
@@ -468,6 +483,7 @@ class JobManager {
         else if (!params.isContinuation && hasQuestion(result.output)) {
           job.status = 'awaiting_input';
           job.targetRole = targetRole;
+          markAwaitingInput(params.roleId);
           job.stream.emit('job:awaiting_input', params.roleId, {
             ...doneData,
             question: result.output.trim().split('\n').slice(-5).join('\n'),
@@ -532,6 +548,7 @@ class JobManager {
           const targetRole = resolveTargetRole(params.sourceRole, params.parentJobId, this.jobs);
           job.status = 'awaiting_input';
           job.targetRole = targetRole;
+          markAwaitingInput(params.roleId);
           const question = `[Turn limit] ${harnessTurnCount}턴 도달 (hardLimit: ${limits.hardLimit}). 계속 진행할까요?`;
           job.stream.emit('job:awaiting_input', params.roleId, {
             question,
@@ -696,11 +713,12 @@ class JobManager {
     };
   }
 
-  /** List jobs with optional filter */
-  listJobs(filter?: { status?: JobStatus; roleId?: string }): JobInfo[] {
+  /** List jobs with optional filter. Use active:true to get running + awaiting_input. */
+  listJobs(filter?: { status?: JobStatus; roleId?: string; active?: boolean }): JobInfo[] {
     const result: JobInfo[] = [];
 
     for (const job of this.jobs.values()) {
+      if (filter?.active && !isJobActive(job.status)) continue;
       if (filter?.status && job.status !== filter.status) continue;
       if (filter?.roleId && job.roleId !== filter.roleId) continue;
       result.push({
@@ -722,7 +740,7 @@ class JobManager {
   /** Abort a running or awaiting_input job */
   abortJob(id: string): boolean {
     const job = this.jobs.get(id);
-    if (!job || (job.status !== 'running' && job.status !== 'awaiting_input')) return false;
+    if (!job || !isJobActive(job.status)) return false;
 
     if (job.status === 'running') job.abort();
     job.status = 'error';
@@ -775,10 +793,10 @@ class JobManager {
     return newJob;
   }
 
-  /** Get the active (running) job for a given role */
+  /** Get the active (running or awaiting_input) job for a given role */
   getActiveJobForRole(roleId: string): Job | undefined {
     for (const job of this.jobs.values()) {
-      if (job.roleId === roleId && job.status === 'running') {
+      if (job.roleId === roleId && isJobActive(job.status)) {
         return job;
       }
     }
@@ -792,7 +810,7 @@ class JobManager {
     for (const job of this.jobs.values()) {
       if (job.sessionId === sessionId) {
         // Prefer running or awaiting_input jobs
-        if (job.status === 'running' || job.status === 'awaiting_input') {
+        if (isJobActive(job.status)) {
           if (!active || job.createdAt > active.createdAt) {
             active = job;
           }

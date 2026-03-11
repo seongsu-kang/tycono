@@ -1,5 +1,6 @@
 import { ActivityStream, type ActivityEvent, type ActivitySubscriber } from './activity-stream.js';
 import type { Job } from './job-manager.js';
+import { isJobActive } from '../../../shared/types';
 import type { Response } from 'express';
 
 /* ─── Types ──────────────────────────────── */
@@ -125,9 +126,11 @@ class WaveMultiplexer {
       }
 
       // Phase 2: Subscribe to live events for running jobs
+      // sendNotification=true ensures wave:role-attached is sent for each active job,
+      // so the client knows which roles are running. History replay is deduped by sentEvents.
       for (const [, job] of jobs) {
-        if (job.status === 'running' || job.status === 'awaiting_input') {
-          this.subscribeJobToClient(client, job, false);
+        if (isJobActive(job.status)) {
+          this.subscribeJobToClient(client, job, true);
         }
       }
     }
