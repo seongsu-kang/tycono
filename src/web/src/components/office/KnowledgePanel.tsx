@@ -250,6 +250,7 @@ function KnowledgeGraph({
   matchedIds,
   localGraphMode,
   onLocalModeChange,
+  onClusterClick, // Quick Win: cluster click-to-filter
 }: {
   docs: KnowledgeDoc[];
   onNodeClick: (doc: KnowledgeDoc) => void;
@@ -257,6 +258,7 @@ function KnowledgeGraph({
   matchedIds: Set<string> | null; // null = show all, Set = fade non-matching
   localGraphMode: LocalGraphMode; // KB-008
   onLocalModeChange: (mode: LocalGraphMode) => void; // KB-008
+  onClusterClick: (domain: string) => void; // Quick Win: cluster click-to-filter
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -264,6 +266,7 @@ function KnowledgeGraph({
   const [graphData, setGraphData] = useState<{ nodes: GNode[]; links: GLink[] }>({ nodes: [], links: [] });
   const [hoveredNode, setHoveredNode] = useState<GNode | null>(null);
   const [hoveredEdgeIdx, setHoveredEdgeIdx] = useState<number | null>(null);
+  const [hoveredNodes, setHoveredNodes] = useState<Set<string>>(new Set()); // Quick Win: highlight connected nodes on edge hover
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
   // Zoom/pan state
@@ -599,7 +602,7 @@ function KnowledgeGraph({
                     style={{ transition: 'opacity 0.3s ease' }}
                     pointerEvents="none"
                   />
-                  {/* Cluster label */}
+                  {/* Cluster label - Quick Win: clickable for filtering */}
                   <text
                     x={cluster.centerX}
                     y={cluster.centerY - cluster.radius - 8}
@@ -609,7 +612,8 @@ function KnowledgeGraph({
                     fontFamily="monospace"
                     fontWeight="600"
                     opacity={hasMatchedNode ? 0.85 : 0.5}
-                    style={{ pointerEvents: 'none', transition: 'opacity 0.3s ease' }}
+                    onClick={() => onClusterClick(cluster.domain)}
+                    style={{ cursor: 'pointer', pointerEvents: 'auto', transition: 'opacity 0.3s ease' }}
                   >
                     {cluster.domain} ({cluster.count})
                   </text>
@@ -640,8 +644,14 @@ function KnowledgeGraph({
                     stroke="transparent"
                     strokeWidth={12}
                     style={{ cursor: 'default' }}
-                    onMouseEnter={() => setHoveredEdgeIdx(i)}
-                    onMouseLeave={() => setHoveredEdgeIdx(null)}
+                    onMouseEnter={() => {
+                      setHoveredEdgeIdx(i);
+                      setHoveredNodes(new Set([sourceId, targetId])); // Quick Win: highlight connected nodes
+                    }}
+                    onMouseLeave={() => {
+                      setHoveredEdgeIdx(null);
+                      setHoveredNodes(new Set()); // Quick Win: clear highlights
+                    }}
                   />
                   <line
                     x1={s.x} y1={s.y} x2={t.x} y2={t.y}
@@ -677,6 +687,7 @@ function KnowledgeGraph({
               const size = zoomLevel === 'micro' ? baseSize * 1.5 : baseSize;
               const isHovered = hoveredNode?.id === node.id;
               const isSelected = selectedDocId === node.id;
+              const isEdgeHovered = hoveredNodes.has(node.id); // Quick Win: edge hover highlight
               const scale = isHovered ? 1.1 : isSelected ? 1.05 : 1;
               // KB-003: Fade non-matching nodes when search is active
               const isMatched = matchedIds === null || matchedIds.has(node.id);
@@ -718,6 +729,20 @@ function KnowledgeGraph({
                       strokeWidth={2}
                       rx={isHub ? 5 : 2}
                       opacity={0.6}
+                    />
+                  )}
+                  {/* Quick Win: Glow for edge-hovered nodes */}
+                  {!isSelected && isEdgeHovered && (
+                    <rect
+                      x={-size / 2 - 3}
+                      y={-size / 2 - 3}
+                      width={size + 6}
+                      height={size + 6}
+                      fill="none"
+                      stroke="#60a5fa"
+                      strokeWidth={1.5}
+                      rx={isHub ? 5 : 2}
+                      opacity={0.7}
                     />
                   )}
                   {/* Outer */}
@@ -2053,6 +2078,18 @@ export default function KnowledgePanel({ docs, onClose, onRefresh: _onRefresh, t
     setGraphSelectedDocId(doc.id);
   };
 
+  // Quick Win: Cluster click-to-filter handler
+  const handleClusterClick = (domain: string) => {
+    setEnabledDomains((prev) => {
+      // Toggle behavior: if already filtered to only this domain, restore all domains
+      if (prev.size === 1 && prev.has(domain)) {
+        return new Set(Object.keys(DOMAIN_COLORS));
+      }
+      // Otherwise, filter to only this domain
+      return new Set([domain]);
+    });
+  };
+
   const selectedGraphDoc = graphSelectedDocId ? docs.find((d) => d.id === graphSelectedDocId) : null;
 
   return (
@@ -2075,6 +2112,13 @@ export default function KnowledgePanel({ docs, onClose, onRefresh: _onRefresh, t
         {/* Header */}
         <div className="p-5 text-white relative" style={{ background: '#16a34a' }}>
           <div className="absolute top-3 right-3 flex items-center gap-1">
+            {/* Quick Win: Keyboard shortcuts tooltip */}
+            <button
+              className="w-7 h-7 rounded-full bg-white/20 text-white flex items-center justify-center text-sm hover:bg-white/30 cursor-help"
+              title={'Keyboard Shortcuts:\n• Esc — Close panel\n• Mouse Wheel — Zoom in/out\n• Mouse Drag — Pan view\n• Click Cluster Label — Filter to domain\n• Hover Edge — Highlight connected nodes'}
+            >
+              ?
+            </button>
             {onMaximize && (
               <button
                 onClick={onMaximize}
@@ -2186,6 +2230,7 @@ export default function KnowledgePanel({ docs, onClose, onRefresh: _onRefresh, t
                 matchedIds={matchedIds}
                 localGraphMode={localGraphMode}
                 onLocalModeChange={setLocalGraphMode}
+                onClusterClick={handleClusterClick}
               />
               {/* Graph detail sidebar */}
               {selectedGraphDoc && (
