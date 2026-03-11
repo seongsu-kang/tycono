@@ -48,6 +48,12 @@ export function handleExecRequest(req: IncomingMessage, res: ServerResponse): vo
     return;
   }
 
+  // ── /api/waves/active — restore active waves after refresh ──
+  if (method === 'GET' && url === '/api/waves/active') {
+    jsonResponse(res, 200, { waves: waveMultiplexer.getActiveWaves() });
+    return;
+  }
+
   // ── /api/waves/save ──
   if (method === 'POST' && url === '/api/waves/save') {
     readBody(req).then((body) => handleSaveWave(body, res));

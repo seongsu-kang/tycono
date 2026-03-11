@@ -78,7 +78,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   const [jobStack, setJobStack] = useState<Array<{ sessionId: string; jobId: string; title: string; color: string }>>([]);
   const [showWaveModal, setShowWaveModal] = useState(false);
   const [showWaveCenter, setShowWaveCenter] = useState(false);
-  const [waveCenterWaves, setWaveCenterWaves] = useState<Array<{ id: string; directive: string; rootJobs: Array<{ sessionId: string; roleId: string; roleName: string; jobId?: string }>; startedAt: number }>>([]);
+  const [waveCenterWaves, setWaveCenterWaves] = useState<Array<{ id: string; directive: string; rootJobs: Array<{ sessionId: string; roleId: string; roleName: string; jobId?: string }>; startedAt: number; sessionIds?: string[] }>>([]);
   const [waveJobs, setWaveJobs] = useState<Array<{ sessionId: string; roleId: string; roleName: string; jobId?: string }>>([]);
   const [waveActiveIdx, setWaveActiveIdx] = useState(0);
   const [jobMinimized, setJobMinimized] = useState(false);
@@ -331,6 +331,12 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     api.getStandups().then(setStandups).catch(() => {});
     api.getWaves().then(setWaves).catch(() => {});
     api.getDecisions().then(setDecisions).catch(() => {});
+    // C4 fix: Restore active waves after page refresh
+    api.getActiveWaves().then(({ waves }) => {
+      if (waves.length > 0) {
+        setWaveCenterWaves(waves);
+      }
+    }).catch(() => {});
     api.getKnowledge().then(setKnowledgeDocs).catch(() => {});
     api.getQuestProgress().then(raw => {
       const p = recalcActiveChapter(raw);

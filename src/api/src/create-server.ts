@@ -119,6 +119,13 @@ export function createHttpServer(): http.Server {
     const url = req.url ?? '';
     const method = req.method ?? '';
 
+    // GET /api/waves/active — restore active waves after refresh
+    if (url === '/api/waves/active' && method === 'GET') {
+      setExecCors(req, res);
+      handleExecRequest(req, res);
+      return;
+    }
+
     // SSE multiplexed wave stream (GET /api/waves/:waveId/stream)
     if (url.match(/^\/api\/waves\/[^/]+\/stream/) && method === 'GET') {
       setExecCors(req, res);

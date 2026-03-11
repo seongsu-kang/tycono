@@ -210,12 +210,17 @@ function handleRoleAttached(
 
     if (existing) {
       // Update existing node with session info
+      // Don't override status if the node already has a more advanced state
+      // (e.g., awaiting_input or done from replayed events)
+      const keepStatus = existing.status === 'awaiting_input'
+        || existing.status === 'done'
+        || existing.status === 'error';
       next.set(roleId, {
         ...existing,
         sessionId,
         jobId: jobId || existing.jobId,
-        status: 'running',
-        streamStatus: 'streaming',
+        status: keepStatus ? existing.status : 'running',
+        streamStatus: keepStatus ? existing.streamStatus : 'streaming',
       });
     } else {
       // Create new node for dynamically discovered role

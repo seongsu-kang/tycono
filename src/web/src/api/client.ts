@@ -59,6 +59,7 @@ export const api = {
   getProject: (id: string) => get<ProjectDetail>(`/projects/${id}`),
   getStandups: () => get<Standup[]>('/operations/standups'),
   getWaves: () => get<Wave[]>('/operations/waves'),
+  getActiveWaves: () => get<{ waves: Array<{ id: string; directive: string; rootJobs: Array<{ sessionId: string; roleId: string; roleName: string; jobId: string }>; startedAt: number; sessionIds: string[] }> }>('/waves/active'),
   getWaveDetail: (id: string) => get<{ id: string; timestamp: string; replay: import('../types').WaveReplay }>(`/operations/waves/${id}`),
   patchWave: (id: string, data: { commitSha: string; commitMessage: string }) => patch_<{ ok: boolean }>(`/operations/waves/${id}`, data),
   getDecisions: () => get<Decision[]>('/operations/decisions'),

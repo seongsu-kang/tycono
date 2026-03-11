@@ -255,6 +255,60 @@ class WaveMultiplexer {
     const jobs = this.waveJobs.get(waveId);
     return jobs ? Array.from(jobs.keys()) : [];
   }
+
+  /**
+   * Return all waves that have at least one active (running/awaiting_input) job.
+   * Used to restore waveCenterWaves after page refresh.
+   */
+  getActiveWaves(): Array<{
+    id: string;
+    directive: string;
+    rootJobs: Array<{ sessionId: string; roleId: string; roleName: string; jobId: string }>;
+    startedAt: number;
+    sessionIds: string[];
+  }> {
+    const result: Array<{
+      id: string;
+      directive: string;
+      rootJobs: Array<{ sessionId: string; roleId: string; roleName: string; jobId: string }>;
+      startedAt: number;
+      sessionIds: string[];
+    }> = [];
+
+    for (const [waveId, jobs] of this.waveJobs) {
+      const hasActive = Array.from(jobs.values()).some(j => isJobActive(j.status));
+      if (!hasActive) continue;
+
+      // Extract wave info from root jobs (jobs without parentJobId in this wave)
+      const rootJobs = Array.from(jobs.values())
+        .filter(j => !j.parentJobId || !jobs.has(j.parentJobId))
+        .map(j => ({
+          sessionId: j.sessionId ?? '',
+          roleId: j.roleId,
+          roleName: j.roleId.toUpperCase(),
+          jobId: j.id,
+        }));
+
+      // Directive from first root job's task (strip "[CEO Wave] " prefix)
+      const firstJob = rootJobs.length > 0
+        ? Array.from(jobs.values()).find(j => j.id === rootJobs[0].jobId)
+        : undefined;
+      const directive = firstJob?.task.replace(/^\[CEO Wave\]\s*/, '') ?? '';
+
+      // StartedAt from earliest job
+      const startedAt = Math.min(
+        ...Array.from(jobs.values()).map(j => new Date(j.createdAt).getTime())
+      );
+
+      const sessionIds = Array.from(jobs.values())
+        .map(j => j.sessionId)
+        .filter((s): s is string => !!s);
+
+      result.push({ id: waveId, directive, rootJobs, startedAt, sessionIds });
+    }
+
+    return result;
+  }
 }
 
 /* ─── Helpers ────────────────────────────── */
