@@ -92,7 +92,7 @@ export default function OrgTreeLive({ nodes, rootId, selectedRoleId, onSelectNod
 
   const statusColor = (node: WaveNode) => {
     switch (node.status) {
-      case 'running': return ROLE_COLORS[node.roleId] ?? '#FBBF24';
+      case 'streaming': return ROLE_COLORS[node.roleId] ?? '#FBBF24';
       case 'awaiting_input': return '#F59E0B';
       case 'done': return '#2E7D32';
       case 'error': return '#C62828';
@@ -137,7 +137,7 @@ export default function OrgTreeLive({ nodes, rootId, selectedRoleId, onSelectNod
           stroke = '#F59E0B';
           dashArray = '6 4';
           className = 'wave-edge-flow';
-        } else if (node?.status === 'running') {
+        } else if (node?.status === 'streaming') {
           stroke = ROLE_COLORS[item.roleId] ?? '#FBBF24';
           dashArray = '6 4';
           className = 'wave-edge-flow';
@@ -215,7 +215,7 @@ export default function OrgTreeLive({ nodes, rootId, selectedRoleId, onSelectNod
               fontSize={8}
               fontFamily="var(--pixel-font)"
             >
-              {node.status === 'running' ? 'Working...' :
+              {node.status === 'streaming' ? 'Working...' :
                node.status === 'awaiting_input' ? 'Awaiting Reply' :
                node.status === 'done' ? (
                  node.children.some(cid => {

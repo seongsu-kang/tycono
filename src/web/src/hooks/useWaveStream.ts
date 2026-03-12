@@ -13,8 +13,7 @@ interface WaveStreamEnvelope {
 interface RoleAttachedPayload {
   sessionId: string;
   roleId: string;
-  jobId: string;
-  parentJobId?: string;
+  parentSessionId?: string;
 }
 
 interface RoleDetachedPayload {
@@ -175,20 +174,20 @@ function handleWaveEvent(
     };
 
     // Update status based on event type
-    if (event.type === 'job:start') {
-      updated.status = 'running';
+    if (event.type === 'msg:start') {
+      updated.status = 'streaming';
       updated.streamStatus = 'streaming';
-    } else if (event.type === 'job:done') {
+    } else if (event.type === 'msg:done') {
       updated.status = 'done';
       updated.streamStatus = 'done';
-    } else if (event.type === 'job:error') {
+    } else if (event.type === 'msg:error') {
       updated.status = 'error';
       updated.streamStatus = 'error';
-    } else if (event.type === 'job:awaiting_input') {
+    } else if (event.type === 'msg:awaiting_input') {
       updated.status = 'awaiting_input';
       updated.streamStatus = 'done';
-    } else if (event.type === 'job:reply') {
-      updated.status = 'running';
+    } else if (event.type === 'msg:reply') {
+      updated.status = 'streaming';
       updated.streamStatus = 'streaming';
     }
 
@@ -202,7 +201,7 @@ function handleRoleAttached(
   setNodes: React.Dispatch<React.SetStateAction<Map<string, WaveNode>>>,
   orgNodes: Record<string, OrgNode>,
 ): void {
-  const { sessionId, roleId, jobId } = data;
+  const { sessionId, roleId } = data;
 
   setNodes((prev) => {
     const next = new Map(prev);
@@ -218,8 +217,7 @@ function handleRoleAttached(
       next.set(roleId, {
         ...existing,
         sessionId,
-        jobId: jobId || existing.jobId,
-        status: keepStatus ? existing.status : 'running',
+        status: keepStatus ? existing.status : 'streaming',
         streamStatus: keepStatus ? existing.streamStatus : 'streaming',
       });
     } else {
@@ -227,11 +225,10 @@ function handleRoleAttached(
       const org = orgNodes[roleId];
       next.set(roleId, {
         sessionId,
-        jobId,
         roleId,
         roleName: org?.name ?? roleId,
         children: org?.children ?? [],
-        status: 'running',
+        status: 'streaming',
         events: [],
         streamStatus: 'streaming',
       });

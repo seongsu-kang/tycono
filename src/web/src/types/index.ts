@@ -1,11 +1,8 @@
 /* ─── Shared Types (re-export from single source of truth) ── */
 
 export {
-  type JobType,
-  type JobStatus,
   type ActivityEventType,
   type ActivityEvent,
-  type JobInfo,
   type RoleStatus,
   type SessionStatus,
   type SessionSource,
@@ -13,15 +10,15 @@ export {
   type WaveRoleStatus,
   type WaveNodeStatus,
   type StreamStatus,
-  isJobActive,
   isRoleActive,
+  isMessageActive,
   isWaveNodeActive,
   isMessageTerminal,
-  eventTypeToJobStatus,
-  jobStatusToRoleStatus,
+  eventTypeToMessageStatus,
+  messageStatusToRoleStatus,
   canTransition,
 } from '@shared/types';
-import type { ActivityEvent, JobStatus, MessageStatus, SessionStatus, SessionSource, WaveRoleStatus } from '@shared/types';
+import type { ActivityEvent, MessageStatus, SessionStatus, SessionSource, WaveRoleStatus } from '@shared/types';
 
 /* ─── Frontend Types ─────────────────────── */
 
@@ -92,14 +89,13 @@ export interface WaveReplay {
 export interface WaveReplayRole {
   roleId: string;
   roleName: string;
-  jobId: string;
-  sessionId?: string;
+  sessionId: string;
   status: WaveRoleStatus;
   events: ActivityEvent[];
-  childJobs: Array<{
+  childSessions: Array<{
     roleId: string;
     roleName: string;
-    jobId: string;
+    sessionId: string;
     status: WaveRoleStatus;
     events: ActivityEvent[];
   }>;
@@ -249,7 +245,6 @@ export interface Session {
   createdAt: string;
   updatedAt: string;
   source?: SessionSource;
-  jobId?: string;
   parentSessionId?: string;
   waveId?: string;
 }
@@ -311,7 +306,7 @@ export interface BrowseResult {
 
 /* ─── Knowledge Import Types ─────────────────── */
 
-export interface ImportJob {
+export interface ImportRequest {
   paths: string[];
   companyRoot: string;
 }
@@ -359,7 +354,7 @@ export interface KnowledgeDocDetail extends KnowledgeDoc {
 /* ─── Git Status Types ───────────────────────── */
 
 export interface WorktreeInfo {
-  jobId: string;
+  sessionId: string;
   path: string;
   branch: string;
   status: 'active' | 'done' | 'pending-merge' | 'stale';
@@ -401,7 +396,7 @@ export interface ActiveSession {
   pid?: number;
   startedAt: string;
   status: 'active' | 'idle' | 'dead';
-  jobStatus?: JobStatus | null;
+  messageStatus?: MessageStatus | null;
   roleName?: string;
   alive?: boolean | null;
 }

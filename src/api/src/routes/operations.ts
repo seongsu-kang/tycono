@@ -4,7 +4,7 @@ import { extractBoldKeyValues } from '../services/markdown-parser.js';
 import { ActivityStream } from '../services/activity-stream.js';
 import path from 'node:path';
 import fs from 'node:fs';
-import { type JobStatus, isJobActive } from '../../../shared/types.js';
+import { type MessageStatus, isMessageActive } from '../../../shared/types.js';
 
 export const operationsRouter = Router();
 
@@ -52,7 +52,7 @@ operationsRouter.get('/waves', (_req: Request, res: Response, next: NextFunction
         try {
           const data = JSON.parse(readFile(`operations/waves/${f}`));
           const roles = data.roles ?? [];
-          const hasRunning = roles.some((r: { status?: string }) => r.status && isJobActive(r.status as JobStatus));
+          const hasRunning = roles.some((r: { status?: string }) => r.status && isMessageActive(r.status as MessageStatus));
           return {
             id,
             timestamp: id,
@@ -218,7 +218,7 @@ operationsRouter.get('/traces/:jobId', (req: Request, res: Response, next: NextF
 
     for (const jid of allJobIds) {
       const jobEvents = ActivityStream.readAll(jid);
-      const startEvent = jobEvents.find(e => e.type === 'job:start');
+      const startEvent = jobEvents.find(e => e.type === 'msg:start' || e.type === 'job:start');
       const jobTraceId = jobEvents[0]?.traceId ?? startEvent?.data?.traceId;
 
       if (jobTraceId === traceId || jid === jobId) {
@@ -269,16 +269,16 @@ operationsRouter.get('/traces', (req: Request, res: Response, next: NextFunction
 
     for (const jid of allJobIds) {
       const events = ActivityStream.readAll(jid);
-      const startEvent = events.find(e => e.type === 'job:start');
+      const startEvent = events.find(e => e.type === 'msg:start' || e.type === 'job:start');
       if (!startEvent) continue;
 
       const traceId = events[0]?.traceId ?? startEvent?.data?.traceId as string ?? jid;
       if (roleFilter && startEvent.roleId !== roleFilter) continue;
 
       if (!traces.has(traceId)) {
-        const doneEvent = events.find(e => e.type === 'job:done');
-        const errorEvent = events.find(e => e.type === 'job:error');
-        const awaitingEvent = events.find(e => e.type === 'job:awaiting_input');
+        const doneEvent = events.find(e => e.type === 'msg:done' || e.type === 'job:done');
+        const errorEvent = events.find(e => e.type === 'msg:error' || e.type === 'job:error');
+        const awaitingEvent = events.find(e => e.type === 'msg:awaiting_input' || e.type === 'job:awaiting_input');
         const status = awaitingEvent ? 'awaiting_input'
           : doneEvent ? 'done'
           : errorEvent ? 'error'

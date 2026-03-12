@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { api } from '../api/client';
-import type { EngineDetection, TeamTemplate, ScaffoldInput, BrowseResult, ImportJob } from '../types';
+import type { EngineDetection, TeamTemplate, ScaffoldInput, BrowseResult, ImportRequest } from '../types';
 
 /* ─── Reusable Folder Browser ─────────── */
 
@@ -144,7 +144,7 @@ function FolderBrowser({ onSelect, onClose }: { onSelect: (path: string) => void
 /* ─── Main Wizard ─────────────────────── */
 
 interface Props {
-  onComplete: (importJob?: ImportJob) => void;
+  onComplete: (importJob?: ImportRequest) => void;
 }
 
 type EngineChoice = 'claude-cli' | 'direct-api' | 'none';

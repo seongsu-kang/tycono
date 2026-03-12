@@ -116,7 +116,7 @@ export default function useWaveTree(
       if (node) {
         node.sessionId = rj.sessionId;
         node.jobId = rj.jobId;
-        node.status = 'running';
+        node.status = 'streaming';
         node.streamStatus = 'connecting';
       }
     }
@@ -183,7 +183,7 @@ export default function useWaveTree(
     setNodes((prev) => {
       const next = new Map(prev);
       const node = next.get(roleId);
-      if (node) next.set(roleId, { ...node, sessionId, status: 'running', streamStatus: 'connecting', events: [] });
+      if (node) next.set(roleId, { ...node, sessionId, status: 'streaming', streamStatus: 'connecting', events: [] });
       return next;
     });
 
@@ -209,7 +209,7 @@ export default function useWaveTree(
         setNodes((prev) => {
           const next = new Map(prev);
           const node = next.get(roleId);
-          if (node) next.set(roleId, { ...node, streamStatus: 'streaming', status: 'running' });
+          if (node) next.set(roleId, { ...node, streamStatus: 'streaming', status: 'streaming' });
           return next;
         });
 
@@ -260,7 +260,7 @@ export default function useWaveTree(
                           next.set(targetRoleId, {
                             ...childNode,
                             sessionId: childSessionId,
-                            status: 'running',
+                            status: 'streaming',
                             streamStatus: 'connecting',
                           });
                           setTimeout(() => connectStream(childSessionId, targetRoleId), 0);
@@ -268,17 +268,17 @@ export default function useWaveTree(
                       }
                     }
 
-                    if (event.type === 'job:done') {
+                    if (event.type === 'msg:done') {
                       updated.status = 'done';
                       updated.streamStatus = 'done';
-                    } else if (event.type === 'job:error') {
+                    } else if (event.type === 'msg:error') {
                       updated.status = 'error';
                       updated.streamStatus = 'error';
-                    } else if (event.type === 'job:awaiting_input') {
+                    } else if (event.type === 'msg:awaiting_input') {
                       updated.status = 'awaiting_input';
                       updated.streamStatus = 'done';
-                    } else if (event.type === 'job:reply') {
-                      updated.status = 'running';
+                    } else if (event.type === 'msg:reply') {
+                      updated.status = 'streaming';
                       updated.streamStatus = 'streaming';
                     }
 
@@ -297,7 +297,7 @@ export default function useWaveTree(
                         : 'done';
                       next.set(roleId, {
                         ...node,
-                        status: node.status === 'running' ? (finalStatus as WaveNodeStatus) : node.status,
+                        status: node.status === 'streaming' ? (finalStatus as WaveNodeStatus) : node.status,
                         streamStatus: finalStatus === 'error' ? 'error' : 'done',
                       });
                       return next;
@@ -377,7 +377,7 @@ export default function useWaveTree(
       if (id === rootRoleId) continue;
       total++;
       if (node.status === 'done') done++;
-      else if (node.status === 'running') running++;
+      else if (node.status === 'streaming') running++;
       else if (node.status === 'awaiting_input') awaitingInput++;
     }
     return { done, total, running, awaitingInput };

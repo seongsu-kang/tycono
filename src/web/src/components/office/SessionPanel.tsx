@@ -236,13 +236,13 @@ function SessionRow({ session, removing, onRemove, statusColor }: SessionRowProp
               backgroundColor: statusColor, marginRight: 8, verticalAlign: 'middle',
             }} />
             <span style={{ textTransform: 'uppercase' }}>{session.roleName || session.roleId}</span>
-            {session.jobStatus && (
+            {session.messageStatus && (
               <span style={{
                 marginLeft: 8, fontSize: 10, padding: '1px 6px',
                 background: 'rgba(255,255,255,0.08)', borderRadius: 3,
                 color: 'rgba(255,255,255,0.6)',
               }}>
-                {session.jobStatus}
+                {session.messageStatus}
               </span>
             )}
           </div>

@@ -18,7 +18,7 @@ interface ActivityPanelProps {
 export default function ActivityPanel({
   sessionId, title, color, variant, style, onClose, onMinimize, onDone, onNavigateToJob, onOpenKnowledgeDoc,
 }: ActivityPanelProps) {
-  const { events, status, textOutput, childJobIds } = useActivityStream(sessionId);
+  const { events, status, textOutput, childSessionIds } = useActivityStream(sessionId);
   const [elapsed, setElapsed] = useState(0);
   const [collapsedThinking, setCollapsedThinking] = useState<Set<number>>(new Set());
   const outputRef = useRef<HTMLDivElement>(null);
@@ -137,7 +137,7 @@ export default function ActivityPanel({
         <div className="text-[10px] text-[var(--terminal-text-muted)]">
           {events.length > 0 && `${events.length} events`}
           {textOutput.length > 0 && ` · ${textOutput.length} chars`}
-          {childJobIds.length > 0 && ` · ${childJobIds.length} dispatches`}
+          {childSessionIds.length > 0 && ` · ${childSessionIds.length} dispatches`}
         </div>
         {canClose && (
           <button

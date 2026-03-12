@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { api } from '../api/client';
-import type { Role, RoleDetail, Project, Standup, Wave, Decision, Session, Message, StreamEvent, CreateRoleInput, ImportJob, KnowledgeDoc, OrgNode, GitStatus, ImageAttachment, RoleStatus } from '../types';
+import type { Role, RoleDetail, Project, Standup, Wave, Decision, Session, Message, StreamEvent, CreateRoleInput, ImportRequest, KnowledgeDoc, OrgNode, GitStatus, ImageAttachment, RoleStatus } from '../types';
 import { isRoleActive } from '../types';
 import SidePanel from '../components/office/SidePanel';
 import OperationsPanel from '../components/office/OperationsPanel';
@@ -59,7 +59,7 @@ type PanelState =
 
 /* ─── Page ───────────────────────────────── */
 
-export default function OfficePage({ importJob, onImportDone }: { importJob?: ImportJob | null; onImportDone?: () => void }) {
+export default function OfficePage({ importJob, onImportDone }: { importJob?: ImportRequest | null; onImportDone?: () => void }) {
   const [roles, setRoles] = useState<Role[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [standups, setStandups] = useState<Standup[]>([]);
@@ -315,7 +315,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
   const { sendMessage: streamSend } = useSessionStream();
-  const waveStreamsRef = useRef<Map<string, AbortController>>(new Map());
+
 
   /* Fetch essential data on mount — lazy-load the rest when needed */
   useEffect(() => {
@@ -681,11 +681,11 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
                       }
                       return { ...s, messages: msgs };
                     }));
-                  } else if (payload.type === 'job:done' || payload.type === 'job:error') {
+                  } else if (payload.type === 'msg:done' || payload.type === 'msg:error') {
                     setSessions((prev) => prev.map((s) => {
                       if (s.id !== sessionId) return s;
                       const msgs = s.messages.map((m) =>
-                        m.status === 'streaming' ? { ...m, status: payload.type === 'job:done' ? 'done' as const : 'error' as const } : m,
+                        m.status === 'streaming' ? { ...m, status: payload.type === 'msg:done' ? 'done' as const : 'error' as const } : m,
                       );
                       return { ...s, messages: msgs };
                     }));
@@ -760,7 +760,6 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
             title: `WAVE: ${w.roleName}`,
             mode: 'do' as const,
             source: 'wave' as const,
-            jobId: w.jobId,
             messages: [{
               id: `msg-wave-${w.jobId}-ceo`,
               from: 'ceo' as const,
@@ -779,7 +778,6 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
             title: `WAVE: ${w.roleName}`,
             mode: 'do' as const,
             source: 'wave' as const,
-            jobId: w.jobId,
             messages: [{
               id: `msg-wave-${w.jobId}-ceo`,
               from: 'ceo' as const,
@@ -943,9 +941,9 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     const session = sessions.find((s) => s.id === sessionId);
     if (session?.source === 'wave') {
       // Abort SSE stream if still running
-      if (session.jobId) {
-        const ctrl = waveStreamsRef.current.get(session.jobId);
-        if (ctrl) { ctrl.abort(); waveStreamsRef.current.delete(session.jobId); }
+      {
+        const ctrl = waveStreamControllers.current.get(session.id);
+        if (ctrl) { ctrl.abort(); waveStreamControllers.current.delete(session.id); }
       }
       setSessions((prev) => {
         const remaining = prev.filter((s) => s.id !== sessionId);
@@ -994,9 +992,9 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     const apiIds = sessions.filter((s) => s.source !== 'wave').map((s) => s.id);
     // Abort all wave SSE streams
     for (const s of sessions) {
-      if (s.source === 'wave' && s.jobId) {
-        const ctrl = waveStreamsRef.current.get(s.jobId);
-        if (ctrl) { ctrl.abort(); waveStreamsRef.current.delete(s.jobId); }
+      if (s.source === 'wave') {
+        const ctrl = waveStreamControllers.current.get(s.id);
+        if (ctrl) { ctrl.abort(); waveStreamControllers.current.delete(s.id); }
       }
     }
     try {

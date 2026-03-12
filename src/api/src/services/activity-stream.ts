@@ -33,6 +33,8 @@ export type ActivitySubscriber = (event: ActivityEvent) => void;
 export class ActivityStream {
   readonly jobId: string;
   readonly roleId: string;
+  readonly parentSessionId?: string;
+  /** @deprecated D-014: use parentSessionId */
   readonly parentJobId?: string;
   /** Trace ID for full chain tracking — top-level jobId propagated to all children */
   readonly traceId?: string;
@@ -45,7 +47,8 @@ export class ActivityStream {
   constructor(jobId: string, roleId: string, parentJobId?: string, traceId?: string) {
     this.jobId = jobId;
     this.roleId = roleId;
-    this.parentJobId = parentJobId;
+    this.parentSessionId = parentJobId;
+    this.parentJobId = parentJobId; // backward compat
     this.traceId = traceId;
 
     ensureDir();
@@ -61,7 +64,8 @@ export class ActivityStream {
       ts: new Date().toISOString(),
       type,
       roleId,
-      parentJobId: this.parentJobId,
+      parentSessionId: this.parentSessionId,
+      parentJobId: this.parentJobId, // backward compat
       ...(this.traceId && { traceId: this.traceId }),
       data,
     };

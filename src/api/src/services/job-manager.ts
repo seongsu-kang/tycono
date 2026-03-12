@@ -15,8 +15,8 @@ import { portRegistry, type PortAllocation } from './port-registry.js';
 
 /* ─── Types (re-export from shared contract) ─── */
 
-export { type JobType, type JobStatus, type JobInfo, isJobActive, canTransition, jobStatusToRoleStatus } from '../../../shared/types.js';
-import { type JobType, type JobStatus, type JobInfo, isJobActive, canTransition } from '../../../shared/types.js';
+export { type JobType, type JobStatus, type JobInfo, isJobActive, canTransition, jobStatusToRoleStatus, messageStatusToRoleStatus } from '../../../shared/types.js';
+import { type JobType, type JobStatus, type JobInfo, isJobActive, canTransition, type MessageStatus } from '../../../shared/types.js';
 
 export interface Job {
   id: string;
@@ -201,8 +201,8 @@ class JobManager {
       // Non-critical — job can proceed without ports
     }
 
-    // Emit job:start
-    job.stream.emit('job:start', params.roleId, {
+    // Emit msg:start (D-014: was job:start)
+    job.stream.emit('msg:start', params.roleId, {
       jobId: job.id,
       traceId: job.traceId,
       type: params.type,
@@ -470,7 +470,7 @@ class JobManager {
           job.targetRole = targetRole;
           markAwaitingInput(params.roleId);
           const question = `[Turn limit] ${harnessTurnCount}턴 도달 (hardLimit: ${limits.hardLimit}). 계속 진행할까요?`;
-          job.stream.emit('job:awaiting_input', params.roleId, {
+          job.stream.emit('msg:awaiting_input', params.roleId, {
             ...doneData,
             question,
             awaitingInput: true,
@@ -484,7 +484,7 @@ class JobManager {
           job.status = 'awaiting_input';
           job.targetRole = targetRole;
           markAwaitingInput(params.roleId);
-          job.stream.emit('job:awaiting_input', params.roleId, {
+          job.stream.emit('msg:awaiting_input', params.roleId, {
             ...doneData,
             question: result.output.trim().split('\n').slice(-5).join('\n'),
             awaitingInput: true,
@@ -523,7 +523,7 @@ class JobManager {
 
           job.status = 'done';
           completeActivity(params.roleId);
-          job.stream.emit('job:done', params.roleId, doneData);
+          job.stream.emit('msg:done', params.roleId, doneData);
           // D-014: Update linked session message with final results
           if (job.sessionId) {
             this.finalizeSessionMessage(job, 'done', result);
@@ -550,7 +550,7 @@ class JobManager {
           job.targetRole = targetRole;
           markAwaitingInput(params.roleId);
           const question = `[Turn limit] ${harnessTurnCount}턴 도달 (hardLimit: ${limits.hardLimit}). 계속 진행할까요?`;
-          job.stream.emit('job:awaiting_input', params.roleId, {
+          job.stream.emit('msg:awaiting_input', params.roleId, {
             question,
             awaitingInput: true,
             targetRole,
@@ -563,7 +563,7 @@ class JobManager {
         job.error = err.message;
         completeActivity(params.roleId);
 
-        job.stream.emit('job:error', params.roleId, { message: err.message });
+        job.stream.emit('msg:error', params.roleId, { message: err.message });
         // D-014: Mark linked session message as error
         if (job.sessionId) {
           this.finalizeSessionMessage(job, 'error');
@@ -654,7 +654,7 @@ class JobManager {
       if (job.parentJobId === parentJobId && job.status === 'awaiting_input') {
         job.status = 'done';
         completeActivity(job.roleId);
-        job.stream.emit('job:done', job.roleId, {
+        job.stream.emit('msg:done', job.roleId, {
           output: '[Auto-closed] Parent job completed',
           turns: 0,
         });
@@ -674,10 +674,10 @@ class JobManager {
       // Check if we have a JSONL file for it (historical)
       if (ActivityStream.exists(id)) {
         const events = ActivityStream.readAll(id);
-        const startEvent = events.find(e => e.type === 'job:start');
-        const doneEvent = events.find(e => e.type === 'job:done');
-        const errorEvent = events.find(e => e.type === 'job:error');
-        const awaitingEvent = events.find(e => e.type === 'job:awaiting_input');
+        const startEvent = events.find(e => e.type === 'msg:start' || e.type === 'job:start');
+        const doneEvent = events.find(e => e.type === 'msg:done' || e.type === 'job:done');
+        const errorEvent = events.find(e => e.type === 'msg:error' || e.type === 'job:error');
+        const awaitingEvent = events.find(e => e.type === 'msg:awaiting_input' || e.type === 'job:awaiting_input');
         const dispatchEvents = events.filter(e => e.type === 'dispatch:start');
 
         if (startEvent) {
@@ -746,7 +746,7 @@ class JobManager {
     job.status = 'error';
     job.error = 'Aborted by user';
     completeActivity(job.roleId);
-    job.stream.emit('job:error', job.roleId, { message: 'Aborted by user' });
+    job.stream.emit('msg:error', job.roleId, { message: 'Aborted by user' });
     return true;
   }
 
@@ -762,7 +762,7 @@ class JobManager {
     // for the continuation job which will emit its own job:done when finished)
     job.status = 'done';
     if (!isFollowUp) completeActivity(job.roleId);
-    job.stream.emit('job:reply', job.roleId, { response, responderRole: effectiveResponder, isFollowUp });
+    job.stream.emit('msg:reply', job.roleId, { response, responderRole: effectiveResponder, isFollowUp });
 
     // Build continuation prompt with previous context
     const prevOutput = job.result?.output ?? '';
@@ -836,12 +836,12 @@ class JobManager {
         if (this.jobs.has(jobId)) continue; // already in memory
 
         const events = ActivityStream.readAll(jobId);
-        const startEvent = events.find(e => e.type === 'job:start');
+        const startEvent = events.find(e => e.type === 'msg:start' || e.type === 'job:start');
         if (!startEvent || (startEvent.data.sessionId as string) !== sessionId) continue;
 
-        const doneEvent = events.find(e => e.type === 'job:done');
-        const errorEvent = events.find(e => e.type === 'job:error');
-        const awaitingEvent = events.find(e => e.type === 'job:awaiting_input');
+        const doneEvent = events.find(e => e.type === 'msg:done' || e.type === 'job:done');
+        const errorEvent = events.find(e => e.type === 'msg:error' || e.type === 'job:error');
+        const awaitingEvent = events.find(e => e.type === 'msg:awaiting_input' || e.type === 'job:awaiting_input');
         const status: JobStatus = awaitingEvent && !doneEvent ? 'awaiting_input'
           : doneEvent ? 'done'
           : errorEvent ? 'error'

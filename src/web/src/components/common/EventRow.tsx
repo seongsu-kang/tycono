@@ -159,7 +159,7 @@ export default function EventRow({ event, isThinkingCollapsed, onToggleThinking,
         </div>
       );
 
-    case 'job:start':
+    case 'msg:start':
       return (
         <div className="text-[var(--terminal-text-muted)] text-[10px] pb-1">
           <span style={{ color: roleColor }} className="font-bold">{event.roleId.toUpperCase()}</span>
@@ -167,7 +167,7 @@ export default function EventRow({ event, isThinkingCollapsed, onToggleThinking,
         </div>
       );
 
-    case 'job:done': {
+    case 'msg:done': {
       const turns = event.data.turns as number ?? 0;
       const toolCalls = event.data.toolCalls as number ?? 0;
       return (
@@ -183,7 +183,7 @@ export default function EventRow({ event, isThinkingCollapsed, onToggleThinking,
       );
     }
 
-    case 'job:error':
+    case 'msg:error':
       return (
         <div className="mt-2 p-2 rounded-lg bg-red-900/20 border border-red-800/30">
           <div className="flex items-center gap-2">
@@ -194,7 +194,7 @@ export default function EventRow({ event, isThinkingCollapsed, onToggleThinking,
         </div>
       );
 
-    case 'job:awaiting_input': {
+    case 'msg:awaiting_input': {
       const question = (event.data.question as string) ?? '';
       return (
         <div className="mt-2 p-2 rounded-lg border" style={{ background: '#F59E0B11', borderColor: '#F59E0B33' }}>
@@ -209,7 +209,7 @@ export default function EventRow({ event, isThinkingCollapsed, onToggleThinking,
       );
     }
 
-    case 'job:reply':
+    case 'msg:reply':
       return (
         <div className="mt-1 p-2 rounded-lg bg-blue-900/20 border border-blue-800/30">
           <div className="flex items-center gap-2">

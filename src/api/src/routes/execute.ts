@@ -14,7 +14,7 @@ import {
   type ImageAttachment,
 } from '../services/session-store.js';
 import { jobManager, type Job } from '../services/job-manager.js';
-import { type JobStatus, type RoleStatus, type WaveRoleStatus, type TeamStatus, isJobActive, isRoleActive, jobStatusToRoleStatus, eventTypeToJobStatus } from '../../../shared/types.js';
+import { type MessageStatus, type RoleStatus, type WaveRoleStatus, type TeamStatus, isMessageActive, isRoleActive, messageStatusToRoleStatus, eventTypeToMessageStatus } from '../../../shared/types.js';
 import { ActivityStream, type ActivityEvent, type ActivitySubscriber } from '../services/activity-stream.js';
 import { earnCoinsInternal } from './coins.js';
 import { appendFollowUpToWave } from '../services/wave-tracker.js';
@@ -341,11 +341,11 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
 
   for (const jobId of jobIds) {
     const events = ActivityStream.readAll(jobId);
-    const startEvent = events.find(e => e.type === 'job:start');
+    const startEvent = events.find(e => e.type === 'msg:start' || e.type === 'job:start');
     const roleId = startEvent?.roleId ?? 'unknown';
     const roleName = (startEvent?.data?.roleName as string) ?? roleId;
-    const doneEvent = events.find(e => e.type === 'job:done' || e.type === 'job:awaiting_input' || e.type === 'job:error');
-    const status: WaveRoleStatus = doneEvent ? eventTypeToJobStatus(doneEvent.type) as WaveRoleStatus : 'unknown';
+    const doneEvent = events.find(e => e.type === 'msg:done' || e.type === 'msg:awaiting_input' || e.type === 'msg:error' || e.type === 'job:done' || e.type === 'job:awaiting_input' || e.type === 'job:error');
+    const status: WaveRoleStatus = doneEvent ? eventTypeToMessageStatus(doneEvent.type) as WaveRoleStatus : 'unknown';
 
     // Collect child jobs (dispatched sub-roles)
     const childJobs: WaveRoleData['childJobs'] = [];
@@ -354,11 +354,11 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
         const childJobId = e.data.childJobId as string;
         const targetRoleId = (e.data.targetRoleId as string) ?? 'unknown';
         const childEvents = ActivityStream.readAll(childJobId);
-        const childDone = childEvents.find(ce => ce.type === 'job:done' || ce.type === 'job:error' || ce.type === 'job:awaiting_input');
-        const childStatus: WaveRoleStatus = childDone ? eventTypeToJobStatus(childDone.type) as WaveRoleStatus : 'unknown';
+        const childDone = childEvents.find(ce => ce.type === 'msg:done' || ce.type === 'msg:error' || ce.type === 'msg:awaiting_input' || ce.type === 'job:done' || ce.type === 'job:error' || ce.type === 'job:awaiting_input');
+        const childStatus: WaveRoleStatus = childDone ? eventTypeToMessageStatus(childDone.type) as WaveRoleStatus : 'unknown';
         childJobs.push({
           roleId: targetRoleId,
-          roleName: (childEvents.find(ce => ce.type === 'job:start')?.data?.roleName as string) ?? targetRoleId,
+          roleName: (childEvents.find(ce => ce.type === 'msg:start' || ce.type === 'job:start')?.data?.roleName as string) ?? targetRoleId,
           jobId: childJobId,
           status: childStatus,
           events: childEvents,
@@ -569,16 +569,16 @@ function handleAssign(body: Record<string, unknown>, req: IncomingMessage, res: 
       case 'stderr':
         sendSSE(res, 'stderr', { message: event.data.message });
         break;
-      case 'job:awaiting_input':
+      case 'msg:awaiting_input': case 'job:awaiting_input':
         sendSSE(res, 'awaiting_input', { question: event.data.question, targetRole: event.data.targetRole, reason: event.data.reason });
         break;
-      case 'job:done':
+      case 'msg:done': case 'job:done':
         cleanupLifecycle();
         sendSSE(res, 'done', event.data);
         if (!res.writableEnded) res.end();
         job.stream.unsubscribe(subscriber);
         break;
-      case 'job:error':
+      case 'msg:error': case 'job:error':
         cleanupLifecycle();
         sendSSE(res, 'error', { message: event.data.message });
         if (!res.writableEnded) res.end();
@@ -671,10 +671,10 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
         case 'stderr':
           sendSSE(res, 'stderr', { roleId: rolePrefix, message: event.data.message });
           break;
-        case 'job:awaiting_input':
+        case 'msg:awaiting_input': case 'job:awaiting_input':
           sendSSE(res, 'role:awaiting_input', { roleId: rolePrefix, question: event.data.question, targetRole: event.data.targetRole, reason: event.data.reason });
           break;
-        case 'job:done':
+        case 'msg:done': case 'job:done':
           sendSSE(res, 'role:done', { roleId: rolePrefix, ...event.data });
           doneCount++;
           if (doneCount >= jobs.length) {
@@ -682,7 +682,7 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
             res.end();
           }
           break;
-        case 'job:error':
+        case 'msg:error': case 'job:error':
           sendSSE(res, 'role:error', { roleId: rolePrefix, message: event.data.message });
           doneCount++;
           if (doneCount >= jobs.length) {
@@ -716,7 +716,7 @@ function handleStatus(res: ServerResponse): void {
     statuses[activity.roleId] = activity.status;
   }
 
-  // 2. JobManager active jobs (isJobActive: running | awaiting_input)
+  // 2. JobManager active jobs (isMessageActive: streaming | awaiting_input)
   const activeJobs = jobManager.listJobs({ active: true });
   const activeRoles = new Set(activeJobs.map(j => j.roleId));
 
@@ -735,9 +735,9 @@ function handleStatus(res: ServerResponse): void {
     }
   }
 
-  // 4. Active jobs override — use jobStatusToRoleStatus() for canonical mapping
+  // 4. Active jobs override — use messageStatusToRoleStatus() for canonical mapping
   for (const job of activeJobs) {
-    const mappedStatus = jobStatusToRoleStatus(job.status as JobStatus);
+    const mappedStatus = messageStatusToRoleStatus(job.status as MessageStatus);
     // running job → 'working' always wins over awaiting_input
     if (statuses[job.roleId] === 'working' && mappedStatus === 'awaiting_input') continue;
     statuses[job.roleId] = mappedStatus;
@@ -918,7 +918,7 @@ function handleSessionMessage(
             input: event.data.input,
           });
           break;
-        case 'job:awaiting_input':
+        case 'msg:awaiting_input': case 'job:awaiting_input':
           sendSSE(res, 'dispatch:progress', {
             roleId: event.roleId,
             type: 'awaiting_input',
@@ -926,14 +926,14 @@ function handleSessionMessage(
             targetRole: event.data.targetRole,
           });
           break;
-        case 'job:done':
+        case 'msg:done': case 'job:done':
           sendSSE(res, 'dispatch:progress', {
             roleId: event.roleId,
             type: 'done',
           });
           childJob.stream.unsubscribe(subscriber);
           break;
-        case 'job:error':
+        case 'msg:error': case 'job:error':
           sendSSE(res, 'dispatch:progress', {
             roleId: event.roleId,
             type: 'error',
@@ -950,7 +950,7 @@ function handleSessionMessage(
   // Build team status from active jobs using schema helpers
   const teamStatus: TeamStatus = {};
   for (const j of jobManager.listJobs({ active: true })) {
-    const mapped = jobStatusToRoleStatus(j.status as JobStatus);
+    const mapped = messageStatusToRoleStatus(j.status as MessageStatus);
     // 'working' takes priority over 'awaiting_input' for same role
     if (teamStatus[j.roleId]?.status === 'working' && mapped === 'awaiting_input') continue;
     teamStatus[j.roleId] = { status: mapped, task: j.task };

@@ -5,7 +5,10 @@ import path from 'node:path';
 
 export interface TokenEntry {
   ts: string;
+  /** @deprecated D-014: use sessionId */
   jobId: string;
+  /** D-014: Session this entry belongs to */
+  sessionId?: string;
   roleId: string;
   model: string;
   inputTokens: number;
@@ -22,7 +25,10 @@ export interface QueryFilter {
   from?: string;   // ISO date string (inclusive)
   to?: string;     // ISO date string (inclusive)
   roleId?: string;
+  /** @deprecated D-014: use sessionId */
   jobId?: string;
+  /** D-014: Filter by session ID */
+  sessionId?: string;
 }
 
 /* ── TokenLedger ────────────────────────── */
@@ -78,6 +84,9 @@ export class TokenLedger {
     }
     if (filter?.jobId) {
       filtered = filtered.filter((e) => e.jobId === filter.jobId);
+    }
+    if (filter?.sessionId) {
+      filtered = filtered.filter((e) => e.sessionId === filter.sessionId);
     }
 
     let totalInput = 0;

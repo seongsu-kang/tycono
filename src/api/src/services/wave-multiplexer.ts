@@ -189,11 +189,11 @@ class WaveMultiplexer {
         event,
       } as WaveStreamEnvelope);
 
-      if (event.type === 'job:done' || event.type === 'job:error') {
+      if (event.type === 'msg:done' || event.type === 'msg:error' || event.type === 'job:done' || event.type === 'job:error') {
         sendSSE(client, 'wave:role-detached', {
           sessionId,
           roleId,
-          reason: event.type === 'job:done' ? 'done' : 'error',
+          reason: (event.type === 'msg:done' || event.type === 'job:done') ? 'done' : 'error',
         });
       }
     };

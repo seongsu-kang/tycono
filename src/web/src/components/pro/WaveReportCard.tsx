@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { ActivityEvent, JobStatus } from '../../types';
+import type { ActivityEvent, MessageStatus } from '../../types';
 import EventRow from '../common/EventRow';
 
 const ROLE_COLORS: Record<string, string> = {
@@ -8,8 +8,8 @@ const ROLE_COLORS: Record<string, string> = {
   'data-analyst': '#0277BD',
 };
 
-/** @deprecated Use JobStatus from shared/types instead */
-export type ReportCardStatus = JobStatus;
+/** @deprecated Use MessageStatus from shared/types instead */
+export type ReportCardStatus = MessageStatus;
 
 export interface WaveReportCardProps {
   roleId: string;
@@ -51,7 +51,7 @@ export default function WaveReportCard({
     e.type === 'tool:result' ||
     e.type === 'dispatch:start' ||
     e.type === 'dispatch:done' ||
-    e.type === 'job:awaiting_input' ||
+    e.type === 'msg:awaiting_input' ||
     e.type === 'thinking'
   );
 

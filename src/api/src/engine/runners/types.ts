@@ -35,6 +35,9 @@ export interface RunnerConfig {
   readOnly?: boolean;
   maxTurns?: number;
   model?: string;
+  /** D-014: Session ID for tracking. Preferred over jobId. */
+  sessionId?: string;
+  /** @deprecated D-014: Use sessionId. Kept for backward compat with token-ledger. */
   jobId?: string;
   teamStatus?: TeamStatus;
   attachments?: ImageAttachment[];

@@ -5,7 +5,7 @@ import OnboardingWizard from './pages/OnboardingWizard';
 import { useCompanyStatus } from './hooks/useCompanyStatus';
 import { OFFICE_THEMES } from './types/appearance';
 import type { OfficeTheme } from './types/appearance';
-import type { ImportJob } from './types';
+import type { ImportRequest } from './types';
 
 const SpritePreview = lazy(() => import('./components/office/sprites/preview-app'));
 
@@ -46,12 +46,12 @@ function applyStoredTheme(): void {
 
 function AppShell() {
   const { initialized, loading, refetch } = useCompanyStatus();
-  const [importJob, setImportJob] = useState<ImportJob | null>(null);
+  const [importJob, setImportJob] = useState<ImportRequest | null>(null);
 
   // Apply saved theme on app mount (before office loads)
   useEffect(() => { applyStoredTheme(); }, []);
 
-  const handleWizardComplete = (job?: ImportJob) => {
+  const handleWizardComplete = (job?: ImportRequest) => {
     if (job) setImportJob(job);
     refetch();
   };

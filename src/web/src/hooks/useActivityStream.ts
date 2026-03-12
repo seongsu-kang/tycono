@@ -6,7 +6,7 @@ interface UseActivityStreamResult {
   events: ActivityEvent[];
   status: StreamStatus;
   textOutput: string;
-  childJobIds: string[];
+  childSessionIds: string[];
   reconnect: () => void;
 }
 
@@ -15,7 +15,7 @@ export default function useActivityStream(sessionId: string | null): UseActivity
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [status, setStatus] = useState<StreamStatus>('idle');
   const [textOutput, setTextOutput] = useState('');
-  const [childJobIds, setChildJobIds] = useState<string[]>([]);
+  const [childSessionIds, setChildSessionIds] = useState<string[]>([]);
   const lastSeqRef = useRef(-1);
   const controllerRef = useRef<AbortController | null>(null);
   const reconnectRef = useRef(0);
@@ -76,13 +76,13 @@ export default function useActivityStream(sessionId: string | null): UseActivity
                     setTextOutput((prev) => prev + (event.data.text as string ?? ''));
                   }
 
-                  if (event.type === 'dispatch:start' && event.data.childJobId) {
-                    setChildJobIds((prev) => [...prev, event.data.childJobId as string]);
+                  if (event.type === 'dispatch:start' && event.data.childSessionId) {
+                    setChildSessionIds((prev) => [...prev, event.data.childSessionId as string]);
                   }
 
-                  if (event.type === 'job:done') {
+                  if (event.type === 'msg:done') {
                     setStatus('done');
-                  } else if (event.type === 'job:error') {
+                  } else if (event.type === 'msg:error') {
                     setStatus('error');
                   }
                 } else if (currentEvent === 'stream:end') {
@@ -123,14 +123,14 @@ export default function useActivityStream(sessionId: string | null): UseActivity
       setEvents([]);
       setStatus('idle');
       setTextOutput('');
-      setChildJobIds([]);
+      setChildSessionIds([]);
       lastSeqRef.current = -1;
       return;
     }
 
     setEvents([]);
     setTextOutput('');
-    setChildJobIds([]);
+    setChildSessionIds([]);
     lastSeqRef.current = -1;
     reconnectRef.current = 0;
 
@@ -141,5 +141,5 @@ export default function useActivityStream(sessionId: string | null): UseActivity
     };
   }, [sessionId, connect]);
 
-  return { events, status, textOutput, childJobIds, reconnect };
+  return { events, status, textOutput, childSessionIds, reconnect };
 }

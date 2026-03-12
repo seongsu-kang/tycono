@@ -11,7 +11,7 @@ import {
   type Message,
 } from '../services/session-store.js';
 import { jobManager } from '../services/job-manager.js';
-import { isJobActive } from '../../../shared/types.js';
+import { isMessageActive, type MessageStatus } from '../../../shared/types.js';
 import { ActivityStream, type ActivityEvent } from '../services/activity-stream.js';
 import { updateFollowUpForReply } from '../services/wave-tracker.js';
 
@@ -119,7 +119,7 @@ sessionsRouter.get('/:id/stream', (req, res) => {
   }
 
   // If the job is finished or doesn't exist, end
-  if (!job || !isJobActive(job.status)) {
+  if (!job || !isMessageActive(job.status as MessageStatus)) {
     sendEvent('stream:end', { reason: job ? job.status : 'no-job' });
     res.end();
     return;
@@ -130,11 +130,11 @@ sessionsRouter.get('/:id/stream', (req, res) => {
     if (event.seq >= fromSeq) {
       sendEvent('activity', event);
     }
-    if (event.type === 'job:done' || event.type === 'job:error') {
-      sendEvent('stream:end', { reason: event.type === 'job:done' ? 'done' : 'error' });
+    if (event.type === 'msg:done' || event.type === 'job:done' || event.type === 'msg:error' || event.type === 'job:error') {
+      sendEvent('stream:end', { reason: (event.type === 'msg:done' || event.type === 'job:done') ? 'done' : 'error' });
       res.end();
       job.stream.unsubscribe(subscriber);
-    } else if (event.type === 'job:reply') {
+    } else if (event.type === 'msg:reply' || event.type === 'job:reply') {
       sendEvent('stream:end', { reason: 'replied' });
       res.end();
       job.stream.unsubscribe(subscriber);

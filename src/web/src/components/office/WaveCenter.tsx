@@ -3,7 +3,7 @@ import useWaveTree, { type WaveNode } from '../../hooks/useWaveTree';
 import OrgTreeLive from './OrgTreeLive';
 import EventRow from '../common/EventRow';
 import type { OrgNode, Wave, WaveReplay, ImageAttachment } from '../../types';
-import { isJobActive, isWaveNodeActive } from '../../types';
+import { isMessageActive, isWaveNodeActive } from '../../types';
 import { api } from '../../api/client';
 import { usePanelResize } from './KnowledgePanel';
 
@@ -89,7 +89,7 @@ export default function WaveCenter({
 
       // If any follow-up roles are still running, reconnect their streams
       for (const r of replayData.roles ?? []) {
-        if (isJobActive(r.status as any) && r.jobId) {
+        if (isMessageActive(r.status as any) && r.sessionId) {
           const node = staticNodes.get(r.roleId);
           if (node?.sessionId) {
             setTimeout(() => waveTree.connectStream(node.sessionId, r.roleId), 100);
@@ -551,7 +551,7 @@ export default function WaveCenter({
                 {(currentActiveWave || isReplay) && (
                   <div className="flex gap-x-3">
                     {[
-                      { label: 'running', color: '#FBBF24', dot: true },
+                      { label: 'streaming', color: '#FBBF24', dot: true },
                       { label: 'awaiting', color: '#F59E0B', dot: true },
                       { label: 'done', color: '#2E7D32', dot: false },
                       { label: 'waiting', color: '#888', dot: false },
@@ -687,13 +687,13 @@ export default function WaveCenter({
                     </span>
                     <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{
                       background: selectedNode.status === 'awaiting_input' ? '#F59E0B22'
-                        : selectedNode.status === 'running' ? '#FBBF2422'
+                        : selectedNode.status === 'streaming' ? '#FBBF2422'
                         : `${selectedColor}22`,
                       color: selectedNode.status === 'awaiting_input' ? '#F59E0B'
-                        : selectedNode.status === 'running' ? '#FBBF24'
+                        : selectedNode.status === 'streaming' ? '#FBBF24'
                         : selectedColor,
                     }}>
-                      {selectedNode.status === 'running' ? 'Working...' :
+                      {selectedNode.status === 'streaming' ? 'Working...' :
                        selectedNode.status === 'done' ? (
                          selectedNode.children.some(cid => {
                            const child = waveTree.nodes.get(cid);
@@ -739,18 +739,18 @@ export default function WaveCenter({
                   {selectedNode && selectedNode.events.length === 0 && (
                     <div className="text-[var(--terminal-text-muted)]">
                       {selectedNode.status === 'waiting' ? 'Waiting for dispatch...' :
-                       selectedNode.status === 'running' ? 'Connecting to activity stream...' :
+                       selectedNode.status === 'streaming' ? 'Connecting to activity stream...' :
                        selectedNode.status === 'not-dispatched' ? 'This role was not dispatched. Send a follow-up to activate.' : ''}
                     </div>
                   )}
                   {selectedNode?.events.map((event, idx) => {
                     const events = selectedNode.events;
                     // Detect follow-up boundary: job:start that's not the first in the list
-                    const isFollowUpStart = event.type === 'job:start' && idx > 0;
-                    // Hide terminal events (job:done/error/awaiting_input) right before a follow-up start
+                    const isFollowUpStart = event.type === 'msg:start' && idx > 0;
+                    // Hide terminal events (msg:done/error/awaiting_input) right before a follow-up start
                     const nextEvent = events[idx + 1];
-                    const isTerminalBeforeFollowUp = (event.type === 'job:done' || event.type === 'job:error' || event.type === 'job:awaiting_input')
-                      && nextEvent?.type === 'job:start';
+                    const isTerminalBeforeFollowUp = (event.type === 'msg:done' || event.type === 'msg:error' || event.type === 'msg:awaiting_input')
+                      && nextEvent?.type === 'msg:start';
 
                     if (isTerminalBeforeFollowUp) return null;
 
@@ -787,7 +787,7 @@ export default function WaveCenter({
                       />
                     );
                   })}
-                  {selectedNode?.status === 'running' && (
+                  {selectedNode?.status === 'streaming' && (
                     <span className="inline-block w-2 h-4 bg-green-400 animate-pulse ml-0.5" />
                   )}
                   {!selectedNode && (
@@ -1078,21 +1078,21 @@ function buildReplayNodes(
   for (const r of replayRoles) {
     const existing = nodes.get(r.roleId);
     if (existing) {
-      const isRunning = isJobActive(r.status as any);
+      const isRunning = isMessageActive(r.status as any);
       nodes.set(r.roleId, {
         ...existing,
-        sessionId: r.sessionId ?? r.jobId ?? '',
+        sessionId: r.sessionId ?? '',
         status: (r.status as WaveNode['status']) || 'done',
         events: r.events,
         streamStatus: isRunning ? 'connecting' : 'done',
       });
     }
-    for (const c of r.childJobs) {
+    for (const c of r.childSessions) {
       const child = nodes.get(c.roleId);
       if (child) {
         nodes.set(c.roleId, {
           ...child,
-          sessionId: c.jobId ?? '', status: (c.status as WaveNode['status']) || 'done',
+          sessionId: c.sessionId ?? '', status: (c.status as WaveNode['status']) || 'done',
           events: c.events, streamStatus: 'done',
         });
       }

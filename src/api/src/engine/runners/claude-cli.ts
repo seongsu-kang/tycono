@@ -20,7 +20,8 @@ const DISPATCH_SCRIPT = `#!/usr/bin/env python3
 
 환경변수:
   DISPATCH_API_URL    — API 서버 URL (default: http://localhost:3001)
-  DISPATCH_PARENT_JOB — 부모 Job ID (자동 설정)
+  DISPATCH_PARENT_SESSION — 부모 Session ID (자동 설정)
+  DISPATCH_PARENT_JOB — (deprecated) 부모 Job ID, DISPATCH_PARENT_SESSION 사용
   DISPATCH_SOURCE_ROLE — 현재 Role ID (자동 설정)
 """
 import sys, os, json, time, urllib.request, urllib.error
@@ -40,7 +41,7 @@ def get_result(job_id, retries=3):
             for e in events:
                 if e['type'] == 'text':
                     text_parts.append(e['data'].get('text', ''))
-                elif e['type'] == 'job:error':
+                elif e['type'] in ('msg:error', 'job:error'):
                     text_parts.append('\\nERROR: ' + e['data'].get('message', ''))
             result = ''.join(text_parts)
             if result:
@@ -62,14 +63,15 @@ def get_status(job_id):
     return get_job_info(job_id).get('status', 'unknown')
 
 def start_job(role_id, task):
-    parent_job = os.environ.get('DISPATCH_PARENT_JOB', '')
+    parent_session = os.environ.get('DISPATCH_PARENT_SESSION', os.environ.get('DISPATCH_PARENT_JOB', ''))
     source_role = os.environ.get('DISPATCH_SOURCE_ROLE', 'ceo')
     body = json.dumps({
         'type': 'assign',
         'roleId': role_id,
         'task': task,
         'sourceRole': source_role,
-        'parentJobId': parent_job if parent_job else None,
+        'parentSessionId': parent_session if parent_session else None,
+        'parentJobId': parent_session if parent_session else None,
     }).encode()
     req = urllib.request.Request(f'{api}/api/jobs', body, {'Content-Type': 'application/json'})
     resp = json.loads(urllib.request.urlopen(req, timeout=10).read())
@@ -164,7 +166,7 @@ def get_result(job_id, retries=3):
             for e in events:
                 if e['type'] == 'text':
                     text_parts.append(e['data'].get('text', ''))
-                elif e['type'] == 'job:error':
+                elif e['type'] in ('msg:error', 'job:error'):
                     text_parts.append('\\nERROR: ' + e['data'].get('message', ''))
             result = ''.join(text_parts)
             if result:
@@ -211,7 +213,7 @@ if len(sys.argv) < 3:
 
 role_id = sys.argv[1]
 question = ' '.join(sys.argv[2:])
-parent_job = os.environ.get('CONSULT_PARENT_JOB', os.environ.get('DISPATCH_PARENT_JOB', ''))
+parent_session = os.environ.get('CONSULT_PARENT_SESSION', os.environ.get('DISPATCH_PARENT_SESSION', os.environ.get('DISPATCH_PARENT_JOB', '')))
 source_role = os.environ.get('CONSULT_SOURCE_ROLE', os.environ.get('DISPATCH_SOURCE_ROLE', 'ceo'))
 
 # Start job (readOnly + consult type)
@@ -222,7 +224,8 @@ body = json.dumps({
     'task': task,
     'sourceRole': source_role,
     'readOnly': True,
-    'parentJobId': parent_job if parent_job else None,
+    'parentSessionId': parent_session if parent_session else None,
+    'parentJobId': parent_session if parent_session else None,
 }).encode()
 
 try:
@@ -344,8 +347,10 @@ export class ClaudeCliRunner implements ExecutionRunner {
     cleanEnv.DISPATCH_API_URL = `http://localhost:${apiPort}`;
     cleanEnv.DISPATCH_SOURCE_ROLE = roleId;
     cleanEnv.DISPATCH_SUBORDINATES = subordinates.join(', ');
-    if (config.jobId) {
-      cleanEnv.DISPATCH_PARENT_JOB = config.jobId;
+    const parentId = config.sessionId ?? config.jobId;
+    if (parentId) {
+      cleanEnv.DISPATCH_PARENT_SESSION = parentId;
+      cleanEnv.DISPATCH_PARENT_JOB = parentId; // deprecated, kept for backward compat
     }
     // dispatch 명령어 경로를 PATH에 추가하지 않고 절대 경로로 사용
     cleanEnv.DISPATCH_CMD = dispatchScript;
@@ -360,7 +365,8 @@ export class ClaudeCliRunner implements ExecutionRunner {
     // Inject repo paths so agents never confuse repos
     cleanEnv.TYCONO_CODE_ROOT = codeRoot;
     cleanEnv.TYCONO_AKB_ROOT = companyRoot;
-    console.log(`[Runner] Spawning claude -p: role=${roleId}, model=${modelName}, maxTurns=${maxTurns}, jobId=${config.jobId ?? 'none'}, cwd=${cwd}, subordinates=[${subordinates.join(',')}]`);
+    const sessionOrJobId = config.sessionId ?? config.jobId ?? 'none';
+    console.log(`[Runner] Spawning claude -p: role=${roleId}, model=${modelName}, maxTurns=${maxTurns}, sessionId=${sessionOrJobId}, cwd=${cwd}, subordinates=[${subordinates.join(',')}]`);
 
     const proc = spawn('claude', args, {
       cwd,
@@ -422,7 +428,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
               addToolCall: (name, input) => {
                 toolCalls.push({ name, input });
                 // Dispatch detection removed — child jobs created by the Python
-                // dispatch bridge script via POST /api/jobs with parentJobId.
+                // dispatch bridge script via POST /api/jobs with parentSessionId.
                 // JobManager.startJob() now auto-emits dispatch:start on parent stream.
               },
               incrementTurn: () => { turnCount++; callbacks.onTurnComplete?.(turnCount); },
@@ -431,7 +437,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
                 totalOutput += out;
                 tokenLedger.record({
                   ts: new Date().toISOString(),
-                  jobId: config.jobId ?? 'unknown',
+                  jobId: config.sessionId ?? config.jobId ?? 'unknown',
                   roleId,
                   model: modelName,
                   inputTokens: input,
@@ -471,7 +477,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
                 totalOutput += out;
                 tokenLedger.record({
                   ts: new Date().toISOString(),
-                  jobId: config.jobId ?? 'unknown',
+                  jobId: config.sessionId ?? config.jobId ?? 'unknown',
                   roleId,
                   model: modelName,
                   inputTokens: input,

@@ -7,7 +7,7 @@ import path from 'node:path';
 import { COMPANY_ROOT } from './file-reader.js';
 import { ActivityStream, type ActivityEvent } from './activity-stream.js';
 import { jobManager } from './job-manager.js';
-import { type WaveRoleStatus, eventTypeToJobStatus } from '../../../shared/types.js';
+import { type WaveRoleStatus, eventTypeToMessageStatus } from '../../../shared/types.js';
 
 /* ─── Find wave file ──────────────────────── */
 
@@ -148,8 +148,11 @@ export function updateFollowUpInWave(waveId: string, jobId: string, roleId: stri
     if (!data.roles) return;
 
     const newEvents = ActivityStream.readAll(jobId);
-    const doneEvent = newEvents.find(e => e.type === 'job:done' || e.type === 'job:error' || e.type === 'job:awaiting_input');
-    const status: WaveRoleStatus = doneEvent ? eventTypeToJobStatus(doneEvent.type) as WaveRoleStatus : 'running' as any;
+    const doneEvent = newEvents.find(e =>
+      e.type === 'msg:done' || e.type === 'msg:error' || e.type === 'msg:awaiting_input' ||
+      e.type === 'job:done' || e.type === 'job:error' || e.type === 'job:awaiting_input'
+    );
+    const status: WaveRoleStatus = doneEvent ? eventTypeToMessageStatus(doneEvent.type) as WaveRoleStatus : 'streaming';
 
     // Collect child jobs
     const childJobs: Array<{ roleId: string; roleName: string; jobId: string; status: string; events: ReturnType<typeof ActivityStream.readAll> }> = [];
@@ -158,8 +161,11 @@ export function updateFollowUpInWave(waveId: string, jobId: string, roleId: stri
         const childJobId = e.data.childJobId as string;
         const targetRoleId = (e.data.targetRoleId as string) ?? 'unknown';
         const childEvents = ActivityStream.readAll(childJobId);
-        const childDone = childEvents.find(ce => ce.type === 'job:done' || ce.type === 'job:error' || ce.type === 'job:awaiting_input');
-        const childStatus: WaveRoleStatus = childDone ? eventTypeToJobStatus(childDone.type) as WaveRoleStatus : 'unknown';
+        const childDone = childEvents.find(ce =>
+          ce.type === 'msg:done' || ce.type === 'msg:error' || ce.type === 'msg:awaiting_input' ||
+          ce.type === 'job:done' || ce.type === 'job:error' || ce.type === 'job:awaiting_input'
+        );
+        const childStatus: WaveRoleStatus = childDone ? eventTypeToMessageStatus(childDone.type) as WaveRoleStatus : 'unknown';
         childJobs.push({ roleId: targetRoleId, roleName: targetRoleId, jobId: childJobId, status: childStatus, events: childEvents });
       }
     }
@@ -189,7 +195,8 @@ function watchJobCompletion(waveId: string, jobId: string, roleId: string): void
   if (!job) return;
 
   const subscriber = (event: ActivityEvent) => {
-    if (event.type === 'job:done' || event.type === 'job:error' || event.type === 'job:awaiting_input') {
+    if (event.type === 'msg:done' || event.type === 'msg:error' || event.type === 'msg:awaiting_input' ||
+        event.type === 'job:done' || event.type === 'job:error' || event.type === 'job:awaiting_input') {
       updateFollowUpInWave(waveId, jobId, roleId);
       job.stream.unsubscribe(subscriber);
     }

@@ -238,7 +238,7 @@ export default function WaveCommandCenter({
               {/* Legend inline */}
               <div className="flex gap-x-3 ml-auto">
                 {[
-                  { label: 'running', color: '#FBBF24', dot: true },
+                  { label: 'streaming', color: '#FBBF24', dot: true },
                   { label: 'awaiting', color: '#F59E0B', dot: true },
                   { label: 'done', color: '#2E7D32', dot: false },
                   { label: 'waiting', color: '#888', dot: false },
@@ -288,7 +288,7 @@ export default function WaveCommandCenter({
                     color: selectedNode.status === 'awaiting_input' ? '#F59E0B' : selectedColor,
                   }}
                 >
-                  {selectedNode.status === 'running' ? 'Working' :
+                  {selectedNode.status === 'streaming' ? 'Working' :
                    selectedNode.status === 'done' ? 'Complete' :
                    selectedNode.status === 'error' ? 'Error' :
                    selectedNode.status === 'waiting' ? 'Waiting' :
@@ -314,7 +314,7 @@ export default function WaveCommandCenter({
                 <div className="text-[var(--terminal-text-muted)]">
                   {selectedNode.status === 'waiting'
                     ? 'Waiting for dispatch...'
-                    : selectedNode.status === 'running'
+                    : selectedNode.status === 'streaming'
                     ? 'Connecting to activity stream...'
                     : selectedNode.status === 'not-dispatched'
                     ? 'This role was not dispatched in this wave.'
@@ -340,7 +340,7 @@ export default function WaveCommandCenter({
                   onOpenKnowledgeDoc={onOpenKnowledgeDoc}
                 />
               ))}
-              {selectedNode?.status === 'running' && (
+              {selectedNode?.status === 'streaming' && (
                 <span className="inline-block w-2 h-4 bg-green-400 animate-pulse ml-0.5" />
               )}
             </div>

@@ -24,7 +24,9 @@ export interface AgentConfig {
   visitedRoles?: Set<string>; // Circular dispatch detection
   abortSignal?: AbortSignal;  // Abort signal for cancellation
   teamStatus?: TeamStatus;    // Current team member statuses
-  jobId?: string;             // Job ID for token tracking
+  sessionId?: string;         // D-014: Session ID for token tracking
+  /** @deprecated D-014: Use sessionId */
+  jobId?: string;             // Job ID for token tracking (deprecated)
   model?: string;             // LLM model name for cost tracking
   tokenLedger?: TokenLedger;  // Token usage ledger (optional)
   attachments?: ImageAttachment[];  // Image attachments for vision
@@ -169,7 +171,8 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
         depth: depth + 1,
         visitedRoles: new Set(visitedRoles), // Copy for parallel dispatch support
         abortSignal,
-        jobId: config.jobId,
+        sessionId: config.sessionId ?? config.jobId,
+        jobId: config.sessionId ?? config.jobId,
         model: config.model,
         tokenLedger: config.tokenLedger,
         onText: (text) => onText?.(`[${targetRoleId}] ${text}`),
@@ -210,7 +213,8 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
         depth: depth + 1,
         visitedRoles: new Set(visitedRoles),
         abortSignal,
-        jobId: config.jobId,
+        sessionId: config.sessionId ?? config.jobId,
+        jobId: config.sessionId ?? config.jobId,
         model: config.model,
         tokenLedger: config.tokenLedger,
         onText: (text) => onText?.(`[consult:${targetRoleId}] ${text}`),
@@ -288,7 +292,7 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
     // Record token usage
     config.tokenLedger?.record({
       ts: new Date().toISOString(),
-      jobId: config.jobId ?? 'unknown',
+      jobId: config.sessionId ?? config.jobId ?? 'unknown',
       roleId,
       model: config.model ?? 'unknown',
       inputTokens: response.usage.inputTokens,
@@ -452,7 +456,7 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
         totalOutput += supResponse.usage.outputTokens;
         config.tokenLedger?.record({
           ts: new Date().toISOString(),
-          jobId: config.jobId ?? 'unknown',
+          jobId: config.sessionId ?? config.jobId ?? 'unknown',
           roleId,
           model: config.model ?? 'unknown',
           inputTokens: supResponse.usage.inputTokens,
@@ -532,7 +536,7 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
           totalOutput += verifyResponse.usage.outputTokens;
           config.tokenLedger?.record({
             ts: new Date().toISOString(),
-            jobId: config.jobId ?? 'unknown',
+            jobId: config.sessionId ?? config.jobId ?? 'unknown',
             roleId,
             model: config.model ?? 'unknown',
             inputTokens: verifyResponse.usage.inputTokens,
@@ -578,7 +582,7 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
               totalOutput += summaryResponse.usage.outputTokens;
               config.tokenLedger?.record({
                 ts: new Date().toISOString(),
-                jobId: config.jobId ?? 'unknown',
+                jobId: config.sessionId ?? config.jobId ?? 'unknown',
                 roleId,
                 model: config.model ?? 'unknown',
                 inputTokens: summaryResponse.usage.inputTokens,
