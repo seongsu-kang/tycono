@@ -90,12 +90,23 @@ export interface WaveReplayRole {
   roleId: string;
   roleName: string;
   sessionId: string;
+  /** @deprecated server still sends jobId */
+  jobId?: string;
   status: WaveRoleStatus;
   events: ActivityEvent[];
-  childSessions: Array<{
+  childSessions?: Array<{
     roleId: string;
     roleName: string;
     sessionId: string;
+    status: WaveRoleStatus;
+    events: ActivityEvent[];
+  }>;
+  /** @deprecated server still sends childJobs */
+  childJobs?: Array<{
+    roleId: string;
+    roleName: string;
+    jobId?: string;
+    sessionId?: string;
     status: WaveRoleStatus;
     events: ActivityEvent[];
   }>;

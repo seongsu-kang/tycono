@@ -1081,18 +1081,19 @@ function buildReplayNodes(
       const isRunning = isMessageActive(r.status as any);
       nodes.set(r.roleId, {
         ...existing,
-        sessionId: r.sessionId ?? '',
+        sessionId: r.sessionId ?? r.jobId ?? '',
         status: (r.status as WaveNode['status']) || 'done',
         events: r.events,
         streamStatus: isRunning ? 'connecting' : 'done',
       });
     }
-    for (const c of r.childSessions) {
+    const children = r.childSessions ?? r.childJobs ?? [];
+    for (const c of children) {
       const child = nodes.get(c.roleId);
       if (child) {
         nodes.set(c.roleId, {
           ...child,
-          sessionId: c.sessionId ?? '', status: (c.status as WaveNode['status']) || 'done',
+          sessionId: c.sessionId ?? (c as any).jobId ?? '', status: (c.status as WaveNode['status']) || 'done',
           events: c.events, streamStatus: 'done',
         });
       }
