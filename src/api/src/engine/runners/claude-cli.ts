@@ -347,11 +347,8 @@ export class ClaudeCliRunner implements ExecutionRunner {
     cleanEnv.DISPATCH_API_URL = `http://localhost:${apiPort}`;
     cleanEnv.DISPATCH_SOURCE_ROLE = roleId;
     cleanEnv.DISPATCH_SUBORDINATES = subordinates.join(', ');
-    const parentId = config.sessionId ?? config.jobId;
-    if (parentId) {
-      cleanEnv.DISPATCH_PARENT_SESSION = parentId;
-      cleanEnv.DISPATCH_PARENT_JOB = parentId; // deprecated, kept for backward compat
-    }
+    cleanEnv.DISPATCH_PARENT_SESSION = config.sessionId;
+    cleanEnv.DISPATCH_PARENT_JOB = config.sessionId; // deprecated, kept for backward compat
     // dispatch 명령어 경로를 PATH에 추가하지 않고 절대 경로로 사용
     cleanEnv.DISPATCH_CMD = dispatchScript;
     cleanEnv.CONSULT_CMD = consultScript;
@@ -365,8 +362,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
     // Inject repo paths so agents never confuse repos
     cleanEnv.TYCONO_CODE_ROOT = codeRoot;
     cleanEnv.TYCONO_AKB_ROOT = companyRoot;
-    const sessionOrJobId = config.sessionId ?? config.jobId ?? 'none';
-    console.log(`[Runner] Spawning claude -p: role=${roleId}, model=${modelName}, maxTurns=${maxTurns}, sessionId=${sessionOrJobId}, cwd=${cwd}, subordinates=[${subordinates.join(',')}]`);
+    console.log(`[Runner] Spawning claude -p: role=${roleId}, model=${modelName}, maxTurns=${maxTurns}, sessionId=${config.sessionId}, cwd=${cwd}, subordinates=[${subordinates.join(',')}]`);
 
     const proc = spawn('claude', args, {
       cwd,
@@ -437,7 +433,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
                 totalOutput += out;
                 tokenLedger.record({
                   ts: new Date().toISOString(),
-                  sessionId: config.sessionId ?? config.jobId ?? 'unknown',
+                  sessionId: config.sessionId,
                   roleId,
                   model: modelName,
                   inputTokens: input,
@@ -477,7 +473,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
                 totalOutput += out;
                 tokenLedger.record({
                   ts: new Date().toISOString(),
-                  sessionId: config.sessionId ?? config.jobId ?? 'unknown',
+                  sessionId: config.sessionId,
                   roleId,
                   model: modelName,
                   inputTokens: input,

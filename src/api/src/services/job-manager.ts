@@ -268,7 +268,7 @@ class JobManager {
         readOnly: params.readOnly,
         maxTurns: limits.hardLimit,
         model,
-        jobId: job.id,
+        sessionId: job.sessionId ?? job.id,
         teamStatus,
         targetRoles: params.targetRoles,
         codeRoot: resolveCodeRoot(COMPANY_ROOT),

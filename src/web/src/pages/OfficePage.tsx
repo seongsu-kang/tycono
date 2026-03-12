@@ -475,7 +475,7 @@ export default function OfficePage({ importReq, onImportDone }: { importReq?: Im
 
     try {
       const resp = await api.execute({ type: 'assign', roleId, task, readOnly: isAsk });
-      const sessionId = resp.sessionId ?? resp.jobId ?? '';
+      const sessionId = resp.sessionId;
       const color = ROLE_COLORS[roleId] ?? '#666';
       const title = `${roleId.toUpperCase()} · ${role?.name ?? roleId}`;
       setExecMinimized(false);
@@ -715,7 +715,7 @@ export default function OfficePage({ importReq, onImportDone }: { importReq?: Im
       fireQuestTrigger({ type: 'wave_dispatched' });
       // D-014: Extract server-generated waveId and sessionIds
       const serverWaveId = resp.waveId ?? `wave-${Date.now()}`;
-      const serverSessionIds: string[] = resp.sessionIds ?? resp.jobIds ?? (resp.jobId ? [resp.jobId] : []);
+      const serverSessionIds: string[] = resp.sessionIds ?? [];
       // Use CEO's direct reports from org tree (not just c-level filter)
       const ceoDirectReports = orgRootId && orgNodes[orgRootId]
         ? orgNodes[orgRootId].children.map(id => roles.find(r => r.id === id)).filter((r): r is typeof roles[number] => !!r)

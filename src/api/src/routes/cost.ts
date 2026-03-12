@@ -80,7 +80,6 @@ costRouter.get('/jobs/:jobId', (req: Request, res: Response, next: NextFunction)
     }
 
     res.json({
-      sessionId: jobId, // D-014: alias (jobId often equals sessionId in legacy data)
       jobId,
       totalInputTokens: summary.totalInput,
       totalOutputTokens: summary.totalOutput,

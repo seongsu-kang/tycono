@@ -175,7 +175,7 @@ sessionsRouter.post('/:id/abort', (req, res) => {
     return;
   }
 
-  res.json({ ok: true, sessionId: req.params.id, jobId: job.id /* @deprecated D-014 */ });
+  res.json({ ok: true, sessionId: req.params.id });
 });
 
 /** POST /api/sessions/:id/reply — reply to awaiting_input job via session */
@@ -254,5 +254,5 @@ sessionsRouter.post('/:id/reply', (req, res) => {
     updateFollowUpForReply(session.waveId, session.roleId, oldJobId, newJob.id, req.params.id);
   }
 
-  res.json({ ok: true, sessionId: req.params.id, jobId: newJob.id /* @deprecated D-014 */ });
+  res.json({ ok: true, sessionId: req.params.id });
 });

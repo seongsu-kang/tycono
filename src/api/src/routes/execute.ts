@@ -237,7 +237,8 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
       addMessage(session.id, roleMsg, true);
     }
 
-    jsonResponse(res, 200, { sessionIds, jobIds, waveId });
+    // sessionIds always contains real session IDs — no ambiguity. jobIds removed from external response.
+    jsonResponse(res, 200, { sessionIds, waveId });
     return;
   }
 
@@ -253,28 +254,26 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
     return;
   }
 
-  // D-014: Create/find session for CEO assigns (not for dispatch child jobs)
-  let sessionId: string | undefined;
-  if (sourceRole === 'ceo' && !parentJobId) {
-    const session = createSession(roleId, {
-      mode: readOnly ? 'talk' : 'do',
-      source: waveId ? 'wave' : 'dispatch',
-      ...(waveId && { waveId }),
-    });
-    sessionId = session.id;
+  // D-014: Always create a session for every job (guarantees sessionId in response)
+  const sessionSource: 'wave' | 'dispatch' = waveId ? 'wave' : 'dispatch';
+  const session = createSession(roleId, {
+    mode: readOnly ? 'talk' : 'do',
+    source: parentJobId ? 'dispatch' : sessionSource,
+    ...(waveId && { waveId }),
+  });
+  const sessionId = session.id;
 
-    // Add CEO message
-    const ceoMsg: Message = {
-      id: `msg-${Date.now()}-ceo`,
-      from: 'ceo',
-      content: task,
-      type: readOnly ? 'conversation' : 'directive',
-      status: 'done',
-      timestamp: new Date().toISOString(),
-      attachments,
-    };
-    addMessage(session.id, ceoMsg);
-  }
+  // Add the initiator's message as the first message in the session
+  const ceoMsg: Message = {
+    id: `msg-${Date.now()}-ceo`,
+    from: 'ceo',
+    content: task,
+    type: readOnly ? 'conversation' : 'directive',
+    status: 'done',
+    timestamp: new Date().toISOString(),
+    attachments,
+  };
+  addMessage(session.id, ceoMsg);
 
   const job = jobManager.startJob({
     type: readOnly ? 'consult' : 'assign',
@@ -288,27 +287,25 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
   });
 
   // D-014: Add role message linked to job
-  if (sessionId) {
-    const roleMsg: Message = {
-      id: `msg-${Date.now() + 1}-role`,
-      from: 'role',
-      content: '',
-      type: 'conversation',
-      status: 'streaming',
-      timestamp: new Date().toISOString(),
-      jobId: job.id, // @deprecated D-014: use message-level tracking
-      readOnly: readOnly || undefined,
-    };
-    addMessage(sessionId, roleMsg, true);
-  }
+  const roleMsg: Message = {
+    id: `msg-${Date.now() + 1}-role`,
+    from: 'role',
+    content: '',
+    type: 'conversation',
+    status: 'streaming',
+    timestamp: new Date().toISOString(),
+    jobId: job.id, // @deprecated D-014: use message-level tracking
+    readOnly: readOnly || undefined,
+  };
+  addMessage(sessionId, roleMsg, true);
 
   // Follow-up: append this job to the wave JSON so it persists across navigation
   if (waveId) {
     appendFollowUpToWave(waveId, job.id, roleId, task, sessionId);
   }
 
-  // D-014: sessionId is the primary identifier. Falls back to job.id only when session creation is deferred.
-  jsonResponse(res, 200, { sessionId: sessionId ?? job.id, jobId: job.id /* @deprecated */, ...(waveId && { waveId }) });
+  // sessionId is always a real session — no ambiguity. jobId removed from external response.
+  jsonResponse(res, 200, { sessionId, ...(waveId && { waveId }) });
 }
 
 /* ─── Follow-up: wave tracking (delegated to wave-tracker service) ── */
@@ -964,7 +961,7 @@ function handleSessionMessage(
   }
 
   const handle = getRunner().execute(
-    { companyRoot: COMPANY_ROOT, roleId, task: fullTask, sourceRole: 'ceo', orgTree, readOnly, model: orgTree.nodes.get(roleId)?.model, attachments, teamStatus },
+    { companyRoot: COMPANY_ROOT, roleId, task: fullTask, sourceRole: 'ceo', orgTree, readOnly, model: orgTree.nodes.get(roleId)?.model, attachments, teamStatus, sessionId },
     {
       onText: (text) => {
         roleMsg.content += text;

@@ -200,6 +200,7 @@ engineRouter.post('/ask/:roleId', async (req: Request, res: Response, next: Next
         orgTree,
         readOnly: true,
         maxTurns: 5,
+        sessionId: `ask-${Date.now()}`,
       },
       {},
     );

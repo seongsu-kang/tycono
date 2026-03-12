@@ -35,10 +35,8 @@ export interface RunnerConfig {
   readOnly?: boolean;
   maxTurns?: number;
   model?: string;
-  /** D-014: Session ID for tracking. Preferred over jobId. */
-  sessionId?: string;
-  /** @deprecated D-014: Use sessionId. Kept for backward compat with token-ledger. */
-  jobId?: string;
+  /** D-014: Session ID for tracking (required — primary identifier for token ledger). */
+  sessionId: string;
   teamStatus?: TeamStatus;
   attachments?: ImageAttachment[];
   /** Selective dispatch scope — only these roles can be dispatched to */

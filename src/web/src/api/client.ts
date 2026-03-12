@@ -107,7 +107,7 @@ export const api = {
 
   // Execution (start only — monitoring/control via Session API)
   execute: (params: { type?: string; roleId?: string; task?: string; directive?: string; sourceRole?: string; readOnly?: boolean; targetRole?: string; targetRoles?: string[]; waveId?: string; attachments?: ImageAttachment[] }) =>
-    post<{ sessionId?: string; sessionIds?: string[]; waveId?: string; jobId?: string; jobIds?: string[] }>('/jobs', params),
+    post<{ sessionId: string; sessionIds?: string[]; waveId?: string }>('/jobs', params),
   saveWave: (params: { directive: string; sessionIds: string[]; waveId?: string }) =>
     post<{ ok: boolean; path: string }>('/waves/save', { ...params, jobIds: params.sessionIds }),
 

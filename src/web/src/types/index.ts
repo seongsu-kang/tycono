@@ -314,21 +314,6 @@ export interface ImportRequest {
   companyRoot: string;
 }
 
-export interface KnowledgeImportEvent {
-  type: 'scanning' | 'processing' | 'created' | 'done' | 'error';
-  path?: string;
-  fileCount?: number;
-  file?: string;
-  index?: number;
-  total?: number;
-  title?: string;
-  summary?: string;
-  imported?: number;
-  created?: number;
-  skipped?: number;
-  message?: string;
-}
-
 export interface ConnectAkbResult {
   ok: boolean;
   companyName: string;
