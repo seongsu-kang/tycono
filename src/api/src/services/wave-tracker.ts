@@ -50,11 +50,12 @@ export function appendFollowUpToWave(
     if (!data.roles) data.roles = [];
 
     // Add follow-up entry with running status
+    // D-014: sessionId is primary identifier; jobId kept for internal runtime tracking
     data.roles.push({
       roleId,
       roleName: roleId,
-      jobId,
-      sessionId,
+      sessionId: sessionId ?? jobId,
+      jobId, // @deprecated D-014: use sessionId
       status: 'running',
       events: [],
       childSessions: [],
@@ -116,11 +117,12 @@ export function updateFollowUpForReply(
       };
     } else {
       // No existing entry — create new
+      // D-014: sessionId is primary identifier
       data.roles.push({
         roleId,
         roleName: roleId,
-        jobId: newJobId,
-        sessionId,
+        sessionId: sessionId ?? newJobId,
+        jobId: newJobId, // @deprecated D-014: use sessionId
         status: 'running',
         events: [],
         childSessions: [],

@@ -32,7 +32,7 @@ export interface Message {
   events?: ActivityEvent[];
   /** Child sessions spawned by dispatch during this message's execution */
   dispatches?: DispatchLink[];
-  /** Internal job ID for runtime tracking (not exposed to UI) */
+  /** @deprecated D-014: Internal job ID for runtime tracking. Use sessionId for external references. */
   jobId?: string;
   /** True for consult/ask messages (read-only execution) */
   readOnly?: boolean;

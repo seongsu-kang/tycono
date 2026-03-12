@@ -46,19 +46,19 @@ function applyStoredTheme(): void {
 
 function AppShell() {
   const { initialized, loading, refetch } = useCompanyStatus();
-  const [importJob, setImportJob] = useState<ImportRequest | null>(null);
+  const [importReq, setImportReq] = useState<ImportRequest | null>(null);
 
   // Apply saved theme on app mount (before office loads)
   useEffect(() => { applyStoredTheme(); }, []);
 
   const handleWizardComplete = (job?: ImportRequest) => {
-    if (job) setImportJob(job);
+    if (job) setImportReq(job);
     refetch();
   };
 
   if (loading) return <BootScreen />;
   if (!initialized) return <OnboardingWizard onComplete={handleWizardComplete} />;
-  return <OfficePage importJob={importJob} onImportDone={() => setImportJob(null)} />;
+  return <OfficePage importReq={importReq} onImportDone={() => setImportReq(null)} />;
 }
 
 export default function App() {

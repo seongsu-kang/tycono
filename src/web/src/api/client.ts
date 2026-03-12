@@ -59,7 +59,7 @@ export const api = {
   getProject: (id: string) => get<ProjectDetail>(`/projects/${id}`),
   getStandups: () => get<Standup[]>('/operations/standups'),
   getWaves: () => get<Wave[]>('/operations/waves'),
-  getActiveWaves: () => get<{ waves: Array<{ id: string; directive: string; rootJobs: Array<{ sessionId: string; roleId: string; roleName: string; jobId: string }>; startedAt: number; sessionIds: string[] }> }>('/waves/active'),
+  getActiveWaves: () => get<{ waves: Array<{ id: string; directive: string; dispatches?: Array<{ sessionId: string; roleId: string; roleName: string }>; rootJobs?: Array<{ sessionId: string; roleId: string; roleName: string; jobId?: string }>; startedAt: number; sessionIds: string[] }> }>('/waves/active'),
   getWaveDetail: (id: string) => get<{ id: string; timestamp: string; replay: import('../types').WaveReplay }>(`/operations/waves/${id}`),
   patchWave: (id: string, data: { commitSha: string; commitMessage: string }) => patch_<{ ok: boolean }>(`/operations/waves/${id}`, data),
   getDecisions: () => get<Decision[]>('/operations/decisions'),
@@ -98,18 +98,18 @@ export const api = {
   /** SCA-011: Abort the active job linked to a session */
   abortSession: (sessionId: string) =>
     post<{ ok: boolean; jobId: string }>(`/sessions/${sessionId}/abort`, {}),
-  /** Abort a job directly by jobId (fallback when session is unavailable) */
+  /** @internal fallback — Abort a job directly by jobId (when session is unavailable) */
   abortJob: (jobId: string) =>
     post<{ ok: boolean; jobId: string }>(`/jobs/${jobId}/abort`, {}),
   /** SCA-011: Reply to an awaiting_input job via session */
   replyToSession: (sessionId: string, message: string, attachments?: ImageAttachment[]) =>
     post<{ ok: boolean; jobId: string; sessionId: string }>(`/sessions/${sessionId}/reply`, { message, ...(attachments && { attachments }) }),
 
-  // Jobs (start only — monitoring/control via Session API)
-  startJob: (params: { type?: string; roleId?: string; task?: string; directive?: string; sourceRole?: string; readOnly?: boolean; targetRole?: string; targetRoles?: string[]; waveId?: string; attachments?: ImageAttachment[] }) =>
+  // Execution (start only — monitoring/control via Session API)
+  execute: (params: { type?: string; roleId?: string; task?: string; directive?: string; sourceRole?: string; readOnly?: boolean; targetRole?: string; targetRoles?: string[]; waveId?: string; attachments?: ImageAttachment[] }) =>
     post<{ jobId: string; jobIds?: string[]; waveId?: string; sessionId?: string; sessionIds?: string[] }>('/jobs', params),
-  saveWave: (params: { directive: string; jobIds: string[]; waveId?: string; sessionIds?: string[] }) =>
-    post<{ ok: boolean; path: string }>('/waves/save', params),
+  saveWave: (params: { directive: string; sessionIds: string[]; waveId?: string }) =>
+    post<{ ok: boolean; path: string }>('/waves/save', { ...params, jobIds: params.sessionIds }),
 
   // Setup / Onboarding
   getStatus: () => get<CompanyStatus>('/status'),

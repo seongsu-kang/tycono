@@ -27,14 +27,14 @@ export interface ProViewProps {
   /* Data */
   roles: Role[];
   roleStatuses: Record<string, string>;
-  activeExecs: { roleId: string; task: string; jobId?: string }[];
+  activeExecs: { roleId: string; task: string; sessionId?: string }[];
   waves: Wave[];
   knowledgeDocs: KnowledgeDoc[];
   sessions: Session[];
   roleLevels: RoleLevelData;
   companyName: string;
   getAppearance: (roleId: string) => CharacterAppearance | undefined;
-  waveCenterWaves: Array<{ id: string; directive: string; rootJobs: Array<{ sessionId: string; roleId: string; roleName: string; jobId?: string }>; startedAt: number }>;
+  waveCenterWaves: Array<{ id: string; directive: string; rootDispatches: Array<{ sessionId: string; roleId: string; roleName: string }>; startedAt: number }>;
 
   /* Profile panel — rendered in right column when open.
      Receives a close callback so the panel × button can dismiss it. */
@@ -59,7 +59,7 @@ export default function ProView({
   const [showProfile, setShowProfile] = useState(false);
 
   const runningWaves = waveCenterWaves.filter(w =>
-    w.rootJobs.some(j => {
+    w.rootDispatches.some(j => {
       const s = roleStatuses[j.roleId];
       return s === 'working' || s === 'thinking';
     }),
@@ -140,10 +140,10 @@ export default function ProView({
               }}>LIVE</span>
             </div>
             <div className="text-[9px]" style={{ color: 'var(--terminal-text-muted)' }}>
-              {runningWaves[0].rootJobs.filter(j => {
+              {runningWaves[0].rootDispatches.filter(j => {
                 const s = roleStatuses[j.roleId];
                 return s === 'working' || s === 'thinking';
-              }).length}/{runningWaves[0].rootJobs.length} roles working
+              }).length}/{runningWaves[0].rootDispatches.length} roles working
             </div>
           </button>
         )}
@@ -241,7 +241,7 @@ export default function ProView({
                 const isActive = channel.type === 'role' && channel.roleId === exec.roleId;
                 return (
                   <button
-                    key={exec.jobId ?? exec.roleId}
+                    key={exec.sessionId ?? exec.roleId}
                     onClick={() => onChannelChange({ type: 'role', roleId: exec.roleId })}
                     className="flex items-center gap-2 w-full px-2 py-1.5 rounded text-left hover:opacity-80 transition-all"
                     style={{
@@ -464,7 +464,7 @@ function NavTile({ icon, label, active, badge, live, onClick }: {
 
 export function ProDashboard({ roles, roleStatuses, activeExecs, waves, knowledgeDocs, roleLevels, getAppearance, onRoleClick, onWaveClick, onKnowledgeClick }: {
   roles: Role[]; roleStatuses: Record<string, string>;
-  activeExecs: { roleId: string; task: string; jobId?: string }[];
+  activeExecs: { roleId: string; task: string; sessionId?: string }[];
   waves: Wave[]; knowledgeDocs: KnowledgeDoc[];
   roleLevels: RoleLevelData;
   getAppearance: (roleId: string) => CharacterAppearance | undefined;

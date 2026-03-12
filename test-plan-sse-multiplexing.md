@@ -35,7 +35,7 @@
   - 이후 child role의 wave:event 정상 수신
 - **결과**: ✅ Pass
   - 3개 wave:role-attached 이벤트 수신 (cto, data-analyst, qa)
-  - 스키마: `{ sessionId, roleId, jobId, parentJobId? }` (문서와 약간 다름)
+  - 스키마: `{ sessionId, roleId, parentSessionId? }` (문서와 약간 다름)
   - Child role (qa) 이벤트 waveSeq 42에서 정상 수신
 
 ### TC-003: Wave 완료 시 wave:done 이벤트
@@ -99,7 +99,7 @@
   - 에러 메시지 포함
 - **결과**: ✅ Pass
   - HTTP 200 응답이지만 JSON 에러 메시지 반환
-  - `{"error":"No jobs found for wave: invalid-wave-id"}`
+  - `{"error":"No sessions found for wave: invalid-wave-id"}`
 
 ### TC-009: WaveStreamEnvelope 스키마 검증
 - **전제 조건**: Wave 실행 중

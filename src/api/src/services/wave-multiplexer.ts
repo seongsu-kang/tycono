@@ -15,6 +15,7 @@ export interface WaveStreamEnvelope {
 }
 
 interface AttachedJob {
+  /** @deprecated D-014: use sessionId */
   jobId: string;
   sessionId: string;
   roleId: string;
@@ -263,6 +264,9 @@ class WaveMultiplexer {
   getActiveWaves(): Array<{
     id: string;
     directive: string;
+    /** D-014: prefer dispatches over rootJobs */
+    dispatches: Array<{ sessionId: string; roleId: string; roleName: string; jobId: string }>;
+    /** @deprecated D-014: use dispatches */
     rootJobs: Array<{ sessionId: string; roleId: string; roleName: string; jobId: string }>;
     startedAt: number;
     sessionIds: string[];
@@ -270,6 +274,7 @@ class WaveMultiplexer {
     const result: Array<{
       id: string;
       directive: string;
+      dispatches: Array<{ sessionId: string; roleId: string; roleName: string; jobId: string }>;
       rootJobs: Array<{ sessionId: string; roleId: string; roleName: string; jobId: string }>;
       startedAt: number;
       sessionIds: string[];
@@ -304,7 +309,7 @@ class WaveMultiplexer {
         .map(j => j.sessionId)
         .filter((s): s is string => !!s);
 
-      result.push({ id: waveId, directive, rootJobs, startedAt, sessionIds });
+      result.push({ id: waveId, directive, dispatches: rootJobs, rootJobs, startedAt, sessionIds });
     }
 
     return result;

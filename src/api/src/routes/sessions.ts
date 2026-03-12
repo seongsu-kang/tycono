@@ -108,6 +108,7 @@ sessionsRouter.get('/:id/stream', (req, res) => {
   };
 
   // If no job found, try to replay from the session's latest jobId in messages
+  // @deprecated D-014: use sessionId — message.jobId is legacy linkage
   const jobId = job?.id ?? session.messages.filter(m => m.jobId).pop()?.jobId;
 
   if (jobId) {
@@ -174,7 +175,7 @@ sessionsRouter.post('/:id/abort', (req, res) => {
     return;
   }
 
-  res.json({ ok: true, jobId: job.id });
+  res.json({ ok: true, sessionId: req.params.id, jobId: job.id /* @deprecated D-014 */ });
 });
 
 /** POST /api/sessions/:id/reply — reply to awaiting_input job via session */
@@ -243,7 +244,7 @@ sessionsRouter.post('/:id/reply', (req, res) => {
     type: 'conversation',
     status: 'streaming',
     timestamp: new Date().toISOString(),
-    jobId: newJob.id,
+    jobId: newJob.id, // @deprecated D-014: use sessionId for tracking
   };
   addMessage(req.params.id, roleMsg, true);
 
@@ -253,5 +254,5 @@ sessionsRouter.post('/:id/reply', (req, res) => {
     updateFollowUpForReply(session.waveId, session.roleId, oldJobId, newJob.id, req.params.id);
   }
 
-  res.json({ ok: true, jobId: newJob.id, sessionId: req.params.id });
+  res.json({ ok: true, sessionId: req.params.id, jobId: newJob.id /* @deprecated D-014 */ });
 });

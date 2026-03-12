@@ -108,7 +108,7 @@ export default function EventRow({ event, isThinkingCollapsed, onToggleThinking,
     case 'dispatch:start': {
       const targetRoleId = event.data.targetRoleId as string ?? event.data.roleId as string ?? '';
       const task = event.data.task as string ?? '';
-      const childSessionId = (event.data.childSessionId ?? event.data.childJobId) as string;
+      const childSessionId = event.data.childSessionId as string;
       const targetColor = ROLE_COLORS[targetRoleId] ?? '#888';
       return (
         <div

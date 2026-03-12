@@ -34,7 +34,7 @@
 - **결과**: ✅ Pass
 - **검증 내용**:
   - 3개 wave:role-attached 이벤트 수신 (cto, data-analyst, qa)
-  - Payload: `{ sessionId, roleId, jobId, parentJobId? }`
+  - Payload: `{ sessionId, roleId, parentSessionId? }`
   - Child role (qa) 이벤트가 waveSeq 42부터 정상 멀티플렉싱됨
 - **참고**: 아키텍처 문서의 스키마(`{ sessionId, roleId, parentRoleId }`)와 약간 다르지만 기능 동일
 
@@ -69,7 +69,7 @@
 - **결과**: ✅ Pass
 - **검증 내용**:
   - `GET /api/waves/invalid-wave-id/stream`
-  - 응답: `{"error":"No jobs found for wave: invalid-wave-id"}`
+  - 응답: `{"error":"No sessions found for wave: invalid-wave-id"}`
   - 적절한 에러 메시지 반환 (HTTP 200이지만 JSON 에러)
 
 ### TC-009: WaveStreamEnvelope 스키마 검증
@@ -101,8 +101,8 @@
 
 ### 1. wave:role-attached 스키마 차이
 - **문서**: `{ sessionId, roleId, parentRoleId }`
-- **실제**: `{ sessionId, roleId, jobId, parentJobId? }`
-- **영향**: 없음 (기능 동일, jobId가 더 유용할 수 있음)
+- **실제**: `{ sessionId, roleId, parentSessionId? }`
+- **영향**: 없음 (기능 동일)
 - **권장**: 아키텍처 문서 업데이트 또는 구현 통일 고려
 
 ### 2. 에러 응답 형식

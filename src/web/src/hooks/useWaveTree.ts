@@ -7,7 +7,6 @@ import { useWaveStream } from './useWaveStream';
 
 export interface WaveNode {
   sessionId: string;
-  jobId?: string;
   roleId: string;
   roleName: string;
   children: string[];
@@ -37,7 +36,7 @@ interface StreamState {
 }
 
 export default function useWaveTree(
-  rootJobs: Array<{ sessionId: string; roleId: string; roleName?: string; jobId?: string }>,
+  rootDispatches: Array<{ sessionId: string; roleId: string; roleName?: string }>,
   orgNodes: Record<string, OrgNode>,
   rootRoleId: string,
   /** SSE-005: When provided, use multiplexed wave stream instead of per-role SSE */
@@ -97,9 +96,9 @@ export default function useWaveTree(
   // Build initial tree from org nodes
   useEffect(() => {
     // Skip rebuild if static nodes were injected (replay mode)
-    // Clear flag when active wave starts (rootJobs non-empty)
+    // Clear flag when active wave starts (rootDispatches non-empty)
     if (injectedRef.current) {
-      if (rootJobs.length > 0) {
+      if (rootDispatches.length > 0) {
         injectedRef.current = false;
       } else {
         return;
@@ -110,12 +109,11 @@ export default function useWaveTree(
     if (!result) return;
     const { initial, allRoles } = result;
 
-    // Map root jobs to their role nodes
-    for (const rj of rootJobs) {
+    // Map root dispatches to their role nodes
+    for (const rj of rootDispatches) {
       const node = initial.get(rj.roleId);
       if (node) {
         node.sessionId = rj.sessionId;
-        node.jobId = rj.jobId;
         node.status = 'streaming';
         node.streamStatus = 'connecting';
       }
@@ -133,10 +131,10 @@ export default function useWaveTree(
       return prev;
     });
 
-    if (rootJobs.length > 0) {
-      setSelectedRoleId(prev => prev ?? rootJobs[0].roleId);
+    if (rootDispatches.length > 0) {
+      setSelectedRoleId(prev => prev ?? rootDispatches[0].roleId);
     }
-  }, [rootJobs, orgNodes, rootRoleId, buildOrgTree]);
+  }, [rootDispatches, orgNodes, rootRoleId, buildOrgTree]);
 
   const toggleCheck = useCallback((roleId: string) => {
     setCheckedRoles(prev => {
@@ -248,7 +246,7 @@ export default function useWaveTree(
 
                     const updated = { ...node, events: [...node.events, event] };
 
-                    if (event.type === 'dispatch:start' && (event.data.childSessionId || event.data.childJobId)) {
+                    if (event.type === 'dispatch:start' && event.data.childSessionId) {
                       const targetRoleId = (event.data.targetRoleId as string) ?? (event.data.roleId as string);
                       const childSessionId = event.data.childSessionId as string | undefined;
 
@@ -327,12 +325,12 @@ export default function useWaveTree(
   const usingMultiplexRef = useRef(false);
   const orgNodesRef = useRef(orgNodes);
   orgNodesRef.current = orgNodes;
-  const rootJobsRef = useRef(rootJobs);
-  rootJobsRef.current = rootJobs;
+  const rootDispatchesRef = useRef(rootDispatches);
+  rootDispatchesRef.current = rootDispatches;
 
   // Multiplexed wave stream effect — depends only on waveId
   useEffect(() => {
-    if (!waveId || rootJobsRef.current.length === 0) return;
+    if (!waveId || rootDispatchesRef.current.length === 0) return;
 
     usingMultiplexRef.current = true;
     connectWaveStream(waveId, setNodes, orgNodesRef.current);
@@ -345,11 +343,11 @@ export default function useWaveTree(
 
   // Fallback: per-role SSE (for cases without waveId, e.g. legacy)
   useEffect(() => {
-    if (waveId || rootJobs.length === 0) return;
+    if (waveId || rootDispatches.length === 0) return;
 
     usingMultiplexRef.current = false;
     const sessionIds = new Set<string>();
-    for (const rj of rootJobs) {
+    for (const rj of rootDispatches) {
       sessionIds.add(rj.sessionId);
       connectStream(rj.sessionId, rj.roleId);
     }
@@ -365,7 +363,7 @@ export default function useWaveTree(
       }
       startedSessionsRef.current.clear();
     };
-  }, [rootJobs, connectStream, waveId]);
+  }, [rootDispatches, connectStream, waveId]);
 
   // Progress
   const progress = (() => {

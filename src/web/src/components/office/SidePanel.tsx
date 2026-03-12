@@ -15,12 +15,11 @@ interface Props {
   onFireRole?: (roleId: string, roleName: string) => void;
   terminalWidth?: number;
   // Live activity
-  activeJobId?: string;
   activeSessionId?: string;
   activeTask?: string;
   isWorking?: boolean;
-  jobStartedAt?: string;
-  onStopJob?: (jobId: string) => void;
+  startedAt?: string;
+  onAbortSession?: (sessionId: string) => void;
   // Inline chat
   sessions: Session[];
   streamingSessionId: string | null;
@@ -62,7 +61,7 @@ const fmtElapsed = (seconds: number) => `${Math.floor(seconds / 60)}:${String(se
 
 export default function SidePanel({
   role, allRoles, recentActivity, onClose, onFireRole, terminalWidth = 0,
-  activeJobId, activeSessionId, activeTask, isWorking, jobStartedAt, onStopJob,
+  activeSessionId, activeTask, isWorking, startedAt, onAbortSession,
   sessions, streamingSessionId, onCreateSessionSilent, onSendMessage, onFocusTerminal, onCustomize, onUpdateRole, appearance, relationships, roleLevel, onMaximize,
 }: Props) {
   const [panelW, setPanelW] = useState(DEFAULT_WIDTH);
@@ -96,13 +95,13 @@ export default function SidePanel({
   // Elapsed timer
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
-    if (!isWorking || !jobStartedAt) { setElapsed(0); return; }
-    const start = new Date(jobStartedAt).getTime();
+    if (!isWorking || !startedAt) { setElapsed(0); return; }
+    const start = new Date(startedAt).getTime();
     const tick = () => setElapsed(Math.floor((Date.now() - start) / 1000));
     tick();
     const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
-  }, [isWorking, jobStartedAt]);
+  }, [isWorking, startedAt]);
 
   const hasTerminal = terminalWidth > 0;
   const panelRight = hasTerminal ? terminalWidth : 0;
@@ -367,9 +366,9 @@ export default function SidePanel({
                   >
                     Open chat ↗
                   </button>
-                  {activeJobId && onStopJob && (
+                  {activeSessionId && onAbortSession && (
                     <button
-                      onClick={() => onStopJob(activeJobId)}
+                      onClick={() => onAbortSession(activeSessionId)}
                       className="text-[10px] px-2 py-0.5 rounded cursor-pointer font-semibold transition-colors"
                       style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}
                     >
@@ -385,7 +384,7 @@ export default function SidePanel({
           )}
 
           {/* ─── ACTIVITY COMPACT (working) ─── */}
-          {isWorking && activeJobId && activitySummary && (
+          {isWorking && activeSessionId && activitySummary && (
             <div className="px-4 py-2.5 shrink-0" style={{ borderBottom: '1px solid var(--terminal-border)' }}>
               <div className="flex items-center justify-between mb-1.5">
                 <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--terminal-text-secondary)' }}>Activity</div>

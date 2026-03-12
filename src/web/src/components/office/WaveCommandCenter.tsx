@@ -14,22 +14,22 @@ const ROLE_COLORS: Record<string, string> = {
 
 interface Props {
   directive: string;
-  rootJobs: Array<{ sessionId: string; roleId: string; roleName: string; jobId?: string }>;
+  rootDispatches: Array<{ sessionId: string; roleId: string; roleName: string }>;
   orgNodes: Record<string, OrgNode>;
   rootRoleId: string;
   waveId?: string;
   onClose: () => void;
   onMinimize: () => void;
   onDone?: () => void;
-  onSave?: (jobIds: string[]) => Promise<void>;
+  onSave?: (sessionIds: string[]) => Promise<void>;
   onOpenKnowledgeDoc?: (docId: string) => void;
 }
 
 export default function WaveCommandCenter({
-  directive, rootJobs, orgNodes, rootRoleId, waveId,
+  directive, rootDispatches, orgNodes, rootRoleId, waveId,
   onClose, onMinimize, onDone, onOpenKnowledgeDoc, onSave,
 }: Props) {
-  const { nodes, selectedRoleId, selectNode, progress, allDone, connectStream } = useWaveTree(rootJobs, orgNodes, rootRoleId, waveId);
+  const { nodes, selectedRoleId, selectNode, progress, allDone, connectStream } = useWaveTree(rootDispatches, orgNodes, rootRoleId, waveId);
   const [elapsed, setElapsed] = useState(0);
   const [collapsedThinking, setCollapsedThinking] = useState<Set<number>>(new Set());
   const [replyText, setReplyText] = useState('');
@@ -43,15 +43,15 @@ export default function WaveCommandCenter({
     if (!onSave) return;
     setSaving(true);
     try {
-      const jobIds = rootJobs.map(j => j.jobId).filter((id): id is string => !!id);
-      await onSave(jobIds);
+      const sessionIds = rootDispatches.map(j => j.sessionId).filter(Boolean);
+      await onSave(sessionIds);
     } catch (err) {
       console.error('Save failed:', err);
     } finally {
       setSaving(false);
       onClose();
     }
-  }, [onSave, rootJobs, onClose]);
+  }, [onSave, rootDispatches, onClose]);
 
   const handleReply = useCallback(async () => {
     if (!selectedRoleId || !replyText.trim()) return;
@@ -72,13 +72,10 @@ export default function WaveCommandCenter({
 
   const handleForceStop = useCallback(async (roleId: string) => {
     const node = nodes.get(roleId);
-    if (!node) return;
+    if (!node?.sessionId) return;
     try {
-      if (node.sessionId) await api.abortSession(node.sessionId);
-      else if (node.jobId) await api.abortJob(node.jobId);
-    } catch {
-      if (node.jobId) try { await api.abortJob(node.jobId); } catch { /* ignore */ }
-    }
+      await api.abortSession(node.sessionId);
+    } catch { /* ignore */ }
   }, [nodes]);
 
   const handleStopAll = useCallback(async () => {
@@ -86,10 +83,7 @@ export default function WaveCommandCenter({
       if (!isWaveNodeActive(node.status)) continue;
       try {
         if (node.sessionId) await api.abortSession(node.sessionId);
-        else if (node.jobId) await api.abortJob(node.jobId);
-      } catch {
-        if (node.jobId) try { await api.abortJob(node.jobId); } catch { /* ignore */ }
-      }
+      } catch { /* ignore */ }
     }
   }, [nodes]);
 
@@ -330,7 +324,7 @@ export default function WaveCommandCenter({
                   onNavigateToSession={(_childSessionId) => {
                     // Find dispatch event to determine target role
                     const dispatchEvt = selectedNode?.events.find(e =>
-                      e.type === 'dispatch:start' && (e.data.childSessionId ?? e.data.childJobId) === _childSessionId
+                      e.type === 'dispatch:start' && e.data.childSessionId === _childSessionId
                     );
                     const targetRole = dispatchEvt?.data.targetRoleId as string | undefined;
                     if (targetRole && nodes.has(targetRole)) {

@@ -16,7 +16,7 @@ const ROLE_COLORS: Record<string, string> = {
 interface ActiveWave {
   id: string;
   directive: string;
-  rootJobs: Array<{ sessionId: string; roleId: string; roleName: string; jobId?: string }>;
+  rootDispatches: Array<{ sessionId: string; roleId: string; roleName: string }>;
   startedAt: number;
   sessionIds?: string[];
 }
@@ -38,7 +38,7 @@ interface Props {
   onDispatch: (directive: string, targetRoles?: string[], attachments?: ImageAttachment[]) => void;
   onClose: () => void;
   onDone?: () => void;
-  onSave?: (directive: string, jobIds: string[], extra?: { waveId?: string; sessionIds?: string[] }) => Promise<void>;
+  onSave?: (directive: string, sessionIds: string[], extra?: { waveId?: string; sessionIds?: string[] }) => Promise<void>;
   onOpenKnowledgeDoc?: (docId: string) => void;
   onRefreshWaves?: () => void;
   terminalWidth?: number;
@@ -70,12 +70,12 @@ export default function WaveCenter({
 
   // Stable empty array to avoid re-renders when no active wave
   const emptyRootJobs = useMemo<Array<{ sessionId: string; roleId: string; roleName?: string }>>(() => [], []);
-  const rootJobs = currentActiveWave?.rootJobs ?? emptyRootJobs;
+  const rootDispatches = currentActiveWave?.rootDispatches ?? emptyRootJobs;
 
   // Unified wave tree — works for active waves and as base for replay
   // SSE-005: Pass waveId to enable multiplexed SSE (1 connection per wave)
   const waveTree = useWaveTree(
-    rootJobs,
+    rootDispatches,
     orgNodes,
     rootRoleId,
     currentActiveWave?.id ?? null,
@@ -346,7 +346,7 @@ export default function WaveCenter({
       } else {
         // Start new job (follow-up for done, replay, or not-dispatched)
         const waveId = currentActiveWave?.id ?? replayData?.waveId ?? replayData?.id;
-        const resp = await api.startJob({ type: 'assign', roleId: waveTree.selectedRoleId, task: replyText.trim(), ...(waveId && { waveId }), ...(atts && { attachments: atts }) });
+        const resp = await api.execute({ type: 'assign', roleId: waveTree.selectedRoleId, task: replyText.trim(), ...(waveId && { waveId }), ...(atts && { attachments: atts }) });
         setReplyText('');
         setAttachments([]);
         if (resp.sessionId) {
@@ -362,14 +362,10 @@ export default function WaveCenter({
 
   const handleForceStop = useCallback(async (roleId: string) => {
     const node = waveTree.nodes.get(roleId);
-    if (!node) return;
+    if (!node?.sessionId) return;
     try {
-      if (node.sessionId) await api.abortSession(node.sessionId);
-      else if (node.jobId) await api.abortJob(node.jobId);
-    } catch {
-      // Fallback: try jobId if session abort failed
-      if (node.jobId) try { await api.abortJob(node.jobId); } catch { /* ignore */ }
-    }
+      await api.abortSession(node.sessionId);
+    } catch { /* ignore */ }
   }, [waveTree.nodes]);
 
   const handleStopAll = useCallback(async () => {
@@ -377,10 +373,7 @@ export default function WaveCenter({
       if (!isWaveNodeActive(node.status)) continue;
       try {
         if (node.sessionId) await api.abortSession(node.sessionId);
-        else if (node.jobId) await api.abortJob(node.jobId);
-      } catch {
-        if (node.jobId) try { await api.abortJob(node.jobId); } catch { /* ignore */ }
-      }
+      } catch { /* ignore */ }
     }
   }, [waveTree.nodes]);
 
@@ -419,16 +412,16 @@ export default function WaveCenter({
       onDone?.();
       // Auto-save wave to disk (prevents disappearing waves)
       if (onSave) {
-        const jobIds = currentActiveWave.rootJobs.map(r => r.jobId).filter((id): id is string => !!id);
-        onSave(currentActiveWave.directive, jobIds, { waveId: currentActiveWave.id, sessionIds: currentActiveWave.sessionIds }).catch(() => {});
+        const sessionIds = currentActiveWave.rootDispatches.map(r => r.sessionId).filter(Boolean);
+        onSave(currentActiveWave.directive, sessionIds, { waveId: currentActiveWave.id, sessionIds: currentActiveWave.sessionIds }).catch(() => {});
       }
     }
   }, [waveTree.allDone, currentActiveWave, onDone, onSave, fetchCodeGit, replayData, replayLoading]);
 
   const handleSave = useCallback(async () => {
     if (!onSave || !currentActiveWave) return;
-    const jobIds = currentActiveWave.rootJobs.map(r => r.jobId).filter((id): id is string => !!id);
-    await onSave(currentActiveWave.directive, jobIds, { waveId: currentActiveWave.id, sessionIds: currentActiveWave.sessionIds });
+    const sessionIds = currentActiveWave.rootDispatches.map(r => r.sessionId).filter(Boolean);
+    await onSave(currentActiveWave.directive, sessionIds, { waveId: currentActiveWave.id, sessionIds: currentActiveWave.sessionIds });
   }, [onSave, currentActiveWave]);
 
   const toggleThinking = (seq: number) => {
@@ -611,7 +604,7 @@ export default function WaveCenter({
                         <span className="text-[var(--terminal-text-secondary)] whitespace-pre-wrap">{currentDirective}</span>
                         {currentActiveWave && (
                           <div className="text-[9px] text-[var(--terminal-text-muted)] mt-1">
-                            dispatched {fmtTime(elapsed)} ago to {currentActiveWave.rootJobs.length} role{currentActiveWave.rootJobs.length !== 1 ? 's' : ''}
+                            dispatched {fmtTime(elapsed)} ago to {currentActiveWave.rootDispatches.length} role{currentActiveWave.rootDispatches.length !== 1 ? 's' : ''}
                           </div>
                         )}
                       </div>
@@ -777,7 +770,7 @@ export default function WaveCenter({
                         onToggleThinking={() => toggleThinking(event.seq)}
                         onNavigateToSession={(childSessionId) => {
                           for (const [, node] of waveTree.nodes) {
-                            if (node.events.some(e => (e.data.childSessionId ?? e.data.childJobId) === childSessionId)) {
+                            if (node.events.some(e => e.data.childSessionId === childSessionId)) {
                               waveTree.selectNode(node.roleId);
                               return;
                             }
@@ -952,7 +945,7 @@ export default function WaveCenter({
                         </span>
                       </div>
                       <div className="text-[9px] text-[var(--terminal-text-muted)] mt-0.5 pl-3.5">
-                        {w.rootJobs.length} role{w.rootJobs.length !== 1 ? 's' : ''}
+                        {w.rootDispatches.length} role{w.rootDispatches.length !== 1 ? 's' : ''}
                       </div>
                     </button>
                   ))}
@@ -1081,20 +1074,19 @@ function buildReplayNodes(
       const isRunning = isMessageActive(r.status as any);
       nodes.set(r.roleId, {
         ...existing,
-        sessionId: r.sessionId ?? r.jobId ?? '',
+        sessionId: r.sessionId ?? '',
         status: (r.status as WaveNode['status']) || 'done',
         events: r.events,
         streamStatus: isRunning ? 'connecting' : 'done',
       });
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const children = r.childSessions ?? (r as any).childJobs ?? [];
+    const children = r.childSessions ?? [];
     for (const c of children) {
       const child = nodes.get(c.roleId);
       if (child) {
         nodes.set(c.roleId, {
           ...child,
-          sessionId: c.sessionId ?? (c as any).jobId ?? '', status: (c.status as WaveNode['status']) || 'done',
+          sessionId: c.sessionId ?? '', status: (c.status as WaveNode['status']) || 'done',
           events: c.events, streamStatus: 'done',
         });
       }

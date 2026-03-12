@@ -232,12 +232,12 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
         type: 'conversation',
         status: 'streaming',
         timestamp: new Date().toISOString(),
-        jobId: job.id,
+        jobId: job.id, // @deprecated D-014: use message-level tracking
       };
       addMessage(session.id, roleMsg, true);
     }
 
-    jsonResponse(res, 200, { jobIds, waveId, sessionIds });
+    jsonResponse(res, 200, { sessionIds, jobIds, waveId });
     return;
   }
 
@@ -296,7 +296,7 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
       type: 'conversation',
       status: 'streaming',
       timestamp: new Date().toISOString(),
-      jobId: job.id,
+      jobId: job.id, // @deprecated D-014: use message-level tracking
       readOnly: readOnly || undefined,
     };
     addMessage(sessionId, roleMsg, true);
@@ -307,7 +307,7 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
     appendFollowUpToWave(waveId, job.id, roleId, task, sessionId);
   }
 
-  jsonResponse(res, 200, { jobId: job.id, ...(sessionId && { sessionId }), ...(waveId && { waveId }) });
+  jsonResponse(res, 200, { sessionId: sessionId ?? job.id, jobId: job.id, ...(waveId && { waveId }) });
 }
 
 /* ─── Follow-up: wave tracking (delegated to wave-tracker service) ── */

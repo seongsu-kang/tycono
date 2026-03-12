@@ -59,7 +59,7 @@ type PanelState =
 
 /* ─── Page ───────────────────────────────── */
 
-export default function OfficePage({ importJob, onImportDone }: { importJob?: ImportRequest | null; onImportDone?: () => void }) {
+export default function OfficePage({ importReq, onImportDone }: { importReq?: ImportRequest | null; onImportDone?: () => void }) {
   const [roles, setRoles] = useState<Role[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [standups, setStandups] = useState<Standup[]>([]);
@@ -75,20 +75,20 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
 
   /* Phase 2: Execution state — session-centric */
   const [assignModal, setAssignModal] = useState<{ roleId: string; roleName: string; mode: 'assign' | 'ask' } | null>(null);
-  const [jobStack, setJobStack] = useState<Array<{ sessionId: string; jobId: string; title: string; color: string }>>([]);
+  const [execStack, setExecStack] = useState<Array<{ sessionId: string; jobId: string; title: string; color: string }>>([]);
   const [showWaveModal, setShowWaveModal] = useState(false);
   const [showWaveCenter, setShowWaveCenter] = useState(false);
-  const [waveCenterWaves, setWaveCenterWaves] = useState<Array<{ id: string; directive: string; rootJobs: Array<{ sessionId: string; roleId: string; roleName: string; jobId?: string }>; startedAt: number; sessionIds?: string[] }>>([]);
-  const [waveJobs, setWaveJobs] = useState<Array<{ sessionId: string; roleId: string; roleName: string; jobId?: string }>>([]);
+  const [waveCenterWaves, setWaveCenterWaves] = useState<Array<{ id: string; directive: string; rootDispatches: Array<{ sessionId: string; roleId: string; roleName: string }>; startedAt: number; sessionIds?: string[] }>>([]);
+  const [waveDispatches, setWaveDispatches] = useState<Array<{ sessionId: string; roleId: string; roleName: string }>>([]);
   const [waveActiveIdx, setWaveActiveIdx] = useState(0);
-  const [jobMinimized, setJobMinimized] = useState(false);
+  const [execMinimized, setExecMinimized] = useState(false);
 
   /* Wave Command Center state */
   const [orgNodes, setOrgNodes] = useState<Record<string, OrgNode>>({});
   const [orgRootId, setOrgRootId] = useState('ceo');
   const [waveState, setWaveState] = useState<{
     directive: string;
-    rootJobs: Array<{ sessionId: string; roleId: string; roleName: string; jobId?: string }>;
+    rootDispatches: Array<{ sessionId: string; roleId: string; roleName: string }>;
     waveId?: string;
   } | null>(null);
   const [waveMinimized, setWaveMinimized] = useState(false);
@@ -102,10 +102,10 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
 
   /* Phase 3: Live status */
   const [roleStatuses, setRoleStatuses] = useState<Record<string, string>>({});
-  const [activeExecs, setActiveExecs] = useState<{ roleId: string; task: string; id?: string; jobId?: string; startedAt?: string }[]>([]);
+  const [activeExecs, setActiveExecs] = useState<{ roleId: string; task: string; id?: string; sessionId?: string; startedAt?: string }[]>([]);
   /** O(1) lookup by roleId — avoids O(n) find() per card render */
   const activeExecsByRole = useMemo(() => {
-    const map: Record<string, { task: string; id?: string; jobId?: string; startedAt?: string }> = {};
+    const map: Record<string, { task: string; id?: string; sessionId?: string; startedAt?: string }> = {};
     for (const e of activeExecs) map[e.roleId] = e;
     return map;
   }, [activeExecs]);
@@ -214,7 +214,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
 
   /* Knowledge import SSE — fire-and-forget, no abort on unmount */
   useEffect(() => {
-    if (!importJob) return;
+    if (!importReq) return;
     if (importStarted.current) return;
     importStarted.current = true;
 
@@ -225,7 +225,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     fetch('/api/setup/import-knowledge', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ paths: importJob.paths, companyRoot: importJob.companyRoot }),
+      body: JSON.stringify({ paths: importReq.paths, companyRoot: importReq.companyRoot }),
     }).then(async (res) => {
       const reader = res.body?.getReader();
       if (!reader) return;
@@ -292,7 +292,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     });
 
     // No cleanup abort — import runs in background on server
-  }, [importJob]);
+  }, [importReq]);
 
   /* View mode: office (topdown) vs pro */
   const [viewMode, setViewMode] = useState<'iso' | 'pro'>('iso');
@@ -334,7 +334,10 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     // C4 fix: Restore active waves after page refresh
     api.getActiveWaves().then(({ waves }) => {
       if (waves.length > 0) {
-        setWaveCenterWaves(waves);
+        setWaveCenterWaves(waves.map(w => ({
+          ...w,
+          rootDispatches: (w.dispatches ?? w.rootJobs ?? []).map(({ sessionId, roleId, roleName }) => ({ sessionId, roleId, roleName })),
+        })));
       }
     }).catch(() => {});
     api.getKnowledge().then(setKnowledgeDocs).catch(() => {});
@@ -471,13 +474,13 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
     setAssignModal(null);
 
     try {
-      const resp = await api.startJob({ type: 'assign', roleId, task, readOnly: isAsk });
+      const resp = await api.execute({ type: 'assign', roleId, task, readOnly: isAsk });
       const jobId = resp.jobId;
       const sessionId = resp.sessionId ?? `job-${jobId}`;
       const color = ROLE_COLORS[roleId] ?? '#666';
       const title = `${roleId.toUpperCase()} · ${role?.name ?? roleId}`;
-      setJobMinimized(false);
-      setJobStack([{ sessionId, jobId, title, color }]);
+      setExecMinimized(false);
+      setExecStack([{ sessionId, jobId, title, color }]);
       fireQuestTrigger({ type: 'task_executed', condition: { roleId } });
       // Log to #office
       officeChat.pushMessage({
@@ -600,7 +603,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   const activeQuest = useMemo(() => getActiveQuest(questProgress), [questProgress]);
 
   const handleExecutionDone = () => {
-    const current = jobStack[jobStack.length - 1];
+    const current = execStack[execStack.length - 1];
     if (current) {
       addToast(`${current.title} completed`, current.color);
       // Log completion to #office
@@ -709,7 +712,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   const handleWaveDispatch = async (directive: string, targetRoles?: string[], attachments?: ImageAttachment[]) => {
     setShowWaveModal(false);
     try {
-      const resp = await api.startJob({ type: 'wave', directive, targetRoles, ...(attachments && { attachments }) });
+      const resp = await api.execute({ type: 'wave', directive, targetRoles, ...(attachments && { attachments }) });
       fireQuestTrigger({ type: 'wave_dispatched' });
       // Wave returns { jobIds: string[] } — one per C-Level role
       const jobIds: string[] = resp.jobIds ?? (resp.jobId ? [resp.jobId] : []);
@@ -726,10 +729,10 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
       const serverSessionIds: string[] = resp.sessionIds ?? [];
 
       const wj = jobIds.map((jid, i) => ({
-        jobId: jid,
         roleId: cLevels[i]?.id ?? `role-${i}`,
         roleName: cLevels[i]?.name ?? `C-Level ${i + 1}`,
         sessionId: serverSessionIds[i] ?? `wave-${jid}`,
+        _jobId: jid, // internal: needed for legacy session creation
       }));
 
       // Log wave to #office
@@ -743,7 +746,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
       const newActiveWave = {
         id: serverWaveId,
         directive,
-        rootJobs: wj,
+        rootDispatches: wj.map(({ roleId, roleName, sessionId }) => ({ roleId, roleName, sessionId })),
         startedAt: Date.now(),
         sessionIds: serverSessionIds,
       };
@@ -755,13 +758,13 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
       const now = new Date().toISOString();
       const waveSessions: Session[] = serverSessionIds.length > 0
         ? wj.map((w, i) => ({
-            id: serverSessionIds[i] ?? `wave-${w.jobId}`,
+            id: serverSessionIds[i] ?? `wave-${w._jobId}`,
             roleId: w.roleId,
             title: `WAVE: ${w.roleName}`,
             mode: 'do' as const,
             source: 'wave' as const,
             messages: [{
-              id: `msg-wave-${w.jobId}-ceo`,
+              id: `msg-wave-${w._jobId}-ceo`,
               from: 'ceo' as const,
               content: directive,
               type: 'directive' as const,
@@ -773,13 +776,13 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
             updatedAt: now,
           }))
         : wj.map((w) => ({
-            id: `wave-${w.jobId}`,
+            id: `wave-${w._jobId}`,
             roleId: w.roleId,
             title: `WAVE: ${w.roleName}`,
             mode: 'do' as const,
             source: 'wave' as const,
             messages: [{
-              id: `msg-wave-${w.jobId}-ceo`,
+              id: `msg-wave-${w._jobId}-ceo`,
               from: 'ceo' as const,
               content: directive,
               type: 'directive' as const,
@@ -797,13 +800,12 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
         messages: [
           ...ws.messages,
           {
-            id: `msg-wave-${wj[i].jobId}-role`,
+            id: `msg-wave-${wj[i]._jobId}-role`,
             from: 'role' as const,
             content: '',
             type: 'conversation' as const,
             status: 'streaming' as const,
             timestamp: now,
-            jobId: wj[i].jobId,
           },
         ],
       }));
@@ -905,16 +907,16 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
   const handleFocusTerminal = async (roleId: string) => {
     // If role is working, open the ActivityPanel for its active job
     const exec = activeExecsByRole[roleId];
-    const jobId = exec?.jobId ?? exec?.id;
-    if (jobId && isRoleActive(effectiveRoleStatuses[roleId] as RoleStatus)) {
+    const execSessionId = exec?.sessionId ?? exec?.id;
+    if (execSessionId && isRoleActive(effectiveRoleStatuses[roleId] as RoleStatus)) {
       const role = roles.find(r => r.id === roleId);
       const color = ROLE_COLORS[roleId] ?? '#666';
       const title = `${roleId.toUpperCase()} · ${role?.name ?? roleId}`;
       // Find session for this role (from active sessions or wave sessions)
       const activeSession = sessions.find(s => s.roleId === roleId && s.status === 'active');
-      const sessionId = activeSession?.id ?? `job-${jobId}`;
-      setJobStack([{ sessionId, jobId, title, color }]);
-      setJobMinimized(false);
+      const sessionId = activeSession?.id ?? execSessionId;
+      setExecStack([{ sessionId, jobId: execSessionId, title, color }]);
+      setExecMinimized(false);
       return;
     }
 
@@ -1676,19 +1678,19 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
             </button>
           )}
           {/* Minimized job indicator */}
-          {jobStack.length > 0 && jobMinimized && (
+          {execStack.length > 0 && execMinimized && (
             <button
-              onClick={() => setJobMinimized(false)}
+              onClick={() => setExecMinimized(false)}
               className="px-3 py-1 font-black text-white cursor-pointer animate-pulse"
               style={{
-                background: jobStack[jobStack.length - 1].color,
-                border: `2px solid ${jobStack[jobStack.length - 1].color}88`,
+                background: execStack[execStack.length - 1].color,
+                border: `2px solid ${execStack[execStack.length - 1].color}88`,
                 fontFamily: 'var(--pixel-font)',
                 borderRadius: 4,
               }}
             >
-              {jobStack[jobStack.length - 1].title.slice(0, 20)}
-              {jobStack[jobStack.length - 1].title.length > 20 ? '..' : ''}
+              {execStack[execStack.length - 1].title.slice(0, 20)}
+              {execStack[execStack.length - 1].title.length > 20 ? '..' : ''}
             </button>
           )}
           <button
@@ -1726,14 +1728,12 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
           onClose={closePanel}
           onFireRole={(id, name) => { setFireTarget({ roleId: id, roleName: name }); closePanel(); }}
           terminalWidth={terminalOpen ? terminalWidth : 0}
-          activeJobId={roleExec?.id}
-          activeSessionId={jobStack.find(j => j.jobId === roleExec?.jobId)?.sessionId}
+          activeSessionId={execStack.find(j => j.jobId === roleExec?.sessionId)?.sessionId ?? roleExec?.sessionId}
           activeTask={roleExec?.task}
           isWorking={isRoleActive(effectiveRoleStatuses[selectedRole.id] as RoleStatus)}
-          jobStartedAt={roleExec?.startedAt}
-          onStopJob={(jobId) => {
-            const entry = jobStack.find(j => j.jobId === jobId);
-            if (entry) api.abortSession(entry.sessionId);
+          startedAt={roleExec?.startedAt}
+          onAbortSession={(sessionId) => {
+            api.abortSession(sessionId).catch(() => {});
           }}
           sessions={sessions}
           streamingSessionId={streamingSessionId}
@@ -1815,14 +1815,12 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
                 onClose={closeProfile}
                 onFireRole={(id, name) => { setFireTarget({ roleId: id, roleName: name }); }}
                 terminalWidth={0}
-                activeJobId={roleExec?.id}
-          activeSessionId={jobStack.find(j => j.jobId === roleExec?.jobId)?.sessionId}
+                activeSessionId={execStack.find(j => j.jobId === roleExec?.sessionId)?.sessionId ?? roleExec?.sessionId}
                 activeTask={roleExec?.task}
                 isWorking={isRoleActive(effectiveRoleStatuses[selectedRole.id] as RoleStatus)}
-                jobStartedAt={roleExec?.startedAt}
-                onStopJob={(jobId) => {
-            const entry = jobStack.find(j => j.jobId === jobId);
-            if (entry) api.abortSession(entry.sessionId);
+                startedAt={roleExec?.startedAt}
+                onAbortSession={(sessionId) => {
+            api.abortSession(sessionId).catch(() => {});
           }}
                 sessions={sessions}
                 streamingSessionId={streamingSessionId}
@@ -1928,9 +1926,9 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
                 setWaveDone(true);
                 addToast('Wave complete', '#2E7D32');
               }}
-              onSave={async (dir, jobIds, extra) => {
+              onSave={async (dir, sessionIds, extra) => {
                 try {
-                  await api.saveWave({ directive: dir, jobIds, waveId: extra?.waveId, sessionIds: extra?.sessionIds });
+                  await api.saveWave({ directive: dir, sessionIds, waveId: extra?.waveId });
                   handleJobDone();
                   addToast('Wave saved', '#2E7D32');
                 } catch (err) {
@@ -2028,7 +2026,7 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
       {waveState && !waveMinimized && (
         <WaveCommandCenter
           directive={waveState.directive}
-          rootJobs={waveState.rootJobs}
+          rootDispatches={waveState.rootDispatches}
           orgNodes={orgNodes}
           rootRoleId={orgRootId}
           onClose={() => { setWaveState(null); setWaveMinimized(false); setWaveDone(false); }}
@@ -2039,9 +2037,9 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
             addToast('Wave complete', '#2E7D32');
             // Note: auto-save is handled inside WaveCenter's own useEffect (doneFired)
           }}
-          onSave={async (jobIds) => {
+          onSave={async (sessionIds) => {
             try {
-              await api.saveWave({ directive: waveState.directive, jobIds });
+              await api.saveWave({ directive: waveState.directive, sessionIds });
               handleJobDone();
               addToast('Wave saved to bulletin', '#2E7D32');
             } catch (err) {
@@ -2076,9 +2074,9 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
             setWaveDone(true);
             addToast('Wave complete', '#2E7D32');
           }}
-          onSave={async (dir, jobIds, extra) => {
+          onSave={async (dir, sessionIds, extra) => {
             try {
-              await api.saveWave({ directive: dir, jobIds, waveId: extra?.waveId, sessionIds: extra?.sessionIds });
+              await api.saveWave({ directive: dir, sessionIds, waveId: extra?.waveId });
               handleJobDone();
               addToast('Wave saved', '#2E7D32');
             } catch (err) {
@@ -2097,20 +2095,20 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
       )}
 
       {/* Phase 2: Activity Panel (replaces ExecutionPanel + WaveExecutionPanel) */}
-      {jobStack.length > 0 && !jobMinimized && (() => {
-        const current = jobStack[jobStack.length - 1];
-        const isWave = waveJobs.length > 1;
+      {execStack.length > 0 && !execMinimized && (() => {
+        const current = execStack[execStack.length - 1];
+        const isWave = waveDispatches.length > 1;
         return (
           <>
             {/* Wave role tabs — show when multiple C-Level jobs */}
-            {isWave && jobStack.length === 1 && (
+            {isWave && execStack.length === 1 && (
               <div className="fixed top-[5%] left-1/2 -translate-x-1/2 w-[720px] max-w-[95vw] z-[63] flex gap-1 px-2 pt-2">
-                {waveJobs.map((wj, i) => (
+                {waveDispatches.map((wj, i) => (
                   <button
                     key={wj.sessionId}
                     onClick={() => {
                       setWaveActiveIdx(i);
-                      setJobStack([{ sessionId: wj.sessionId, jobId: wj.jobId ?? '', title: `CEO WAVE · ${wj.roleId.toUpperCase()}`, color: '#B71C1C' }]);
+                      setExecStack([{ sessionId: wj.sessionId, jobId: wj.sessionId, title: `CEO WAVE · ${wj.roleId.toUpperCase()}`, color: '#B71C1C' }]);
                     }}
                     className="px-3 py-1.5 text-xs font-bold rounded-t-lg cursor-pointer transition-colors"
                     style={{
@@ -2128,15 +2126,15 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
             <ActivityPanel
               key={current.sessionId}
               sessionId={current.sessionId}
-              title={jobStack.length > 1
+              title={execStack.length > 1
                 ? current.title
                 : isWave
-                  ? `CEO WAVE · ${waveJobs[waveActiveIdx]?.roleName ?? ''}`
+                  ? `CEO WAVE · ${waveDispatches[waveActiveIdx]?.roleName ?? ''}`
                   : current.title
               }
               color={current.color}
               variant="modal"
-              style={isWave && jobStack.length === 1 ? { marginTop: 28 } : undefined}
+              style={isWave && execStack.length === 1 ? { marginTop: 28 } : undefined}
               onClose={() => {
                 // Clean up wave sessions from local state and server
                 const waveSessionIds = sessions.filter(s => s.source === 'wave').map(s => s.id);
@@ -2144,15 +2142,15 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
                   setSessions(prev => prev.filter(s => s.source !== 'wave'));
                   api.deleteSessions(waveSessionIds).catch(() => {});
                 }
-                setJobStack([]); setWaveJobs([]); setWaveActiveIdx(0); setJobMinimized(false);
+                setExecStack([]); setWaveDispatches([]); setWaveActiveIdx(0); setExecMinimized(false);
               }}
-              onMinimize={() => setJobMinimized(true)}
+              onMinimize={() => setExecMinimized(true)}
               onDone={() => { handleExecutionDone(); handleJobDone(); }}
               onNavigateToSession={() => {
                 // Child session navigation removed — all monitoring via sessions
               }}
               onOpenKnowledgeDoc={(docId) => {
-                setJobStack([]); setWaveJobs([]); setWaveActiveIdx(0); setJobMinimized(false);
+                setExecStack([]); setWaveDispatches([]); setWaveActiveIdx(0); setExecMinimized(false);
                 openPanel({ type: 'knowledge', docId });
                 api.getKnowledge().then(setKnowledgeDocs).catch(() => {});
               }}
@@ -2162,14 +2160,14 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
       })()}
 
       {/* Back button overlay for drill-down navigation */}
-      {jobStack.length > 1 && (
+      {execStack.length > 1 && (
         <div className="fixed top-[5%] left-1/2 -translate-x-1/2 w-[720px] max-w-[95vw] z-[62] pointer-events-none">
           <div className="pointer-events-auto">
             <button
-              onClick={() => setJobStack((prev) => prev.slice(0, -1))}
+              onClick={() => setExecStack((prev) => prev.slice(0, -1))}
               className="mt-2 ml-2 px-3 py-1 text-xs font-bold text-[var(--terminal-text)] bg-[var(--terminal-bg)] border border-[var(--terminal-border)] rounded-lg cursor-pointer hover:bg-[var(--terminal-inline-bg)]"
             >
-              {'\u2190'} Back to {jobStack[jobStack.length - 2]?.title}
+              {'\u2190'} Back to {execStack[execStack.length - 2]?.title}
             </button>
           </div>
         </div>
