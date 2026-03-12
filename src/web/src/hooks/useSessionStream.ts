@@ -33,7 +33,7 @@ export default function useSessionStream() {
     const controller = new AbortController();
     controllerRef.current = controller;
 
-    fetch(`/api/exec/session/${sessionId}/message`, {
+    fetch(`/api/sessions/${sessionId}/message`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content, mode, attachments }),

@@ -133,6 +133,16 @@ export function createHttpServer(): http.Server {
       return;
     }
 
+    // D-014: POST /api/sessions/:id/message — delegate to execute handler for SSE streaming
+    const sessionMessageMatch = url.match(/^\/api\/sessions\/([^/]+)\/message$/);
+    if (sessionMessageMatch && method === 'POST') {
+      setExecCors(req, res);
+      // Rewrite URL to legacy format for handleExecRequest
+      req.url = `/api/exec/session/${sessionMessageMatch[1]}/message`;
+      handleExecRequest(req, res);
+      return;
+    }
+
     // SSE 엔드포인트: Express 우회하여 raw HTTP로 처리
     if ((url.startsWith('/api/exec/') || url.startsWith('/api/jobs') || url === '/api/waves/save' || url === '/api/setup/import-knowledge') && method === 'POST') {
       setExecCors(req, res);
@@ -144,8 +154,8 @@ export function createHttpServer(): http.Server {
       return;
     }
 
-    // CORS preflight for exec/jobs endpoints
-    if ((url.startsWith('/api/exec/') || url.startsWith('/api/jobs')) && method === 'OPTIONS') {
+    // CORS preflight for exec/jobs/sessions endpoints
+    if ((url.startsWith('/api/exec/') || url.startsWith('/api/jobs') || url.match(/^\/api\/sessions\/[^/]+\/message$/)) && method === 'OPTIONS') {
       setExecCors(req, res);
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
