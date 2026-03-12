@@ -101,15 +101,6 @@ export interface WaveReplayRole {
     status: WaveRoleStatus;
     events: ActivityEvent[];
   }>;
-  /** @deprecated server still sends childJobs */
-  childJobs?: Array<{
-    roleId: string;
-    roleName: string;
-    jobId?: string;
-    sessionId?: string;
-    status: WaveRoleStatus;
-    events: ActivityEvent[];
-  }>;
   isFollowUp?: boolean;
   followUpTask?: string;
 }

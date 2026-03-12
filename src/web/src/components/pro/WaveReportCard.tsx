@@ -19,7 +19,7 @@ export interface WaveReportCardProps {
   sessionId?: string;
   onFollowUp?: (roleId: string, sessionId: string) => void;
   onViewReport?: (roleId: string) => void;
-  onNavigateToJob?: (jobId: string) => void;
+  onNavigateToSession?: (sessionId: string) => void;
   onOpenKnowledgeDoc?: (docId: string) => void;
 }
 
@@ -31,7 +31,7 @@ export default function WaveReportCard({
   sessionId,
   onFollowUp,
   onViewReport,
-  onNavigateToJob,
+  onNavigateToSession,
   onOpenKnowledgeDoc,
 }: WaveReportCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -170,7 +170,7 @@ export default function WaveReportCard({
                   event={event}
                   isThinkingCollapsed={thinkingCollapsed[idx] ?? true}
                   onToggleThinking={() => setThinkingCollapsed(prev => ({ ...prev, [idx]: !prev[idx] }))}
-                  onNavigateToJob={onNavigateToJob}
+                  onNavigateToSession={onNavigateToSession}
                   onOpenKnowledgeDoc={onOpenKnowledgeDoc}
                   compact={true}
                 />

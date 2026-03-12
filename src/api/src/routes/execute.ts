@@ -332,10 +332,10 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
   interface WaveRoleData {
     roleId: string;
     roleName: string;
-    jobId: string;
+    sessionId: string;
     status: WaveRoleStatus;
     events: ReturnType<typeof ActivityStream.readAll>;
-    childJobs: Array<{ roleId: string; roleName: string; jobId: string; status: WaveRoleStatus; events: ReturnType<typeof ActivityStream.readAll> }>;
+    childSessions: Array<{ roleId: string; roleName: string; sessionId: string; status: WaveRoleStatus; events: ReturnType<typeof ActivityStream.readAll> }>;
   }
   const rolesData: WaveRoleData[] = [];
 
@@ -347,26 +347,26 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
     const doneEvent = events.find(e => e.type === 'msg:done' || e.type === 'msg:awaiting_input' || e.type === 'msg:error' || e.type === 'job:done' || e.type === 'job:awaiting_input' || e.type === 'job:error');
     const status: WaveRoleStatus = doneEvent ? eventTypeToMessageStatus(doneEvent.type) as WaveRoleStatus : 'unknown';
 
-    // Collect child jobs (dispatched sub-roles)
-    const childJobs: WaveRoleData['childJobs'] = [];
+    // Collect child sessions (dispatched sub-roles)
+    const childSessions: WaveRoleData['childSessions'] = [];
     for (const e of events) {
-      if (e.type === 'dispatch:start' && e.data.childJobId) {
-        const childJobId = e.data.childJobId as string;
+      const childJobId = (e.data.childSessionId ?? e.data.childJobId) as string | undefined;
+      if (e.type === 'dispatch:start' && childJobId) {
         const targetRoleId = (e.data.targetRoleId as string) ?? 'unknown';
         const childEvents = ActivityStream.readAll(childJobId);
         const childDone = childEvents.find(ce => ce.type === 'msg:done' || ce.type === 'msg:error' || ce.type === 'msg:awaiting_input' || ce.type === 'job:done' || ce.type === 'job:error' || ce.type === 'job:awaiting_input');
         const childStatus: WaveRoleStatus = childDone ? eventTypeToMessageStatus(childDone.type) as WaveRoleStatus : 'unknown';
-        childJobs.push({
+        childSessions.push({
           roleId: targetRoleId,
           roleName: (childEvents.find(ce => ce.type === 'msg:start' || ce.type === 'job:start')?.data?.roleName as string) ?? targetRoleId,
-          jobId: childJobId,
+          sessionId: childJobId,
           status: childStatus,
           events: childEvents,
         });
       }
     }
 
-    rolesData.push({ roleId, roleName, jobId, status, events, childJobs });
+    rolesData.push({ roleId, roleName, sessionId: jobId, status, events, childSessions });
   }
 
   // Write to operations/waves/
@@ -561,7 +561,7 @@ function handleAssign(body: Record<string, unknown>, req: IncomingMessage, res: 
         sendSSE(res, 'tool', { name: event.data.name, input: event.data.input });
         break;
       case 'dispatch:start':
-        sendSSE(res, 'dispatch', { roleId: event.data.targetRoleId, task: event.data.task, childJobId: event.data.childJobId });
+        sendSSE(res, 'dispatch', { roleId: event.data.targetRoleId, task: event.data.task, childJobId: event.data.childJobId, childSessionId: event.data.childSessionId ?? event.data.childJobId });
         break;
       case 'turn:complete':
         sendSSE(res, 'turn', { turn: event.data.turn });
@@ -663,7 +663,7 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
           sendSSE(res, 'tool', { roleId: rolePrefix, name: event.data.name, input: event.data.input });
           break;
         case 'dispatch:start':
-          sendSSE(res, 'dispatch', { roleId: rolePrefix, targetRoleId: event.data.targetRoleId, task: event.data.task, childJobId: event.data.childJobId });
+          sendSSE(res, 'dispatch', { roleId: rolePrefix, targetRoleId: event.data.targetRoleId, task: event.data.task, childJobId: event.data.childJobId, childSessionId: event.data.childSessionId ?? event.data.childJobId });
           break;
         case 'turn:complete':
           sendSSE(res, 'turn', { roleId: rolePrefix, turn: event.data.turn });

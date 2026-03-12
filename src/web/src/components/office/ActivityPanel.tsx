@@ -11,12 +11,12 @@ interface ActivityPanelProps {
   onClose: () => void;
   onMinimize?: () => void;
   onDone?: () => void;
-  onNavigateToJob?: (childJobId: string) => void;
+  onNavigateToSession?: (childSessionId: string) => void;
   onOpenKnowledgeDoc?: (docId: string) => void;
 }
 
 export default function ActivityPanel({
-  sessionId, title, color, variant, style, onClose, onMinimize, onDone, onNavigateToJob, onOpenKnowledgeDoc,
+  sessionId, title, color, variant, style, onClose, onMinimize, onDone, onNavigateToSession, onOpenKnowledgeDoc,
 }: ActivityPanelProps) {
   const { events, status, textOutput, childSessionIds } = useActivityStream(sessionId);
   const [elapsed, setElapsed] = useState(0);
@@ -123,7 +123,7 @@ export default function ActivityPanel({
             event={event}
             isThinkingCollapsed={collapsedThinking.has(event.seq)}
             onToggleThinking={() => toggleThinking(event.seq)}
-            onNavigateToJob={onNavigateToJob}
+            onNavigateToSession={onNavigateToSession}
             onOpenKnowledgeDoc={onOpenKnowledgeDoc}
           />
         ))}

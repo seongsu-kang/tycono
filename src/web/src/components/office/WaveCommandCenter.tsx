@@ -327,10 +327,10 @@ export default function WaveCommandCenter({
                   event={event}
                   isThinkingCollapsed={collapsedThinking.has(event.seq)}
                   onToggleThinking={() => toggleThinking(event.seq)}
-                  onNavigateToJob={(_childJobId) => {
+                  onNavigateToSession={(_childSessionId) => {
                     // Find dispatch event to determine target role
                     const dispatchEvt = selectedNode?.events.find(e =>
-                      e.type === 'dispatch:start' && e.data.childJobId === _childJobId
+                      e.type === 'dispatch:start' && (e.data.childSessionId ?? e.data.childJobId) === _childSessionId
                     );
                     const targetRole = dispatchEvt?.data.targetRoleId as string | undefined;
                     if (targetRole && nodes.has(targetRole)) {

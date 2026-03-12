@@ -2148,8 +2148,8 @@ export default function OfficePage({ importJob, onImportDone }: { importJob?: Im
               }}
               onMinimize={() => setJobMinimized(true)}
               onDone={() => { handleExecutionDone(); handleJobDone(); }}
-              onNavigateToJob={() => {
-                // Child job navigation removed — all monitoring via sessions
+              onNavigateToSession={() => {
+                // Child session navigation removed — all monitoring via sessions
               }}
               onOpenKnowledgeDoc={(docId) => {
                 setJobStack([]); setWaveJobs([]); setWaveActiveIdx(0); setJobMinimized(false);

@@ -57,7 +57,7 @@ export function appendFollowUpToWave(
       sessionId,
       status: 'running',
       events: [],
-      childJobs: [],
+      childSessions: [],
       isFollowUp: true,
       followUpTask: task,
     });
@@ -123,7 +123,7 @@ export function updateFollowUpForReply(
         sessionId,
         status: 'running',
         events: [],
-        childJobs: [],
+        childSessions: [],
         isFollowUp: true,
       });
     }
@@ -154,11 +154,11 @@ export function updateFollowUpInWave(waveId: string, jobId: string, roleId: stri
     );
     const status: WaveRoleStatus = doneEvent ? eventTypeToMessageStatus(doneEvent.type) as WaveRoleStatus : 'streaming';
 
-    // Collect child jobs
-    const childJobs: Array<{ roleId: string; roleName: string; jobId: string; status: string; events: ReturnType<typeof ActivityStream.readAll> }> = [];
+    // Collect child sessions
+    const childSessions: Array<{ roleId: string; roleName: string; sessionId: string; status: string; events: ReturnType<typeof ActivityStream.readAll> }> = [];
     for (const e of newEvents) {
-      if (e.type === 'dispatch:start' && e.data.childJobId) {
-        const childJobId = e.data.childJobId as string;
+      const childJobId = (e.data.childSessionId ?? e.data.childJobId) as string | undefined;
+      if (e.type === 'dispatch:start' && childJobId) {
         const targetRoleId = (e.data.targetRoleId as string) ?? 'unknown';
         const childEvents = ActivityStream.readAll(childJobId);
         const childDone = childEvents.find(ce =>
@@ -166,7 +166,7 @@ export function updateFollowUpInWave(waveId: string, jobId: string, roleId: stri
           ce.type === 'job:done' || ce.type === 'job:error' || ce.type === 'job:awaiting_input'
         );
         const childStatus: WaveRoleStatus = childDone ? eventTypeToMessageStatus(childDone.type) as WaveRoleStatus : 'unknown';
-        childJobs.push({ roleId: targetRoleId, roleName: targetRoleId, jobId: childJobId, status: childStatus, events: childEvents });
+        childSessions.push({ roleId: targetRoleId, roleName: targetRoleId, sessionId: childJobId, status: childStatus, events: childEvents });
       }
     }
 
@@ -178,7 +178,7 @@ export function updateFollowUpInWave(waveId: string, jobId: string, roleId: stri
       const chainEvents = entry.events ?? [];
       const mergedEvents = [...chainEvents, ...newEvents];
 
-      data.roles[idx] = { ...entry, status, events: mergedEvents, childJobs };
+      data.roles[idx] = { ...entry, status, events: mergedEvents, childSessions };
     }
 
     fs.writeFileSync(waveFile, JSON.stringify(data, null, 2), 'utf-8');

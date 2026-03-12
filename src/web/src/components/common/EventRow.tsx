@@ -7,11 +7,11 @@ const ROLE_COLORS: Record<string, string> = {
   engineer: '#4A148C', designer: '#AD1457', qa: '#00695C',
 };
 
-export default function EventRow({ event, isThinkingCollapsed, onToggleThinking, onNavigateToJob, onOpenKnowledgeDoc, compact }: {
+export default function EventRow({ event, isThinkingCollapsed, onToggleThinking, onNavigateToSession, onOpenKnowledgeDoc, compact }: {
   event: ActivityEvent;
   isThinkingCollapsed: boolean;
   onToggleThinking: () => void;
-  onNavigateToJob?: (childJobId: string) => void;
+  onNavigateToSession?: (childSessionId: string) => void;
   onOpenKnowledgeDoc?: (docId: string) => void;
   compact?: boolean;
 }) {
@@ -108,7 +108,7 @@ export default function EventRow({ event, isThinkingCollapsed, onToggleThinking,
     case 'dispatch:start': {
       const targetRoleId = event.data.targetRoleId as string ?? event.data.roleId as string ?? '';
       const task = event.data.task as string ?? '';
-      const childJobId = event.data.childJobId as string;
+      const childSessionId = (event.data.childSessionId ?? event.data.childJobId) as string;
       const targetColor = ROLE_COLORS[targetRoleId] ?? '#888';
       return (
         <div
@@ -117,7 +117,7 @@ export default function EventRow({ event, isThinkingCollapsed, onToggleThinking,
             borderColor: `${targetColor}44`,
             background: `${targetColor}11`,
           }}
-          onClick={() => childJobId && onNavigateToJob?.(childJobId)}
+          onClick={() => childSessionId && onNavigateToSession?.(childSessionId)}
         >
           <div className="flex items-center gap-2">
             <span style={{ color: targetColor }} className="font-bold text-[11px]">
@@ -126,7 +126,7 @@ export default function EventRow({ event, isThinkingCollapsed, onToggleThinking,
             <span className={`text-[var(--terminal-text-secondary)] text-[10px] truncate flex-1`}>
               {task.slice(0, compact ? 60 : 100)}
             </span>
-            {childJobId && onNavigateToJob && (
+            {childSessionId && onNavigateToSession && (
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-[var(--terminal-text-muted)]">
                 View {'\u2192'}
               </span>

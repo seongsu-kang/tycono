@@ -202,6 +202,7 @@ class JobManager {
     }
 
     // Emit msg:start (D-014: was job:start)
+    const parentSession = params.parentJobId ? this.jobs.get(params.parentJobId)?.sessionId : undefined;
     job.stream.emit('msg:start', params.roleId, {
       jobId: job.id,
       traceId: job.traceId,
@@ -210,6 +211,7 @@ class JobManager {
       sourceRole: params.sourceRole ?? 'ceo',
       ...(params.parentJobId && { parentJobId: params.parentJobId }),
       ...(params.sessionId && { sessionId: params.sessionId }),
+      ...(parentSession && { parentSessionId: parentSession }),
     });
 
     // If this job has a parent, emit dispatch:start on the parent's stream
@@ -223,6 +225,7 @@ class JobManager {
           task: params.task,
           childJobId: job.id,
           childSessionId: params.sessionId,
+          parentSessionId: parentJob.sessionId,
         });
       }
     }

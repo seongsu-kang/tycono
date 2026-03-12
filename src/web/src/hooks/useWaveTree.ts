@@ -248,7 +248,7 @@ export default function useWaveTree(
 
                     const updated = { ...node, events: [...node.events, event] };
 
-                    if (event.type === 'dispatch:start' && event.data.childJobId) {
+                    if (event.type === 'dispatch:start' && (event.data.childSessionId || event.data.childJobId)) {
                       const targetRoleId = (event.data.targetRoleId as string) ?? (event.data.roleId as string);
                       const childSessionId = event.data.childSessionId as string | undefined;
 

@@ -775,9 +775,9 @@ export default function WaveCenter({
                         event={event}
                         isThinkingCollapsed={collapsedThinking.has(event.seq)}
                         onToggleThinking={() => toggleThinking(event.seq)}
-                        onNavigateToJob={(childJobId) => {
+                        onNavigateToSession={(childSessionId) => {
                           for (const [, node] of waveTree.nodes) {
-                            if (node.events.some(e => e.data.childJobId === childJobId)) {
+                            if (node.events.some(e => (e.data.childSessionId ?? e.data.childJobId) === childSessionId)) {
                               waveTree.selectNode(node.roleId);
                               return;
                             }
@@ -1087,7 +1087,8 @@ function buildReplayNodes(
         streamStatus: isRunning ? 'connecting' : 'done',
       });
     }
-    const children = r.childSessions ?? r.childJobs ?? [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const children = r.childSessions ?? (r as any).childJobs ?? [];
     for (const c of children) {
       const child = nodes.get(c.roleId);
       if (child) {
