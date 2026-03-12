@@ -61,6 +61,7 @@ operationsRouter.get('/waves', (_req: Request, res: Response, next: NextFunction
             startedAt: data.startedAt ?? '',
             ...(data.commit ? { commit: data.commit } : {}),
             ...(hasRunning ? { hasRunning: true } : {}),
+            ...(data.sessionIds && data.sessionIds.length > 0 ? { sessionIds: data.sessionIds } : {}),
           };
         } catch {
           return { id, timestamp: id, directive: '', rolesCount: 0, startedAt: '' };
@@ -218,7 +219,7 @@ operationsRouter.get('/traces/:jobId', (req: Request, res: Response, next: NextF
 
     for (const jid of allJobIds) {
       const jobEvents = ActivityStream.readAll(jid);
-      const startEvent = jobEvents.find(e => e.type === 'msg:start' || e.type === 'job:start');
+      const startEvent = jobEvents.find(e => e.type === 'msg:start' || (e.type as string) === 'job:start');
       const jobTraceId = jobEvents[0]?.traceId ?? startEvent?.data?.traceId;
 
       if (jobTraceId === traceId || jid === jobId) {
@@ -269,16 +270,16 @@ operationsRouter.get('/traces', (req: Request, res: Response, next: NextFunction
 
     for (const jid of allJobIds) {
       const events = ActivityStream.readAll(jid);
-      const startEvent = events.find(e => e.type === 'msg:start' || e.type === 'job:start');
+      const startEvent = events.find(e => e.type === 'msg:start' || (e.type as string) === 'job:start');
       if (!startEvent) continue;
 
       const traceId = events[0]?.traceId ?? startEvent?.data?.traceId as string ?? jid;
       if (roleFilter && startEvent.roleId !== roleFilter) continue;
 
       if (!traces.has(traceId)) {
-        const doneEvent = events.find(e => e.type === 'msg:done' || e.type === 'job:done');
-        const errorEvent = events.find(e => e.type === 'msg:error' || e.type === 'job:error');
-        const awaitingEvent = events.find(e => e.type === 'msg:awaiting_input' || e.type === 'job:awaiting_input');
+        const doneEvent = events.find(e => e.type === 'msg:done' || (e.type as string) === 'job:done');
+        const errorEvent = events.find(e => e.type === 'msg:error' || (e.type as string) === 'job:error');
+        const awaitingEvent = events.find(e => e.type === 'msg:awaiting_input' || (e.type as string) === 'job:awaiting_input');
         const status = awaitingEvent ? 'awaiting_input'
           : doneEvent ? 'done'
           : errorEvent ? 'error'

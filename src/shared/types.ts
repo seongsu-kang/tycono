@@ -63,46 +63,6 @@ export function canTransition(from: MessageStatus, to: MessageStatus): boolean {
 }
 
 /* ═══════════════════════════════════════════════
- *  Backward Compatibility — 내부 런타임 핸들 (D-014 전환기)
- *  job-manager.ts 등 내부 서비스에서만 사용. API/UI에 노출 금지.
- * ═══════════════════════════════════════════════ */
-
-/** @deprecated D-014: MessageStatus 사용. 내부 런타임 핸들 전용 */
-export type JobStatus = 'running' | 'done' | 'error' | 'awaiting_input';
-
-/** @deprecated D-014: SessionSource 사용 */
-export type JobType = 'assign' | 'wave' | 'session-message' | 'consult';
-
-/** @deprecated D-014: isMessageActive 사용 */
-export function isJobActive(status: JobStatus): boolean {
-  return status === 'running' || status === 'awaiting_input';
-}
-
-/** @deprecated D-014: messageStatusToRoleStatus 사용 */
-export function jobStatusToRoleStatus(jobStatus: JobStatus): RoleStatus {
-  switch (jobStatus) {
-    case 'running': return 'working';
-    case 'awaiting_input': return 'awaiting_input';
-    case 'done': return 'done';
-    case 'error': return 'done';
-  }
-}
-
-/** @deprecated D-014: 제거 예정. 내부 런타임 핸들 전용 */
-export interface JobInfo {
-  id: string;
-  type: JobType;
-  roleId: string;
-  task: string;
-  status: JobStatus;
-  parentJobId?: string;
-  childJobIds: string[];
-  createdAt: string;
-  targetRole?: string;
-  output?: string;
-}
-
-/* ═══════════════════════════════════════════════
  *  Activity Events — 실행 이벤트 로그
  * ═══════════════════════════════════════════════ */
 
@@ -122,9 +82,6 @@ export type ActivityEventType =
   | 'import:scan' | 'import:process' | 'import:created'
   // Trace (full prompt/response capture for AI debugging)
   | 'trace:prompt' | 'trace:response'
-  // Legacy event types (backward compat for existing JSONL files)
-  | 'job:start' | 'job:done' | 'job:error'
-  | 'job:awaiting_input' | 'job:reply'
   // Other
   | 'stderr';
 
@@ -134,8 +91,6 @@ export interface ActivityEvent {
   type: ActivityEventType;
   roleId: string;
   parentSessionId?: string;
-  /** @deprecated D-014: parentSessionId 사용 */
-  parentJobId?: string;
   /** Trace ID — top-level sessionId, inherited by child sessions */
   traceId?: string;
   data: Record<string, unknown>;
@@ -177,15 +132,12 @@ export type StreamStatus = 'idle' | 'connecting' | 'streaming' | 'done' | 'error
 /** ActivityEventType → MessageStatus 변환 (wave replay 등에서 사용) */
 export function eventTypeToMessageStatus(eventType: ActivityEventType): MessageStatus | 'unknown' {
   switch (eventType) {
-    case 'msg:done': case 'job:done': return 'done';
-    case 'msg:error': case 'job:error': return 'error';
-    case 'msg:awaiting_input': case 'job:awaiting_input': return 'awaiting_input';
+    case 'msg:done': return 'done';
+    case 'msg:error': return 'error';
+    case 'msg:awaiting_input': return 'awaiting_input';
     default: return 'unknown';
   }
 }
-
-/** @deprecated D-014: eventTypeToMessageStatus 사용 */
-export const eventTypeToJobStatus = eventTypeToMessageStatus;
 
 /** TeamStatus — Role별 현재 상태 + 작업 내용 (context-assembler, runner에서 공유) */
 export type TeamStatus = Record<string, { status: RoleStatus; task?: string }>;

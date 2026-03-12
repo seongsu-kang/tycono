@@ -341,8 +341,13 @@ export default function WaveCenter({
         const resp = await api.replyToSession(node.sessionId, replyText.trim(), atts);
         setReplyText('');
         setAttachments([]);
-        // Use the returned sessionId (may be a new continuation session)
-        waveTree.connectStream(resp.sessionId || node.sessionId, waveTree.selectedRoleId);
+        // When multiplexed wave stream is active, DON'T call connectStream —
+        // it clears events and creates a redundant per-role SSE.
+        // The wave multiplexer auto-subscribes to the continuation job via onJobCreated.
+        const hasActiveWave = !!(currentActiveWave?.id);
+        if (!hasActiveWave) {
+          waveTree.connectStream(resp.sessionId || node.sessionId, waveTree.selectedRoleId);
+        }
       } else {
         // Start new execution (follow-up for done, replay, or not-dispatched)
         const waveId = currentActiveWave?.id ?? replayData?.waveId ?? replayData?.id;
@@ -350,7 +355,10 @@ export default function WaveCenter({
         setReplyText('');
         setAttachments([]);
         if (resp.sessionId) {
-          waveTree.connectStream(resp.sessionId, waveTree.selectedRoleId);
+          const hasActiveWave = !!(currentActiveWave?.id);
+          if (!hasActiveWave) {
+            waveTree.connectStream(resp.sessionId, waveTree.selectedRoleId);
+          }
         }
       }
     } catch (err) {

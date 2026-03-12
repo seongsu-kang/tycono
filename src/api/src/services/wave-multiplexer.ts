@@ -1,22 +1,16 @@
 import { ActivityStream, type ActivityEvent, type ActivitySubscriber } from './activity-stream.js';
-import type { Job } from './job-manager.js';
-import { isJobActive } from '../../../shared/types.js';
+import type { Execution } from './execution-manager.js';
 import type { Response } from 'express';
 
 /* ─── Types ──────────────────────────────── */
 
 export interface WaveStreamEnvelope {
-  /** Wave-level sequence (across all roles) */
   waveSeq: number;
-  /** Session this event belongs to */
   sessionId: string;
-  /** Original ActivityEvent (unchanged) */
   event: ActivityEvent;
 }
 
-interface AttachedJob {
-  /** @deprecated D-014: use sessionId */
-  jobId: string;
+interface AttachedSession {
   sessionId: string;
   roleId: string;
   unsubscribe: () => void;
@@ -25,8 +19,7 @@ interface AttachedJob {
 interface WaveStreamClient {
   res: Response;
   waveSeq: number;
-  attachedJobs: Map<string, AttachedJob>; // jobId → attachment
-  /** Set of event keys already sent (to avoid duplicates) */
+  attachedSessions: Map<string, AttachedSession>; // sessionId → attachment
   sentEvents: Set<string>;
   heartbeat: ReturnType<typeof setInterval>;
   closed: boolean;
@@ -35,39 +28,28 @@ interface WaveStreamClient {
 /* ─── WaveMultiplexer ────────────────────── */
 
 class WaveMultiplexer {
-  /** waveId → set of connected SSE clients */
   private clients = new Map<string, Set<WaveStreamClient>>();
-  /** waveId → Map<jobId, Job> for live jobs */
-  private waveJobs = new Map<string, Map<string, Job>>();
+  private waveSessions = new Map<string, Map<string, Execution>>();
 
-  /**
-   * Register a job as belonging to a wave + auto-attach to existing clients.
-   */
-  registerJob(waveId: string, job: Job): void {
-    if (!this.waveJobs.has(waveId)) {
-      this.waveJobs.set(waveId, new Map());
+  registerSession(waveId: string, execution: Execution): void {
+    if (!this.waveSessions.has(waveId)) {
+      this.waveSessions.set(waveId, new Map());
     }
-    this.waveJobs.get(waveId)!.set(job.id, job);
+    this.waveSessions.get(waveId)!.set(execution.sessionId, execution);
 
-    console.log(`[WaveMux] registerJob wave=${waveId} job=${job.id} role=${job.roleId}`);
+    console.log(`[WaveMux] registerSession wave=${waveId} session=${execution.sessionId} role=${execution.roleId}`);
 
-    // Auto-attach to all existing clients for this wave
     const clients = this.clients.get(waveId);
     if (clients) {
       for (const client of clients) {
         if (!client.closed) {
-          this.subscribeJobToClient(client, job, true);
+          this.subscribeSessionToClient(client, execution, true);
         }
       }
     }
   }
 
-  /**
-   * Connect a new SSE client to a wave stream.
-   * Replays all historical events + subscribes to live events.
-   */
   attach(waveId: string, res: Response, fromWaveSeq: number): WaveStreamClient {
-    // SSE headers
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -79,7 +61,7 @@ class WaveMultiplexer {
     const client: WaveStreamClient = {
       res,
       waveSeq: 0,
-      attachedJobs: new Map(),
+      attachedSessions: new Map(),
       sentEvents: new Set(),
       heartbeat: setInterval(() => {
         if (client.closed || res.destroyed || res.writableEnded) {
@@ -96,17 +78,15 @@ class WaveMultiplexer {
     }
     this.clients.get(waveId)!.add(client);
 
-    // Replay + subscribe for all known jobs
-    const jobs = this.waveJobs.get(waveId);
-    if (jobs) {
+    const sessions = this.waveSessions.get(waveId);
+    if (sessions) {
       // Phase 1: Replay all historical events sorted by timestamp
       const allEvents: { event: ActivityEvent; sessionId: string }[] = [];
 
-      for (const [, job] of jobs) {
-        const events = ActivityStream.readFrom(job.id, 0);
-        const sessionId = job.sessionId ?? '';
+      for (const [, exec] of sessions) {
+        const events = ActivityStream.readFrom(exec.sessionId, 0);
         for (const event of events) {
-          allEvents.push({ event, sessionId });
+          allEvents.push({ event, sessionId: exec.sessionId });
         }
       }
 
@@ -126,41 +106,32 @@ class WaveMultiplexer {
         } as WaveStreamEnvelope);
       }
 
-      // Phase 2: Subscribe to live events for running jobs
-      // sendNotification=true ensures wave:role-attached is sent for each active job,
-      // so the client knows which roles are running. History replay is deduped by sentEvents.
-      for (const [, job] of jobs) {
-        if (isJobActive(job.status)) {
-          this.subscribeJobToClient(client, job, true);
+      // Phase 2: Subscribe to live events for active sessions
+      for (const [, exec] of sessions) {
+        if (exec.status === 'running' || exec.status === 'awaiting_input') {
+          this.subscribeSessionToClient(client, exec, true);
         }
       }
     }
 
-    console.log(`[WaveMux] attach wave=${waveId} jobs=${jobs?.size ?? 0} from=${fromWaveSeq}`);
+    console.log(`[WaveMux] attach wave=${waveId} sessions=${sessions?.size ?? 0} from=${fromWaveSeq}`);
     return client;
   }
 
-  /**
-   * Subscribe to a job's live events on a client.
-   * @param sendNotification - if true, send wave:role-attached + replay history (for late-joining jobs)
-   */
-  private subscribeJobToClient(client: WaveStreamClient, job: Job, sendNotification: boolean): void {
-    if (client.attachedJobs.has(job.id)) return;
+  private subscribeSessionToClient(client: WaveStreamClient, execution: Execution, sendNotification: boolean): void {
+    if (client.attachedSessions.has(execution.sessionId)) return;
 
-    const sessionId = job.sessionId ?? '';
-    const roleId = job.roleId;
+    const sessionId = execution.sessionId;
+    const roleId = execution.roleId;
 
     if (sendNotification) {
-      // Notify client about new role joining
       sendSSE(client, 'wave:role-attached', {
         sessionId,
         roleId,
-        jobId: job.id,
-        parentJobId: job.parentJobId,
+        parentSessionId: execution.parentSessionId,
       });
 
-      // Replay this job's history (for late-joining child jobs)
-      const events = ActivityStream.readFrom(job.id, 0);
+      const events = ActivityStream.readFrom(execution.sessionId, 0);
       for (const event of events) {
         const key = `${event.roleId}:${event.seq}`;
         if (client.sentEvents.has(key)) continue;
@@ -175,12 +146,11 @@ class WaveMultiplexer {
       }
     }
 
-    // Subscribe to live events
     const subscriber: ActivitySubscriber = (event: ActivityEvent) => {
       if (client.closed) return;
 
       const key = `${event.roleId}:${event.seq}`;
-      if (client.sentEvents.has(key)) return; // skip duplicate
+      if (client.sentEvents.has(key)) return;
       client.sentEvents.add(key);
 
       const waveSeq = client.waveSeq++;
@@ -190,50 +160,41 @@ class WaveMultiplexer {
         event,
       } as WaveStreamEnvelope);
 
-      if (event.type === 'msg:done' || event.type === 'msg:error' || event.type === 'job:done' || event.type === 'job:error') {
+      if (event.type === 'msg:done' || event.type === 'msg:error') {
         sendSSE(client, 'wave:role-detached', {
           sessionId,
           roleId,
-          reason: (event.type === 'msg:done' || event.type === 'job:done') ? 'done' : 'error',
+          reason: event.type === 'msg:done' ? 'done' : 'error',
         });
       }
     };
 
-    job.stream.subscribe(subscriber);
+    execution.stream.subscribe(subscriber);
 
-    client.attachedJobs.set(job.id, {
-      jobId: job.id,
+    client.attachedSessions.set(sessionId, {
       sessionId,
       roleId,
-      unsubscribe: () => job.stream.unsubscribe(subscriber),
+      unsubscribe: () => execution.stream.unsubscribe(subscriber),
     });
 
-    console.log(`[WaveMux] subscribed job=${job.id} role=${roleId} notify=${sendNotification}`);
+    console.log(`[WaveMux] subscribed session=${sessionId} role=${roleId} notify=${sendNotification}`);
   }
 
-  /**
-   * Called when any new job is created — check if it belongs to a wave.
-   */
-  onJobCreated(job: Job): void {
-    // Find wave by tracing parentJobId chain
-    const waveId = this.findWaveIdForJob(job.id) ?? this.findWaveIdForJob(job.parentJobId ?? '');
+  onExecutionCreated(execution: Execution): void {
+    const waveId = this.findWaveIdForSession(execution.sessionId) ?? this.findWaveIdForSession(execution.parentSessionId ?? '');
     if (!waveId) return;
 
-    // Register + auto-attach to clients
-    this.registerJob(waveId, job);
+    this.registerSession(waveId, execution);
   }
 
-  /**
-   * Disconnect a client from a wave stream
-   */
   detach(waveId: string, client: WaveStreamClient): void {
     client.closed = true;
     clearInterval(client.heartbeat);
 
-    for (const [, attached] of client.attachedJobs) {
+    for (const [, attached] of client.attachedSessions) {
       attached.unsubscribe();
     }
-    client.attachedJobs.clear();
+    client.attachedSessions.clear();
     client.sentEvents.clear();
 
     const clientSet = this.clients.get(waveId);
@@ -245,71 +206,57 @@ class WaveMultiplexer {
     }
   }
 
-  private findWaveIdForJob(jobId: string): string | undefined {
-    for (const [waveId, jobs] of this.waveJobs) {
-      if (jobs.has(jobId)) return waveId;
+  private findWaveIdForSession(sessionId: string): string | undefined {
+    for (const [waveId, sessions] of this.waveSessions) {
+      if (sessions.has(sessionId)) return waveId;
     }
     return undefined;
   }
 
-  getWaveJobIds(waveId: string): string[] {
-    const jobs = this.waveJobs.get(waveId);
-    return jobs ? Array.from(jobs.keys()) : [];
+  getWaveSessionIds(waveId: string): string[] {
+    const sessions = this.waveSessions.get(waveId);
+    return sessions ? Array.from(sessions.keys()) : [];
   }
 
-  /**
-   * Return all waves that have at least one active (running/awaiting_input) job.
-   * Used to restore waveCenterWaves after page refresh.
-   */
   getActiveWaves(): Array<{
     id: string;
     directive: string;
-    /** D-014: prefer dispatches over rootJobs */
-    dispatches: Array<{ sessionId: string; roleId: string; roleName: string; jobId: string }>;
-    /** @deprecated D-014: use dispatches */
-    rootJobs: Array<{ sessionId: string; roleId: string; roleName: string; jobId: string }>;
+    dispatches: Array<{ sessionId: string; roleId: string; roleName: string }>;
     startedAt: number;
     sessionIds: string[];
   }> {
     const result: Array<{
       id: string;
       directive: string;
-      dispatches: Array<{ sessionId: string; roleId: string; roleName: string; jobId: string }>;
-      rootJobs: Array<{ sessionId: string; roleId: string; roleName: string; jobId: string }>;
+      dispatches: Array<{ sessionId: string; roleId: string; roleName: string }>;
       startedAt: number;
       sessionIds: string[];
     }> = [];
 
-    for (const [waveId, jobs] of this.waveJobs) {
-      const hasActive = Array.from(jobs.values()).some(j => isJobActive(j.status));
+    for (const [waveId, sessions] of this.waveSessions) {
+      const hasActive = Array.from(sessions.values()).some(e => e.status === 'running' || e.status === 'awaiting_input');
       if (!hasActive) continue;
 
-      // Extract wave info from root jobs (jobs without parentJobId in this wave)
-      const rootJobs = Array.from(jobs.values())
-        .filter(j => !j.parentJobId || !jobs.has(j.parentJobId))
-        .map(j => ({
-          sessionId: j.sessionId ?? '',
-          roleId: j.roleId,
-          roleName: j.roleId.toUpperCase(),
-          jobId: j.id,
+      const rootSessions = Array.from(sessions.values())
+        .filter(e => !e.parentSessionId || !sessions.has(e.parentSessionId))
+        .map(e => ({
+          sessionId: e.sessionId,
+          roleId: e.roleId,
+          roleName: e.roleId.toUpperCase(),
         }));
 
-      // Directive from first root job's task (strip "[CEO Wave] " prefix)
-      const firstJob = rootJobs.length > 0
-        ? Array.from(jobs.values()).find(j => j.id === rootJobs[0].jobId)
+      const firstExec = rootSessions.length > 0
+        ? Array.from(sessions.values()).find(e => e.sessionId === rootSessions[0].sessionId)
         : undefined;
-      const directive = firstJob?.task.replace(/^\[CEO Wave\]\s*/, '') ?? '';
+      const directive = firstExec?.task.replace(/^\[CEO Wave\]\s*/, '') ?? '';
 
-      // StartedAt from earliest job
       const startedAt = Math.min(
-        ...Array.from(jobs.values()).map(j => new Date(j.createdAt).getTime())
+        ...Array.from(sessions.values()).map(e => new Date(e.createdAt).getTime())
       );
 
-      const sessionIds = Array.from(jobs.values())
-        .map(j => j.sessionId)
-        .filter((s): s is string => !!s);
+      const sessionIds = Array.from(sessions.values()).map(e => e.sessionId);
 
-      result.push({ id: waveId, directive, dispatches: rootJobs, rootJobs, startedAt, sessionIds });
+      result.push({ id: waveId, directive, dispatches: rootSessions, startedAt, sessionIds });
     }
 
     return result;

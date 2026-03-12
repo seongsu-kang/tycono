@@ -71,8 +71,7 @@ def start_job(role_id, task):
         'task': task,
         'sourceRole': source_role,
         'parentSessionId': parent_session if parent_session else None,
-        'parentJobId': parent_session if parent_session else None,
-    }).encode()
+        }).encode()
     req = urllib.request.Request(f'{api}/api/jobs', body, {'Content-Type': 'application/json'})
     resp = json.loads(urllib.request.urlopen(req, timeout=10).read())
     return resp['jobId']
@@ -225,7 +224,6 @@ body = json.dumps({
     'sourceRole': source_role,
     'readOnly': True,
     'parentSessionId': parent_session if parent_session else None,
-    'parentJobId': parent_session if parent_session else None,
 }).encode()
 
 try:

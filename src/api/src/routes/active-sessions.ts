@@ -2,29 +2,25 @@
  * active-sessions.ts — Active session visibility API
  *
  * Exposes session + port + worktree state for both UI and AI agents.
- * All sessions sharing the same tycono server origin can query this.
  */
 import { Router } from 'express';
 import { portRegistry } from '../services/port-registry.js';
-import { jobManager } from '../services/job-manager.js';
+import { executionManager } from '../services/execution-manager.js';
 
 export const activeSessionsRouter = Router();
 
 /**
  * GET /api/active-sessions
- * Returns all active sessions with port + worktree info.
- * Used by both the web UI and AI agents (curl).
  */
 activeSessionsRouter.get('/', (_req, res) => {
   const sessions = portRegistry.getAll();
 
-  // Enrich with job info where available
   const enriched = sessions.map(s => {
-    const job = jobManager.getJobInfo(s.sessionId);
+    const exec = executionManager.getActiveExecution(s.sessionId);
     return {
       ...s,
-      messageStatus: job?.status ?? null,
-      roleName: job?.roleId ?? s.roleId,
+      messageStatus: exec?.status ?? null,
+      roleName: exec?.roleId ?? s.roleId,
       alive: s.pid ? isAlive(s.pid) : null,
     };
   });
@@ -37,7 +33,6 @@ activeSessionsRouter.get('/', (_req, res) => {
 
 /**
  * GET /api/active-sessions/:id
- * Get detailed info for a specific session.
  */
 activeSessionsRouter.get('/:id', (req, res) => {
   const session = portRegistry.get(req.params.id);
@@ -46,20 +41,19 @@ activeSessionsRouter.get('/:id', (req, res) => {
     return;
   }
 
-  const job = jobManager.getJobInfo(session.sessionId);
+  const exec = executionManager.getActiveExecution(session.sessionId);
 
   res.json({
     ...session,
-    messageStatus: job?.status ?? null,
-    roleName: job?.roleId ?? session.roleId,
+    messageStatus: exec?.status ?? null,
+    roleName: exec?.roleId ?? session.roleId,
     alive: session.pid ? isAlive(session.pid) : null,
-    job: job ?? null,
+    execution: exec ? { id: exec.id, status: exec.status, roleId: exec.roleId, task: exec.task } : null,
   });
 });
 
 /**
  * DELETE /api/active-sessions/:id
- * Stop a session — release ports + clean up.
  */
 activeSessionsRouter.delete('/:id', (req, res) => {
   const sessionId = req.params.id;
@@ -70,10 +64,7 @@ activeSessionsRouter.delete('/:id', (req, res) => {
     return;
   }
 
-  // Try to abort the job if running
-  jobManager.abortJob(sessionId);
-
-  // Release ports
+  executionManager.abortSession(sessionId);
   portRegistry.release(sessionId);
 
   res.json({ ok: true, released: session.ports });
@@ -81,7 +72,6 @@ activeSessionsRouter.delete('/:id', (req, res) => {
 
 /**
  * POST /api/active-sessions/cleanup
- * Clean up all dead sessions (PID gone).
  */
 activeSessionsRouter.post('/cleanup', (_req, res) => {
   const result = portRegistry.cleanup();
@@ -98,7 +88,6 @@ activeSessionsRouter.post('/cleanup', (_req, res) => {
 
 /**
  * POST /api/active-sessions/register
- * Manually register a session (for external Claude Code sessions).
  */
 activeSessionsRouter.post('/register', async (req, res) => {
   const { sessionId, roleId, task, pid, worktreePath } = req.body;
@@ -108,7 +97,6 @@ activeSessionsRouter.post('/register', async (req, res) => {
     return;
   }
 
-  // Check if already registered
   const existing = portRegistry.get(sessionId);
   if (existing) {
     res.json({ ok: true, ports: existing.ports, existing: true });

@@ -218,7 +218,11 @@ export default function useWaveTree(
 
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            // Mark stream as ended so connectStream can reconnect to this sessionId
+            controller.abort();
+            break;
+          }
 
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split('\n');

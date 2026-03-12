@@ -90,8 +90,6 @@ export interface WaveReplayRole {
   roleId: string;
   roleName: string;
   sessionId: string;
-  /** @deprecated server still sends jobId */
-  jobId?: string;
   status: WaveRoleStatus;
   events: ActivityEvent[];
   childSessions?: Array<{
@@ -157,8 +155,6 @@ export interface Message {
   /* D-014: Session-Centric extensions */
   events?: ActivityEvent[];
   dispatches?: Array<{ sessionId: string; roleId: string }>;
-  /** @deprecated D-014: internal runtime handle, not exposed to UI */
-  jobId?: string;
   readOnly?: boolean;
   turns?: number;
   tokens?: { input: number; output: number };

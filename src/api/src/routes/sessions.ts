@@ -10,7 +10,7 @@ import {
   addMessage,
   type Message,
 } from '../services/session-store.js';
-import { jobManager } from '../services/job-manager.js';
+import { executionManager } from '../services/execution-manager.js';
 import { isMessageActive, type MessageStatus } from '../../../shared/types.js';
 import { ActivityStream, type ActivityEvent } from '../services/activity-stream.js';
 import { updateFollowUpForReply } from '../services/wave-tracker.js';
@@ -80,9 +80,9 @@ sessionsRouter.delete('/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-/* ─── SCA-011: Session-based Job proxying ──── */
+/* ─── Session-based execution proxying ──── */
 
-/** GET /api/sessions/:id/stream — SSE proxy to linked job's activity stream */
+/** GET /api/sessions/:id/stream — SSE proxy to linked execution's activity stream */
 sessionsRouter.get('/:id/stream', (req, res) => {
   const session = getSession(req.params.id);
   if (!session) {
@@ -90,10 +90,9 @@ sessionsRouter.get('/:id/stream', (req, res) => {
     return;
   }
 
-  const job = jobManager.getJobBySessionId(req.params.id);
+  const exec = executionManager.getActiveExecution(req.params.id);
   const fromSeq = parseInt(req.query.from as string ?? '0', 10);
 
-  // Start SSE
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
@@ -107,44 +106,42 @@ sessionsRouter.get('/:id/stream', (req, res) => {
     try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch { /* ignore */ }
   };
 
-  // If no job found, try to replay from the session's latest jobId in messages
-  // @deprecated D-014: use sessionId — message.jobId is legacy linkage
-  const jobId = job?.id ?? session.messages.filter(m => m.jobId).pop()?.jobId;
-
-  if (jobId) {
-    // Replay historical events
-    const pastEvents = ActivityStream.readFrom(jobId, fromSeq);
+  // Read from session-keyed stream file
+  const streamId = exec?.sessionId ?? req.params.id;
+  if (ActivityStream.exists(streamId)) {
+    const pastEvents = ActivityStream.readFrom(streamId, fromSeq);
     for (const event of pastEvents) {
       sendEvent('activity', event);
     }
   }
 
-  // If the job is finished or doesn't exist, end
-  if (!job || !isMessageActive(job.status as MessageStatus)) {
-    sendEvent('stream:end', { reason: job ? job.status : 'no-job' });
+  if (!exec || !isMessageActive(exec.status as MessageStatus)) {
+    sendEvent('stream:end', { reason: exec ? exec.status : 'no-execution' });
     res.end();
     return;
   }
 
-  // Subscribe for live events
   const subscriber = (event: ActivityEvent) => {
     if (event.seq >= fromSeq) {
       sendEvent('activity', event);
     }
-    if (event.type === 'msg:done' || event.type === 'job:done' || event.type === 'msg:error' || event.type === 'job:error') {
-      sendEvent('stream:end', { reason: (event.type === 'msg:done' || event.type === 'job:done') ? 'done' : 'error' });
+    if (event.type === 'msg:done' || event.type === 'msg:error') {
+      sendEvent('stream:end', { reason: event.type === 'msg:done' ? 'done' : 'error' });
       res.end();
-      job.stream.unsubscribe(subscriber);
-    } else if (event.type === 'msg:reply' || event.type === 'job:reply') {
+      exec.stream.unsubscribe(subscriber);
+    } else if (event.type === 'msg:awaiting_input') {
+      sendEvent('stream:end', { reason: 'awaiting_input' });
+      res.end();
+      exec.stream.unsubscribe(subscriber);
+    } else if (event.type === 'msg:reply') {
       sendEvent('stream:end', { reason: 'replied' });
       res.end();
-      job.stream.unsubscribe(subscriber);
+      exec.stream.unsubscribe(subscriber);
     }
   };
 
-  job.stream.subscribe(subscriber);
+  exec.stream.subscribe(subscriber);
 
-  // Heartbeat
   const heartbeat = setInterval(() => {
     if (res.destroyed || res.writableEnded) {
       clearInterval(heartbeat);
@@ -155,30 +152,22 @@ sessionsRouter.get('/:id/stream', (req, res) => {
 
   req.on('close', () => {
     clearInterval(heartbeat);
-    job.stream.unsubscribe(subscriber);
+    exec.stream.unsubscribe(subscriber);
   });
 });
 
-/** POST /api/sessions/:id/abort — abort linked job */
+/** POST /api/sessions/:id/abort — abort linked execution */
 sessionsRouter.post('/:id/abort', (req, res) => {
-  // Try session-based lookup first, then fallback to direct job search
-  // (session file may not exist after server restart, but job can still be in-memory)
-  const job = jobManager.getJobBySessionId(req.params.id);
-  if (!job) {
-    res.status(404).json({ error: 'No active job for this session' });
-    return;
-  }
-
-  const success = jobManager.abortJob(job.id);
+  const success = executionManager.abortSession(req.params.id);
   if (!success) {
-    res.status(400).json({ error: 'Job not running or already finished' });
+    res.status(404).json({ error: 'No active execution for this session' });
     return;
   }
 
   res.json({ ok: true, sessionId: req.params.id });
 });
 
-/** POST /api/sessions/:id/message — send a new message to the session (D-014 Session-Centric) */
+/** POST /api/sessions/:id/message — send a new message to the session */
 sessionsRouter.post('/:id/message', (req, res) => {
   const session = getSession(req.params.id);
   if (!session) {
@@ -192,7 +181,6 @@ sessionsRouter.post('/:id/message', (req, res) => {
     return;
   }
 
-  // Add CEO message to session
   const ceoMsg: Message = {
     id: `msg-${Date.now()}-ceo-msg`,
     from: 'ceo',
@@ -204,8 +192,7 @@ sessionsRouter.post('/:id/message', (req, res) => {
   };
   addMessage(req.params.id, ceoMsg);
 
-  // Start new job for this message
-  const newJob = jobManager.startJob({
+  const newExec = executionManager.startExecution({
     type: 'assign',
     roleId: session.roleId,
     task: message ?? '(image attached)',
@@ -214,7 +201,6 @@ sessionsRouter.post('/:id/message', (req, res) => {
     attachments,
   });
 
-  // Add role message for the new job
   const roleMsg: Message = {
     id: `msg-${Date.now() + 1}-role-msg`,
     from: 'role',
@@ -222,14 +208,13 @@ sessionsRouter.post('/:id/message', (req, res) => {
     type: 'conversation',
     status: 'streaming',
     timestamp: new Date().toISOString(),
-    jobId: newJob.id, // @deprecated D-014: use sessionId for tracking
   };
   addMessage(req.params.id, roleMsg, true);
 
-  res.json({ ok: true, sessionId: req.params.id, jobId: newJob.id });
+  res.json({ ok: true, sessionId: req.params.id });
 });
 
-/** POST /api/sessions/:id/reply — reply to awaiting_input job via session */
+/** POST /api/sessions/:id/reply — reply to awaiting_input execution via session */
 sessionsRouter.post('/:id/reply', (req, res) => {
   const session = getSession(req.params.id);
   if (!session) {
@@ -243,7 +228,6 @@ sessionsRouter.post('/:id/reply', (req, res) => {
     return;
   }
 
-  // Add CEO reply message to session
   const ceoMsg: Message = {
     id: `msg-${Date.now()}-ceo-reply`,
     from: 'ceo',
@@ -255,19 +239,16 @@ sessionsRouter.post('/:id/reply', (req, res) => {
   };
   addMessage(req.params.id, ceoMsg);
 
-  const job = jobManager.getJobBySessionId(req.params.id);
-  let newJob;
+  const exec = executionManager.getActiveExecution(req.params.id);
+  let newExec;
 
-  if (job) {
-    // Normal path: reply to existing job
-    newJob = jobManager.replyToJob(job.id, message ?? '(image attached)', responderRole);
-    if (!newJob) {
-      res.status(400).json({ error: 'Job not in a replyable state' });
+  if (exec) {
+    newExec = executionManager.continueSession(req.params.id, message ?? '(image attached)', responderRole);
+    if (!newExec) {
+      res.status(400).json({ error: 'Execution not in a replyable state' });
       return;
     }
   } else {
-    // Fallback: job lost (server restart) — create fresh follow-up job
-    // Build context from session history
     const prevMessages = session.messages
       .filter(m => m.id !== ceoMsg.id)
       .slice(-6)
@@ -277,7 +258,7 @@ sessionsRouter.post('/:id/reply', (req, res) => {
       ? `[Conversation History]\n${prevMessages}\n\n[CEO Follow-up]\n${message ?? '(image attached)'}`
       : (message ?? '(image attached)');
 
-    newJob = jobManager.startJob({
+    newExec = executionManager.startExecution({
       type: 'assign',
       roleId: session.roleId,
       task,
@@ -287,7 +268,6 @@ sessionsRouter.post('/:id/reply', (req, res) => {
     });
   }
 
-  // Add role message for the continuation job
   const roleMsg: Message = {
     id: `msg-${Date.now() + 1}-role-reply`,
     from: 'role',
@@ -295,14 +275,11 @@ sessionsRouter.post('/:id/reply', (req, res) => {
     type: 'conversation',
     status: 'streaming',
     timestamp: new Date().toISOString(),
-    jobId: newJob.id, // @deprecated D-014: use sessionId for tracking
   };
   addMessage(req.params.id, roleMsg, true);
 
-  // Update wave JSON if this session belongs to a wave
   if (session.waveId) {
-    const oldJobId = job?.id;
-    updateFollowUpForReply(session.waveId, session.roleId, oldJobId, newJob.id, req.params.id);
+    updateFollowUpForReply(session.waveId, session.roleId, req.params.id);
   }
 
   res.json({ ok: true, sessionId: req.params.id });

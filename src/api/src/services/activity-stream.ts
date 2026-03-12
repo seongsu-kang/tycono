@@ -20,8 +20,8 @@ function ensureDir(): void {
   }
 }
 
-function streamPath(jobId: string): string {
-  return path.join(streamsDir(), `${jobId}.jsonl`);
+function streamPath(streamId: string): string {
+  return path.join(streamsDir(), `${streamId}.jsonl`);
 }
 
 /* ─── Subscriber type ────────────────────── */
@@ -31,12 +31,10 @@ export type ActivitySubscriber = (event: ActivityEvent) => void;
 /* ─── ActivityStream ─────────────────────── */
 
 export class ActivityStream {
-  readonly jobId: string;
+  readonly sessionId: string;
   readonly roleId: string;
   readonly parentSessionId?: string;
-  /** @deprecated D-014: use parentSessionId */
-  readonly parentJobId?: string;
-  /** Trace ID for full chain tracking — top-level jobId propagated to all children */
+  /** Trace ID for full chain tracking — top-level sessionId propagated to all children */
   readonly traceId?: string;
 
   private seq = 0;
@@ -44,17 +42,29 @@ export class ActivityStream {
   private filePath: string;
   private closed = false;
 
-  constructor(jobId: string, roleId: string, parentJobId?: string, traceId?: string) {
-    this.jobId = jobId;
+  constructor(sessionId: string, roleId: string, parentSessionId?: string, traceId?: string) {
+    this.sessionId = sessionId;
     this.roleId = roleId;
-    this.parentSessionId = parentJobId;
-    this.parentJobId = parentJobId; // backward compat
+    this.parentSessionId = parentSessionId;
     this.traceId = traceId;
 
     ensureDir();
-    this.filePath = streamPath(jobId);
-    // Create empty file
-    fs.writeFileSync(this.filePath, '', { flag: 'w' });
+    this.filePath = streamPath(sessionId);
+
+    // Resume mode: if file already exists, read last seq and continue
+    if (fs.existsSync(this.filePath)) {
+      const content = fs.readFileSync(this.filePath, 'utf-8');
+      const lines = content.split('\n').filter(Boolean);
+      if (lines.length > 0) {
+        try {
+          const lastEvent = JSON.parse(lines[lines.length - 1]) as ActivityEvent;
+          this.seq = lastEvent.seq + 1;
+        } catch { /* start from 0 if parse fails */ }
+      }
+    } else {
+      // Create empty file
+      fs.writeFileSync(this.filePath, '', { flag: 'w' });
+    }
   }
 
   /** Append event to JSONL + push to live subscribers */
@@ -65,7 +75,6 @@ export class ActivityStream {
       type,
       roleId,
       parentSessionId: this.parentSessionId,
-      parentJobId: this.parentJobId, // backward compat
       ...(this.traceId && { traceId: this.traceId }),
       data,
     };
@@ -110,11 +119,27 @@ export class ActivityStream {
     return this.seq;
   }
 
+  /* ─── Static factory ─────────────────── */
+
+  /** Cache of active streams by sessionId */
+  private static activeStreams = new Map<string, ActivityStream>();
+
+  /** Get or create an ActivityStream for a session. Reuses existing stream for continuations. */
+  static getOrCreate(sessionId: string, roleId: string, parentSessionId?: string, traceId?: string): ActivityStream {
+    const existing = ActivityStream.activeStreams.get(sessionId);
+    if (existing && !existing.isClosed) {
+      return existing;
+    }
+    const stream = new ActivityStream(sessionId, roleId, parentSessionId, traceId);
+    ActivityStream.activeStreams.set(sessionId, stream);
+    return stream;
+  }
+
   /* ─── Static: read from file ───────────── */
 
   /** Read events from a JSONL file starting at fromSeq */
-  static readFrom(jobId: string, fromSeq = 0): ActivityEvent[] {
-    const fp = streamPath(jobId);
+  static readFrom(streamId: string, fromSeq = 0): ActivityEvent[] {
+    const fp = streamPath(streamId);
     if (!fs.existsSync(fp)) return [];
 
     const lines = fs.readFileSync(fp, 'utf-8').split('\n').filter(Boolean);
@@ -133,16 +158,16 @@ export class ActivityStream {
   }
 
   /** Read all events from a JSONL file */
-  static readAll(jobId: string): ActivityEvent[] {
-    return ActivityStream.readFrom(jobId, 0);
+  static readAll(streamId: string): ActivityEvent[] {
+    return ActivityStream.readFrom(streamId, 0);
   }
 
   /** Check if a stream file exists */
-  static exists(jobId: string): boolean {
-    return fs.existsSync(streamPath(jobId));
+  static exists(streamId: string): boolean {
+    return fs.existsSync(streamPath(streamId));
   }
 
-  /** List all stream files (job IDs) */
+  /** List all stream files (stream IDs) */
   static listAll(): string[] {
     ensureDir();
     return fs.readdirSync(streamsDir())

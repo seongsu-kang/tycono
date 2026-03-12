@@ -109,7 +109,7 @@ export const api = {
   execute: (params: { type?: string; roleId?: string; task?: string; directive?: string; sourceRole?: string; readOnly?: boolean; targetRole?: string; targetRoles?: string[]; waveId?: string; attachments?: ImageAttachment[] }) =>
     post<{ sessionId: string; sessionIds?: string[]; waveId?: string }>('/jobs', params),
   saveWave: (params: { directive: string; sessionIds: string[]; waveId?: string }) =>
-    post<{ ok: boolean; path: string }>('/waves/save', { ...params, jobIds: params.sessionIds }),
+    post<{ ok: boolean; path: string }>('/waves/save', params),
 
   // Setup / Onboarding
   getStatus: () => get<CompanyStatus>('/status'),

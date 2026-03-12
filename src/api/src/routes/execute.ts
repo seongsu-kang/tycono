@@ -13,16 +13,16 @@ import {
   type Message,
   type ImageAttachment,
 } from '../services/session-store.js';
-import { jobManager, type Job } from '../services/job-manager.js';
+import { executionManager, type Execution } from '../services/execution-manager.js';
 import { type MessageStatus, type RoleStatus, type WaveRoleStatus, type TeamStatus, isMessageActive, isRoleActive, messageStatusToRoleStatus, eventTypeToMessageStatus } from '../../../shared/types.js';
 import { ActivityStream, type ActivityEvent, type ActivitySubscriber } from '../services/activity-stream.js';
 import { earnCoinsInternal } from './coins.js';
 import { appendFollowUpToWave } from '../services/wave-tracker.js';
 import { waveMultiplexer } from '../services/wave-multiplexer.js';
 
-/* ─── SSE-003: Auto-attach child dispatch jobs to wave multiplexer ── */
-jobManager.onJobCreated((job) => {
-  waveMultiplexer.onJobCreated(job);
+/* ─── Auto-attach child executions to wave multiplexer ── */
+executionManager.onExecutionCreated((exec) => {
+  waveMultiplexer.onExecutionCreated(exec);
 });
 
 /* ─── Runner — lazy, re-created when engine changes ── */
@@ -60,7 +60,7 @@ export function handleExecRequest(req: IncomingMessage, res: ServerResponse): vo
     return;
   }
 
-  // ── /api/jobs/* routes ──
+  // ── /api/jobs/* routes (internal) ──
   if (url.startsWith('/api/jobs')) {
     handleJobsRequest(url, method, req, res);
     return;
@@ -86,61 +86,74 @@ export function handleExecRequest(req: IncomingMessage, res: ServerResponse): vo
 }
 
 /* ═══════════════════════════════════════════════
-   /api/jobs/* — Job-based API
+   /api/jobs/* — Internal endpoints
    ═══════════════════════════════════════════════ */
 
 function handleJobsRequest(url: string, method: string, req: IncomingMessage, res: ServerResponse): void {
-  const [path] = url.split('?');
+  const [reqPath] = url.split('?');
 
-  // POST /api/jobs — start a new job (creates session + job)
-  if (method === 'POST' && path === '/api/jobs') {
+  // POST /api/jobs — start a new execution (creates session + execution)
+  if (method === 'POST' && reqPath === '/api/jobs') {
     readBody(req).then((body) => handleStartJob(body, res));
     return;
   }
 
-  // GET /api/jobs/:id — internal only (used by dispatch bridge Python script)
-  const jobMatch = path.match(/^\/api\/jobs\/([^/]+)$/);
+  // GET /api/jobs/:id — internal only
+  const jobMatch = reqPath.match(/^\/api\/jobs\/([^/]+)$/);
   if (method === 'GET' && jobMatch) {
-    const jobId = jobMatch[1];
-    const info = jobManager.getJobInfo(jobId);
-    if (!info) {
-      res.writeHead(404);
-      res.end(JSON.stringify({ error: 'Job not found' }));
+    const id = jobMatch[1];
+    const exec = executionManager.getExecution(id) ?? executionManager.getActiveExecution(id);
+    if (!exec) {
+      // Try reading from stream file directly
+      if (ActivityStream.exists(id)) {
+        const events = ActivityStream.readAll(id);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ id, events }));
+      } else {
+        res.writeHead(404);
+        res.end(JSON.stringify({ error: 'Not found' }));
+      }
     } else {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(info));
+      res.end(JSON.stringify({
+        id: exec.id,
+        roleId: exec.roleId,
+        task: exec.task,
+        status: exec.status,
+        sessionId: exec.sessionId,
+        createdAt: exec.createdAt,
+      }));
     }
     return;
   }
 
-  // GET /api/jobs/:id/history — internal only (used by engine Python sub-processes)
-  const historyMatch = path.match(/^\/api\/jobs\/([^/]+)\/history$/);
+  // GET /api/jobs/:id/history — internal only
+  const historyMatch = reqPath.match(/^\/api\/jobs\/([^/]+)\/history$/);
   if (method === 'GET' && historyMatch) {
-    const jobId = historyMatch[1];
-    const events = ActivityStream.readAll(jobId);
+    const id = historyMatch[1];
+    const events = ActivityStream.readAll(id);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ events }));
     return;
   }
 
-  // POST /api/jobs/:id/abort — abort a running job directly by jobId
-  const abortMatch = path.match(/^\/api\/jobs\/([^/]+)\/abort$/);
+  // POST /api/jobs/:id/abort — abort by execution ID or session ID
+  const abortMatch = reqPath.match(/^\/api\/jobs\/([^/]+)\/abort$/);
   if (method === 'POST' && abortMatch) {
-    const jobId = abortMatch[1];
-    const success = jobManager.abortJob(jobId);
+    const id = abortMatch[1];
+    const success = executionManager.abortExecution(id) || executionManager.abortSession(id);
     if (!success) {
       res.writeHead(404);
-      res.end(JSON.stringify({ error: 'Job not found or not running' }));
+      res.end(JSON.stringify({ error: 'Not found or not running' }));
     } else {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, jobId }));
+      res.end(JSON.stringify({ ok: true }));
     }
     return;
   }
 
-  // All other /api/jobs/* endpoints → 410
   res.writeHead(410);
-  res.end(JSON.stringify({ error: 'Use /api/sessions/* for client-facing operations. /api/jobs/:id and /api/jobs/:id/history are internal only.' }));
+  res.end(JSON.stringify({ error: 'Use /api/sessions/* for client-facing operations.' }));
 }
 
 /* ─── POST /api/jobs ─────────────────────── */
@@ -152,12 +165,10 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
   const directive = body.directive as string;
   const sourceRole = (body.sourceRole as string) || 'ceo';
   const readOnly = body.readOnly === true;
-  const targetRole = (body.targetRole as string) || 'cto';
-  const parentJobId = body.parentJobId as string | undefined;
+  const parentSessionId = body.parentSessionId as string | undefined;
   const waveId = body.waveId as string | undefined;
   const attachments = body.attachments as ImageAttachment[] | undefined;
 
-  // Wave shorthand — broadcast to C-level direct reports (optionally filtered)
   if (type === 'wave') {
     if (!directive) {
       jsonResponse(res, 400, { error: 'directive is required for wave jobs' });
@@ -167,7 +178,6 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
     const orgTree = buildOrgTree(COMPANY_ROOT);
     let cLevelRoles = getSubordinates(orgTree, 'ceo');
 
-    // Selective dispatch: filter by targetRoles if provided
     const targetRoles = body.targetRoles as string[] | undefined;
     if (targetRoles && Array.isArray(targetRoles) && targetRoles.length > 0) {
       const allowed = new Set(targetRoles);
@@ -179,25 +189,19 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
       return;
     }
 
-    // Resolve full targetRoles scope for re-dispatch filtering
-    // Include both the C-level roles AND any sub-roles from targetRoles
     const fullTargetScope = targetRoles && targetRoles.length > 0 ? targetRoles : undefined;
 
-    // D-014: Create Wave meta + Sessions for each target role
-    const waveId = `wave-${Date.now()}`;
-    const jobIds: string[] = [];
+    const newWaveId = `wave-${Date.now()}`;
     const sessionIds: string[] = [];
 
     for (const cRole of cLevelRoles) {
-      // Create a Session for this role (D-014: Wave = Session batch creation)
       const session = createSession(cRole, {
         mode: 'do',
         source: 'wave',
-        waveId,
+        waveId: newWaveId,
       });
       sessionIds.push(session.id);
 
-      // Add CEO directive as the first message in the session
       const ceoMsg: Message = {
         id: `msg-${Date.now()}-ceo-${cRole}`,
         from: 'ceo',
@@ -209,22 +213,19 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
       };
       addMessage(session.id, ceoMsg);
 
-      const job = jobManager.startJob({
+      const exec = executionManager.startExecution({
         type: 'wave',
         roleId: cRole,
         task: `[CEO Wave] ${directive}`,
         sourceRole: 'ceo',
-        parentJobId,
+        parentSessionId,
         targetRoles: fullTargetScope,
-        sessionId: session.id,       // D-014: link job to session
+        sessionId: session.id,
         attachments,
       });
-      jobIds.push(job.id);
 
-      // SSE-001: Register wave job with multiplexer
-      waveMultiplexer.registerJob(waveId, job);
+      waveMultiplexer.registerSession(newWaveId, exec);
 
-      // Add a role message (will be updated as execution progresses)
       const roleMsg: Message = {
         id: `msg-${Date.now() + 1}-role-${cRole}`,
         from: 'role',
@@ -232,13 +233,11 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
         type: 'conversation',
         status: 'streaming',
         timestamp: new Date().toISOString(),
-        jobId: job.id, // @deprecated D-014: use message-level tracking
       };
       addMessage(session.id, roleMsg, true);
     }
 
-    // sessionIds always contains real session IDs — no ambiguity. jobIds removed from external response.
-    jsonResponse(res, 200, { sessionIds, waveId });
+    jsonResponse(res, 200, { sessionIds, waveId: newWaveId });
     return;
   }
 
@@ -254,16 +253,14 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
     return;
   }
 
-  // D-014: Always create a session for every job (guarantees sessionId in response)
   const sessionSource: 'wave' | 'dispatch' = waveId ? 'wave' : 'dispatch';
   const session = createSession(roleId, {
     mode: readOnly ? 'talk' : 'do',
-    source: parentJobId ? 'dispatch' : sessionSource,
+    source: parentSessionId ? 'dispatch' : sessionSource,
     ...(waveId && { waveId }),
   });
   const sessionId = session.id;
 
-  // Add the initiator's message as the first message in the session
   const ceoMsg: Message = {
     id: `msg-${Date.now()}-ceo`,
     from: 'ceo',
@@ -275,18 +272,17 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
   };
   addMessage(session.id, ceoMsg);
 
-  const job = jobManager.startJob({
+  const exec = executionManager.startExecution({
     type: readOnly ? 'consult' : 'assign',
     roleId,
     task,
     sourceRole,
     readOnly,
-    parentJobId,
+    parentSessionId,
     sessionId,
     attachments,
   });
 
-  // D-014: Add role message linked to job
   const roleMsg: Message = {
     id: `msg-${Date.now() + 1}-role`,
     from: 'role',
@@ -294,39 +290,32 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
     type: 'conversation',
     status: 'streaming',
     timestamp: new Date().toISOString(),
-    jobId: job.id, // @deprecated D-014: use message-level tracking
     readOnly: readOnly || undefined,
   };
   addMessage(sessionId, roleMsg, true);
 
-  // Follow-up: append this job to the wave JSON so it persists across navigation
   if (waveId) {
-    appendFollowUpToWave(waveId, job.id, roleId, task, sessionId);
+    appendFollowUpToWave(waveId, sessionId, roleId, task);
   }
 
-  // sessionId is always a real session — no ambiguity. jobId removed from external response.
   jsonResponse(res, 200, { sessionId, ...(waveId && { waveId }) });
 }
-
-/* ─── Follow-up: wave tracking (delegated to wave-tracker service) ── */
 
 /* ─── POST /api/waves/save ──────────────── */
 
 function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): void {
   const directive = body.directive as string;
-  const jobIds = body.jobIds as string[];
-  const sessionIds = body.sessionIds as string[] | undefined;
+  const sessionIds = (body.sessionIds ?? body.jobIds) as string[];
   const waveId = body.waveId as string | undefined;
 
-  if (!directive || !jobIds || jobIds.length === 0) {
-    jsonResponse(res, 400, { error: 'directive and jobIds are required' });
+  if (!directive || !sessionIds || sessionIds.length === 0) {
+    jsonResponse(res, 400, { error: 'directive and sessionIds are required' });
     return;
   }
 
   const now = new Date();
   const dateStr = now.toISOString().slice(0, 10);
 
-  // Structured data for JSON replay
   interface WaveRoleData {
     roleId: string;
     roleName: string;
@@ -337,43 +326,40 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
   }
   const rolesData: WaveRoleData[] = [];
 
-  for (const jobId of jobIds) {
-    const events = ActivityStream.readAll(jobId);
-    const startEvent = events.find(e => e.type === 'msg:start' || e.type === 'job:start');
+  for (const sid of sessionIds) {
+    const events = ActivityStream.readAll(sid);
+    const startEvent = events.find(e => e.type === 'msg:start');
     const roleId = startEvent?.roleId ?? 'unknown';
     const roleName = (startEvent?.data?.roleName as string) ?? roleId;
-    const doneEvent = events.find(e => e.type === 'msg:done' || e.type === 'msg:awaiting_input' || e.type === 'msg:error' || e.type === 'job:done' || e.type === 'job:awaiting_input' || e.type === 'job:error');
+    const doneEvent = events.find(e => e.type === 'msg:done' || e.type === 'msg:awaiting_input' || e.type === 'msg:error');
     const status: WaveRoleStatus = doneEvent ? eventTypeToMessageStatus(doneEvent.type) as WaveRoleStatus : 'unknown';
 
-    // Collect child sessions (dispatched sub-roles)
     const childSessions: WaveRoleData['childSessions'] = [];
     for (const e of events) {
-      const childJobId = (e.data.childSessionId ?? e.data.childJobId) as string | undefined;
-      if (e.type === 'dispatch:start' && childJobId) {
+      const childSessionId = e.data.childSessionId as string | undefined;
+      if (e.type === 'dispatch:start' && childSessionId) {
         const targetRoleId = (e.data.targetRoleId as string) ?? 'unknown';
-        const childEvents = ActivityStream.readAll(childJobId);
-        const childDone = childEvents.find(ce => ce.type === 'msg:done' || ce.type === 'msg:error' || ce.type === 'msg:awaiting_input' || ce.type === 'job:done' || ce.type === 'job:error' || ce.type === 'job:awaiting_input');
+        const childEvents = ActivityStream.readAll(childSessionId);
+        const childDone = childEvents.find(ce => ce.type === 'msg:done' || ce.type === 'msg:error' || ce.type === 'msg:awaiting_input');
         const childStatus: WaveRoleStatus = childDone ? eventTypeToMessageStatus(childDone.type) as WaveRoleStatus : 'unknown';
         childSessions.push({
           roleId: targetRoleId,
-          roleName: (childEvents.find(ce => ce.type === 'msg:start' || ce.type === 'job:start')?.data?.roleName as string) ?? targetRoleId,
-          sessionId: childJobId,
+          roleName: (childEvents.find(ce => ce.type === 'msg:start')?.data?.roleName as string) ?? targetRoleId,
+          sessionId: childSessionId,
           status: childStatus,
           events: childEvents,
         });
       }
     }
 
-    rolesData.push({ roleId, roleName, sessionId: jobId, status, events, childSessions });
+    rolesData.push({ roleId, roleName, sessionId: sid, status, events, childSessions });
   }
 
-  // Write to operations/waves/
   const wavesDir = path.join(COMPANY_ROOT, 'operations', 'waves');
   if (!fs.existsSync(wavesDir)) {
     fs.mkdirSync(wavesDir, { recursive: true });
   }
 
-  // Dedup: if waveId matches an existing file, overwrite instead of creating new
   let baseName: string;
   if (waveId) {
     const existing = fs.readdirSync(wavesDir).find(f => {
@@ -394,15 +380,13 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
     id: baseName,
     directive,
     startedAt: now.toISOString(),
-    duration: 0, // Could be computed from events
+    duration: 0,
     roles: rolesData,
-    // D-014: Session references for follow-up
     ...(waveId && { waveId }),
-    ...(sessionIds && sessionIds.length > 0 && { sessionIds }),
+    ...(sessionIds.length > 0 && { sessionIds }),
   };
   fs.writeFileSync(jsonPath, JSON.stringify(waveJson, null, 2), 'utf-8');
 
-  // EC-012: Wave completion bonus (participating roles × 500 coins)
   const roleCount = rolesData.length;
   if (roleCount > 0) {
     try {
@@ -413,21 +397,19 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
   jsonResponse(res, 200, { ok: true, path: `operations/waves/${baseName}.json` });
 }
 
-/* ─── GET /api/waves/:waveId/stream — SSE multiplexed wave stream (SSE-002) ── */
+/* ─── GET /api/waves/:waveId/stream ── */
 
 function handleWaveStream(waveId: string, url: string, res: ServerResponse, req: IncomingMessage): void {
   const fromMatch = url.match(/[?&]from=(\d+)/);
   const fromWaveSeq = fromMatch ? parseInt(fromMatch[1], 10) : 0;
 
-  // Check if wave has any registered jobs
-  const jobIds = waveMultiplexer.getWaveJobIds(waveId);
-  if (jobIds.length === 0) {
+  const sessionIds = waveMultiplexer.getWaveSessionIds(waveId);
+  if (sessionIds.length === 0) {
     res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: `No jobs found for wave: ${waveId}` }));
+    res.end(JSON.stringify({ error: `No sessions found for wave: ${waveId}` }));
     return;
   }
 
-  // attach() handles everything: replay history + subscribe to live events
   const client = waveMultiplexer.attach(waveId, res as any, fromWaveSeq);
 
   req.on('close', () => {
@@ -437,7 +419,6 @@ function handleWaveStream(waveId: string, url: string, res: ServerResponse, req:
 
 /* ═══════════════════════════════════════════════
    Legacy /api/exec/* — kept for backward compat
-   Now internally delegates to JobManager where possible
    ═══════════════════════════════════════════════ */
 
 /* ─── Body parser ────────────────────────────── */
@@ -470,9 +451,7 @@ function jsonResponse(res: ServerResponse, status: number, body: unknown): void 
   res.end(JSON.stringify(body));
 }
 
-/** SSE timeout: max duration for a single SSE connection (10 minutes) */
 const SSE_TIMEOUT_MS = 10 * 60 * 1000;
-/** SSE heartbeat interval (15 seconds) */
 const SSE_HEARTBEAT_MS = 15 * 1000;
 
 function startSSE(res: ServerResponse): void {
@@ -485,7 +464,6 @@ function startSSE(res: ServerResponse): void {
   res.flushHeaders();
 }
 
-/** Start SSE heartbeat + timeout. Returns cleanup function. */
 function startSSELifecycle(res: ServerResponse, onTimeout: () => void): () => void {
   const heartbeat = setInterval(() => {
     if (res.destroyed || res.writableEnded) {
@@ -511,7 +489,6 @@ function startSSELifecycle(res: ServerResponse, onTimeout: () => void): () => vo
 }
 
 /* ─── POST /api/exec/assign ──────────────────── */
-/* Now delegates to JobManager, streams events back via SSE for backward compat */
 
 function handleAssign(body: Record<string, unknown>, req: IncomingMessage, res: ServerResponse): void {
   const roleId = body.roleId as string;
@@ -533,18 +510,24 @@ function handleAssign(body: Record<string, unknown>, req: IncomingMessage, res: 
     return;
   }
 
-  // Start job via JobManager (JobManager is source of truth for job status)
-  const job = jobManager.startJob({ type: 'assign', roleId, task, sourceRole, readOnly });
+  const session = createSession(roleId, { mode: readOnly ? 'talk' : 'do' });
+  const exec = executionManager.startExecution({
+    type: 'assign',
+    roleId,
+    task,
+    sourceRole,
+    readOnly,
+    sessionId: session.id,
+  });
 
-  // Bridge: stream job events as legacy SSE format
   startSSE(res);
-  sendSSE(res, 'start', { id: job.id, roleId, task, sourceRole });
+  sendSSE(res, 'start', { id: exec.id, roleId, task, sourceRole });
 
   const cleanupLifecycle = startSSELifecycle(res, () => {
     roleStatus.set(roleId, 'idle');
     sendSSE(res, 'error', { message: 'SSE timeout — connection forcibly closed after 10 minutes' });
     if (!res.writableEnded) res.end();
-    job.stream.unsubscribe(subscriber);
+    exec.stream.unsubscribe(subscriber);
   });
 
   const subscriber = (event: ActivityEvent) => {
@@ -559,7 +542,7 @@ function handleAssign(body: Record<string, unknown>, req: IncomingMessage, res: 
         sendSSE(res, 'tool', { name: event.data.name, input: event.data.input });
         break;
       case 'dispatch:start':
-        sendSSE(res, 'dispatch', { roleId: event.data.targetRoleId, task: event.data.task, childJobId: event.data.childJobId, childSessionId: event.data.childSessionId ?? event.data.childJobId });
+        sendSSE(res, 'dispatch', { roleId: event.data.targetRoleId, task: event.data.task, childSessionId: event.data.childSessionId });
         break;
       case 'turn:complete':
         sendSSE(res, 'turn', { turn: event.data.turn });
@@ -567,30 +550,29 @@ function handleAssign(body: Record<string, unknown>, req: IncomingMessage, res: 
       case 'stderr':
         sendSSE(res, 'stderr', { message: event.data.message });
         break;
-      case 'msg:awaiting_input': case 'job:awaiting_input':
+      case 'msg:awaiting_input':
         sendSSE(res, 'awaiting_input', { question: event.data.question, targetRole: event.data.targetRole, reason: event.data.reason });
         break;
-      case 'msg:done': case 'job:done':
+      case 'msg:done':
         cleanupLifecycle();
         sendSSE(res, 'done', event.data);
         if (!res.writableEnded) res.end();
-        job.stream.unsubscribe(subscriber);
+        exec.stream.unsubscribe(subscriber);
         break;
-      case 'msg:error': case 'job:error':
+      case 'msg:error':
         cleanupLifecycle();
         sendSSE(res, 'error', { message: event.data.message });
         if (!res.writableEnded) res.end();
-        job.stream.unsubscribe(subscriber);
+        exec.stream.unsubscribe(subscriber);
         break;
     }
   };
 
-  job.stream.subscribe(subscriber);
+  exec.stream.subscribe(subscriber);
 
-  // Client disconnect → unsubscribe only (job keeps running!)
   req.on('close', () => {
     cleanupLifecycle();
-    job.stream.unsubscribe(subscriber);
+    exec.stream.unsubscribe(subscriber);
     roleStatus.set(roleId, 'idle');
   });
 }
@@ -608,7 +590,6 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
   const orgTree = buildOrgTree(COMPANY_ROOT);
   let cLevelRoles = getSubordinates(orgTree, 'ceo');
 
-  // Selective dispatch: filter by targetRoles if provided
   const targetRoles = body.targetRoles as string[] | undefined;
   if (targetRoles && Array.isArray(targetRoles) && targetRoles.length > 0) {
     const allowed = new Set(targetRoles);
@@ -620,36 +601,35 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
     return;
   }
 
-  // Resolve full targetRoles scope for re-dispatch filtering
   const fullTargetScope = targetRoles && targetRoles.length > 0 ? targetRoles : undefined;
 
-  // Start a job for EACH C-level role
-  const jobs: Job[] = [];
+  const executions: Execution[] = [];
   for (const cRole of cLevelRoles) {
-    const job = jobManager.startJob({
+    const session = createSession(cRole, { mode: 'do' });
+    const exec = executionManager.startExecution({
       type: 'wave',
       roleId: cRole,
       task: `[CEO Wave] ${directive}`,
       sourceRole: 'ceo',
       targetRoles: fullTargetScope,
+      sessionId: session.id,
     });
-    jobs.push(job);
+    executions.push(exec);
   }
 
-  // Bridge: stream ALL job events as SSE, close when all done
   startSSE(res);
   sendSSE(res, 'start', {
-    ids: jobs.map((j) => j.id),
+    ids: executions.map((e) => e.id),
     directive,
     targetRoles: cLevelRoles,
   });
 
   let doneCount = 0;
-  const subscribers: Array<{ job: Job; sub: ActivitySubscriber }> = [];
+  const subscribers: Array<{ exec: Execution; sub: ActivitySubscriber }> = [];
 
-  for (const job of jobs) {
+  for (const exec of executions) {
     const subscriber: ActivitySubscriber = (event: ActivityEvent) => {
-      const rolePrefix = job.roleId;
+      const rolePrefix = exec.roleId;
       switch (event.type) {
         case 'text':
           sendSSE(res, 'output', { roleId: rolePrefix, text: event.data.text });
@@ -661,7 +641,7 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
           sendSSE(res, 'tool', { roleId: rolePrefix, name: event.data.name, input: event.data.input });
           break;
         case 'dispatch:start':
-          sendSSE(res, 'dispatch', { roleId: rolePrefix, targetRoleId: event.data.targetRoleId, task: event.data.task, childJobId: event.data.childJobId, childSessionId: event.data.childSessionId ?? event.data.childJobId });
+          sendSSE(res, 'dispatch', { roleId: rolePrefix, targetRoleId: event.data.targetRoleId, task: event.data.task, childSessionId: event.data.childSessionId });
           break;
         case 'turn:complete':
           sendSSE(res, 'turn', { roleId: rolePrefix, turn: event.data.turn });
@@ -669,21 +649,21 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
         case 'stderr':
           sendSSE(res, 'stderr', { roleId: rolePrefix, message: event.data.message });
           break;
-        case 'msg:awaiting_input': case 'job:awaiting_input':
+        case 'msg:awaiting_input':
           sendSSE(res, 'role:awaiting_input', { roleId: rolePrefix, question: event.data.question, targetRole: event.data.targetRole, reason: event.data.reason });
           break;
-        case 'msg:done': case 'job:done':
+        case 'msg:done':
           sendSSE(res, 'role:done', { roleId: rolePrefix, ...event.data });
           doneCount++;
-          if (doneCount >= jobs.length) {
+          if (doneCount >= executions.length) {
             sendSSE(res, 'done', { directive, completedRoles: cLevelRoles });
             res.end();
           }
           break;
-        case 'msg:error': case 'job:error':
+        case 'msg:error':
           sendSSE(res, 'role:error', { roleId: rolePrefix, message: event.data.message });
           doneCount++;
-          if (doneCount >= jobs.length) {
+          if (doneCount >= executions.length) {
             sendSSE(res, 'done', { directive, completedRoles: cLevelRoles });
             res.end();
           }
@@ -691,14 +671,13 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
       }
     };
 
-    job.stream.subscribe(subscriber);
-    subscribers.push({ job, sub: subscriber });
+    exec.stream.subscribe(subscriber);
+    subscribers.push({ exec, sub: subscriber });
   }
 
-  // Client disconnect → unsubscribe all (jobs keep running)
   req.on('close', () => {
-    for (const { job, sub } of subscribers) {
-      job.stream.unsubscribe(sub);
+    for (const { exec, sub } of subscribers) {
+      exec.stream.unsubscribe(sub);
     }
   });
 }
@@ -708,23 +687,19 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
 function handleStatus(res: ServerResponse): void {
   const statuses: Record<string, string> = {};
 
-  // 1. File-backed activity tracker (baseline)
   const fileActivities = getAllActivities();
   for (const activity of fileActivities) {
     statuses[activity.roleId] = activity.status;
   }
 
-  // 2. JobManager active jobs (isMessageActive: streaming | awaiting_input)
-  const activeJobs = jobManager.listJobs({ active: true });
-  const activeRoles = new Set(activeJobs.map(j => j.roleId));
+  const activeExecs = executionManager.listExecutions({ active: true });
+  const activeRoles = new Set(activeExecs.map(e => e.roleId));
 
-  // 2b. In-memory roleStatus (includes chat streaming sessions, not just jobs)
   const memoryWorking = new Set<string>();
   for (const [rid, st] of roleStatus.entries()) {
     if (isRoleActive(st as RoleStatus)) memoryWorking.add(rid);
   }
 
-  // 3. Stale cleanup: active in file but NOT in JobManager AND NOT in memory → done
   for (const roleId of Object.keys(statuses)) {
     const s = statuses[roleId];
     if (isRoleActive(s as RoleStatus) && !activeRoles.has(roleId) && !memoryWorking.has(roleId)) {
@@ -733,27 +708,24 @@ function handleStatus(res: ServerResponse): void {
     }
   }
 
-  // 4. Active jobs override — use messageStatusToRoleStatus() for canonical mapping
-  for (const job of activeJobs) {
-    const mappedStatus = messageStatusToRoleStatus(job.status as MessageStatus);
-    // running job → 'working' always wins over awaiting_input
-    if (statuses[job.roleId] === 'working' && mappedStatus === 'awaiting_input') continue;
-    statuses[job.roleId] = mappedStatus;
+  for (const exec of activeExecs) {
+    const mappedStatus = messageStatusToRoleStatus(exec.status as MessageStatus);
+    if (statuses[exec.roleId] === 'working' && mappedStatus === 'awaiting_input') continue;
+    statuses[exec.roleId] = mappedStatus;
   }
 
-  // 5. In-memory working (chat streaming) also overrides
   for (const rid of memoryWorking) {
     statuses[rid] = 'working';
   }
 
-  const activeExecs = activeJobs.map((j) => ({
-    id: j.id,
-    roleId: j.roleId,
-    task: j.task,
-    startedAt: j.createdAt,
+  const activeExecutions = activeExecs.map((e) => ({
+    id: e.id,
+    roleId: e.roleId,
+    task: e.task,
+    startedAt: e.createdAt,
   }));
 
-  jsonResponse(res, 200, { statuses, activeExecutions: activeExecs });
+  jsonResponse(res, 200, { statuses, activeExecutions });
 }
 
 /* ─── POST /api/exec/activity ────────────────── */
@@ -803,14 +775,12 @@ function handleSessionMessage(
   const mode = (body.mode as 'talk' | 'do') ?? session.mode;
   const attachments = body.attachments as ImageAttachment[] | undefined;
 
-  // Allow empty content if there are attachments
   if (!content && (!attachments || attachments.length === 0)) {
     jsonResponse(res, 400, { error: 'content or attachments required' });
     return;
   }
 
-  // Validate attachments if present
-  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+  const MAX_FILE_SIZE = 5 * 1024 * 1024;
   const SUPPORTED_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
   if (attachments && attachments.length > 0) {
     for (const att of attachments) {
@@ -818,7 +788,6 @@ function handleSessionMessage(
         jsonResponse(res, 400, { error: `Unsupported image type: ${att.mediaType}` });
         return;
       }
-      // Approximate size check (base64 is ~33% larger than binary)
       const approximateSize = (att.data.length * 3) / 4;
       if (approximateSize > MAX_FILE_SIZE) {
         jsonResponse(res, 400, { error: `File too large: ${att.name}. Max 5MB.` });
@@ -865,9 +834,7 @@ function handleSessionMessage(
   startSSE(res);
   sendSSE(res, 'session', { sessionId, ceoMessageId: ceoMsg.id, roleMessageId: roleMsg.id });
 
-  // SSE lifecycle: heartbeat keeps connection alive, timeout prevents stuck connections
   const cleanupSSELifecycle = startSSELifecycle(res, () => {
-    // Timeout reached — force close the SSE connection
     cleanupChildSubscriptions();
     updateMessage(sessionId, roleMsg.id, { status: 'error' });
     roleStatus.set(roleId, 'idle');
@@ -880,80 +847,49 @@ function handleSessionMessage(
   roleStatus.set(roleId, 'working');
   setActivity(roleId, content.slice(0, 80));
 
-  // Track child job subscriptions for cleanup
-  const childSubscriptions: Array<{ job: Job; subscriber: ActivitySubscriber }> = [];
-  const pendingDispatches = new Set<string>(); // roleIds we expect child jobs for
+  const childSubscriptions: Array<{ exec: Execution; subscriber: ActivitySubscriber }> = [];
+  const pendingDispatches = new Set<string>();
 
-  // Watch for child jobs created via dispatch bridge
-  const unwatchJobs = jobManager.onJobCreated((childJob) => {
-    // Only match jobs for roles we dispatched to from this session
-    if (childJob.type !== 'assign') return;
+  const unwatchExecs = executionManager.onExecutionCreated((childExec) => {
+    if (childExec.type !== 'assign') return;
     if (roleMsg.status !== 'streaming') return;
-    if (!pendingDispatches.has(childJob.roleId)) return;
-    pendingDispatches.delete(childJob.roleId);
+    if (!pendingDispatches.has(childExec.roleId)) return;
+    pendingDispatches.delete(childExec.roleId);
 
     const subscriber: ActivitySubscriber = (event) => {
       switch (event.type) {
         case 'text':
-          sendSSE(res, 'dispatch:progress', {
-            roleId: event.roleId,
-            type: 'text',
-            text: event.data.text,
-          });
+          sendSSE(res, 'dispatch:progress', { roleId: event.roleId, type: 'text', text: event.data.text });
           break;
         case 'thinking':
-          sendSSE(res, 'dispatch:progress', {
-            roleId: event.roleId,
-            type: 'thinking',
-            text: event.data.text,
-          });
+          sendSSE(res, 'dispatch:progress', { roleId: event.roleId, type: 'thinking', text: event.data.text });
           break;
         case 'tool:start':
-          sendSSE(res, 'dispatch:progress', {
-            roleId: event.roleId,
-            type: 'tool',
-            name: event.data.name,
-            input: event.data.input,
-          });
+          sendSSE(res, 'dispatch:progress', { roleId: event.roleId, type: 'tool', name: event.data.name, input: event.data.input });
           break;
-        case 'msg:awaiting_input': case 'job:awaiting_input':
-          sendSSE(res, 'dispatch:progress', {
-            roleId: event.roleId,
-            type: 'awaiting_input',
-            question: event.data.question,
-            targetRole: event.data.targetRole,
-          });
+        case 'msg:awaiting_input':
+          sendSSE(res, 'dispatch:progress', { roleId: event.roleId, type: 'awaiting_input', question: event.data.question, targetRole: event.data.targetRole });
           break;
-        case 'msg:done': case 'job:done':
-          sendSSE(res, 'dispatch:progress', {
-            roleId: event.roleId,
-            type: 'done',
-          });
-          childJob.stream.unsubscribe(subscriber);
+        case 'msg:done':
+          sendSSE(res, 'dispatch:progress', { roleId: event.roleId, type: 'done' });
+          childExec.stream.unsubscribe(subscriber);
           break;
-        case 'msg:error': case 'job:error':
-          sendSSE(res, 'dispatch:progress', {
-            roleId: event.roleId,
-            type: 'error',
-            message: event.data.message,
-          });
-          childJob.stream.unsubscribe(subscriber);
+        case 'msg:error':
+          sendSSE(res, 'dispatch:progress', { roleId: event.roleId, type: 'error', message: event.data.message });
+          childExec.stream.unsubscribe(subscriber);
           break;
       }
     };
-    childJob.stream.subscribe(subscriber);
-    childSubscriptions.push({ job: childJob, subscriber });
+    childExec.stream.subscribe(subscriber);
+    childSubscriptions.push({ exec: childExec, subscriber });
   });
 
-  // Build team status from active jobs using schema helpers
   const teamStatus: TeamStatus = {};
-  for (const j of jobManager.listJobs({ active: true })) {
-    const mapped = messageStatusToRoleStatus(j.status as MessageStatus);
-    // 'working' takes priority over 'awaiting_input' for same role
-    if (teamStatus[j.roleId]?.status === 'working' && mapped === 'awaiting_input') continue;
-    teamStatus[j.roleId] = { status: mapped, task: j.task };
+  for (const e of executionManager.listExecutions({ active: true })) {
+    const mapped = messageStatusToRoleStatus(e.status as MessageStatus);
+    if (teamStatus[e.roleId]?.status === 'working' && mapped === 'awaiting_input') continue;
+    teamStatus[e.roleId] = { status: mapped, task: e.task };
   }
-  // Also include roleStatus for roles working via session (not tracked as jobs)
   for (const [rid, status] of roleStatus) {
     if (isRoleActive(status as RoleStatus) && rid !== roleId && !teamStatus[rid]) {
       teamStatus[rid] = { status: status as RoleStatus };
@@ -990,9 +926,9 @@ function handleSessionMessage(
   );
 
   const cleanupChildSubscriptions = () => {
-    unwatchJobs();
-    for (const { job, subscriber } of childSubscriptions) {
-      job.stream.unsubscribe(subscriber);
+    unwatchExecs();
+    for (const { exec, subscriber } of childSubscriptions) {
+      exec.stream.unsubscribe(subscriber);
     }
     childSubscriptions.length = 0;
   };
