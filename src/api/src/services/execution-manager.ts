@@ -249,6 +249,12 @@ class ExecutionManager {
           ...process.env,
           ...portEnv,
         },
+        // SV-6, SV-7: Supervision callbacks (direct-api runner only)
+        onAbortSession: (sessionId: string) => this.abortSession(sessionId),
+        onAmendSession: (sessionId: string, instruction: string) => {
+          const result = this.continueSession(sessionId, `[SUPERVISION AMENDMENT] ${instruction}`, params.roleId);
+          return result !== null;
+        },
       },
       {
         onText: (text) => {

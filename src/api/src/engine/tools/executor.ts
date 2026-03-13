@@ -6,6 +6,9 @@ import type { ToolCall, ToolResult } from '../llm-adapter.js';
 import { validateWrite, validateRead } from '../authority-validator.js';
 import type { OrgTree } from '../org-tree.js';
 import { buildKnowledgeGateWarning } from '../knowledge-gate.js';
+import { ActivityStream } from '../../services/activity-stream.js';
+import { digest, quietDigest, type DigestResult } from '../../services/digest-engine.js';
+import type { ActivityEvent } from '../../../../shared/types.js';
 
 /* ─── Types ──────────────────────────────────── */
 
@@ -14,9 +17,14 @@ export interface ToolExecutorOptions {
   roleId: string;
   orgTree: OrgTree;
   codeRoot?: string;
+  sessionId?: string;
   onDispatch?: (roleId: string, task: string) => Promise<string>;
   onConsult?: (roleId: string, question: string) => Promise<string>;
   onToolExec?: (name: string, input: Record<string, unknown>) => void;
+  /** For supervision: abort a running session */
+  onAbortSession?: (sessionId: string) => boolean;
+  /** For supervision: amend a running session with new instructions */
+  onAmendSession?: (sessionId: string, instruction: string) => boolean;
 }
 
 /* ─── Tool Executor ──────────────────────────── */
@@ -48,6 +56,12 @@ export async function executeTool(
         return await dispatchTask(id, input, onDispatch);
       case 'consult':
         return await consultTask(id, input, onConsult);
+      case 'heartbeat_watch':
+        return await heartbeatWatch(id, input, companyRoot);
+      case 'amend_session':
+        return amendSession(id, input, options.onAmendSession);
+      case 'abort_session':
+        return abortSession(id, input, options.onAbortSession);
       default:
         return { tool_use_id: id, content: `Unknown tool: ${name}`, is_error: true };
     }
@@ -411,4 +425,153 @@ async function consultTask(
 
   const result = await onConsult(roleId, question);
   return { tool_use_id: id, content: result };
+}
+
+/* ─── Supervision Tools (SV-3, SV-6, SV-7) ──── */
+
+const MAX_WATCH_DURATION = 300;
+const DEFAULT_WATCH_DURATION = 120;
+
+/**
+ * heartbeat_watch: Block for N seconds collecting events from activity streams.
+ * Returns a DigestEngine summary. Early-returns on alert events.
+ * $0 LLM cost during wait — all blocking is server-side.
+ */
+async function heartbeatWatch(
+  id: string,
+  input: Record<string, unknown>,
+  companyRoot: string,
+): Promise<ToolResult> {
+  const sessionIds = input.sessionIds as string[] | undefined;
+  if (!sessionIds || !Array.isArray(sessionIds) || sessionIds.length === 0) {
+    return { tool_use_id: id, content: 'Error: sessionIds array is required', is_error: true };
+  }
+
+  const durationSec = Math.min(
+    Math.max(Number(input.durationSec) || DEFAULT_WATCH_DURATION, 5),
+    MAX_WATCH_DURATION,
+  );
+  const alertOn = (input.alertOn as string[] | undefined) ?? ['msg:done', 'msg:error'];
+  const alertSet = new Set(alertOn);
+
+  // Collect current checkpoints (last known seq for each session)
+  const startCheckpoints = new Map<string, number>();
+  for (const sid of sessionIds) {
+    const events = ActivityStream.readAll(sid);
+    startCheckpoints.set(sid, events.length > 0 ? events[events.length - 1].seq + 1 : 0);
+  }
+
+  // Set up event collection with live subscriptions
+  const collectedEvents = new Map<string, ActivityEvent[]>();
+  for (const sid of sessionIds) {
+    collectedEvents.set(sid, []);
+  }
+
+  let earlyReturn = false;
+  const unsubscribers: Array<() => void> = [];
+
+  // Subscribe to live events for early alert detection
+  for (const sid of sessionIds) {
+    const stream = ActivityStream.getOrCreate(sid, 'unknown');
+    const handler = (event: ActivityEvent) => {
+      const events = collectedEvents.get(sid);
+      if (events) events.push(event);
+      if (alertSet.has(event.type)) {
+        earlyReturn = true;
+      }
+    };
+    stream.subscribe(handler);
+    unsubscribers.push(() => stream.unsubscribe(handler));
+  }
+
+  // Wait for duration or early return
+  await new Promise<void>((resolve) => {
+    const timeout = setTimeout(resolve, durationSec * 1000);
+    const checkInterval = setInterval(() => {
+      if (earlyReturn) {
+        clearTimeout(timeout);
+        clearInterval(checkInterval);
+        resolve();
+      }
+    }, 500); // Check every 500ms
+    // Ensure cleanup even if early
+    setTimeout(() => { clearInterval(checkInterval); }, durationSec * 1000 + 100);
+  });
+
+  // Unsubscribe all
+  for (const unsub of unsubscribers) unsub();
+
+  // If live subscription missed events (e.g., stream was not active), read from file
+  for (const sid of sessionIds) {
+    const fromSeq = startCheckpoints.get(sid) ?? 0;
+    const liveEvents = collectedEvents.get(sid) ?? [];
+    if (liveEvents.length === 0) {
+      // Fallback: read from JSONL
+      const fileEvents = ActivityStream.readFrom(sid, fromSeq);
+      collectedEvents.set(sid, fileEvents);
+    }
+  }
+
+  // Run DigestEngine
+  const result: DigestResult = digest(collectedEvents);
+
+  // SV-10: Quiet tick gate
+  if (result.significanceScore < 2 && result.anomalies.length === 0) {
+    const quietText = quietDigest(sessionIds.length, result.eventCount, result.errorCount);
+    return { tool_use_id: id, content: quietText };
+  }
+
+  return { tool_use_id: id, content: result.text };
+}
+
+/**
+ * amend_session: Send additional instructions to a running session (SV-6)
+ */
+function amendSession(
+  id: string,
+  input: Record<string, unknown>,
+  onAmend?: (sessionId: string, instruction: string) => boolean,
+): ToolResult {
+  const sessionId = String(input.sessionId ?? '');
+  const instruction = String(input.instruction ?? '');
+
+  if (!sessionId || !instruction) {
+    return { tool_use_id: id, content: 'Error: sessionId and instruction are required', is_error: true };
+  }
+
+  if (!onAmend) {
+    return { tool_use_id: id, content: 'Error: amend_session not available in this context', is_error: true };
+  }
+
+  const success = onAmend(sessionId, instruction);
+  if (success) {
+    return { tool_use_id: id, content: `Session ${sessionId} amended. Instruction will be injected at next turn boundary.` };
+  }
+  return { tool_use_id: id, content: `Failed to amend session ${sessionId}. Session may not be running.`, is_error: true };
+}
+
+/**
+ * abort_session: Abort a running session immediately (SV-7)
+ */
+function abortSession(
+  id: string,
+  input: Record<string, unknown>,
+  onAbort?: (sessionId: string) => boolean,
+): ToolResult {
+  const sessionId = String(input.sessionId ?? '');
+  const reason = String(input.reason ?? 'Aborted by supervisor');
+
+  if (!sessionId) {
+    return { tool_use_id: id, content: 'Error: sessionId is required', is_error: true };
+  }
+
+  if (!onAbort) {
+    return { tool_use_id: id, content: 'Error: abort_session not available in this context', is_error: true };
+  }
+
+  const success = onAbort(sessionId);
+  if (success) {
+    return { tool_use_id: id, content: `Session ${sessionId} aborted. Reason: ${reason}` };
+  }
+  return { tool_use_id: id, content: `Failed to abort session ${sessionId}. Session may not be running.`, is_error: true };
 }

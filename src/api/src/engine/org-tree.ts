@@ -21,6 +21,12 @@ export interface RoleSource {
   upstream_version?: string;
 }
 
+export interface HeartbeatConfig {
+  enabled: boolean;
+  intervalSec: number;   // default 120
+  maxTicks: number;      // default 60
+}
+
 export interface OrgNode {
   id: string;
   name: string;
@@ -34,6 +40,7 @@ export interface OrgNode {
   skills?: string[];
   model?: string;
   source?: RoleSource;
+  heartbeat?: HeartbeatConfig;
 }
 
 export interface OrgTree {
@@ -68,6 +75,11 @@ interface RawRoleYaml {
     sync?: string;
     forked_at?: string;
     upstream_version?: string;
+  };
+  heartbeat?: {
+    enabled?: boolean;
+    intervalSec?: number;
+    maxTicks?: number;
   };
 }
 
@@ -127,6 +139,11 @@ export function buildOrgTree(companyRoot: string): OrgTree {
           sync: (raw.source.sync as RoleSource['sync']) || 'manual',
           forked_at: raw.source.forked_at,
           upstream_version: raw.source.upstream_version,
+        } : undefined,
+        heartbeat: raw.heartbeat ? {
+          enabled: raw.heartbeat.enabled ?? false,
+          intervalSec: raw.heartbeat.intervalSec ?? 120,
+          maxTicks: raw.heartbeat.maxTicks ?? 60,
         } : undefined,
       };
       tree.nodes.set(node.id, node);

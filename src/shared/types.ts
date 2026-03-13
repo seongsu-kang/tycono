@@ -82,6 +82,8 @@ export type ActivityEventType =
   | 'import:scan' | 'import:process' | 'import:created'
   // Trace (full prompt/response capture for AI debugging)
   | 'trace:prompt' | 'trace:response'
+  // Supervision (C-Level heartbeat)
+  | 'heartbeat:tick' | 'heartbeat:skip'
   // Other
   | 'stderr';
 

@@ -249,6 +249,152 @@ log(f'')
 log(f'Poll every 10s until status is DONE.')
 `;
 
+/* ─── Supervision Bridge Script (Python3) — SV-14 ────── */
+
+const SUPERVISION_SCRIPT = `#!/usr/bin/env python3
+"""supervision-bridge: C-Level이 부하 세션을 감시하는 브릿지 스크립트.
+
+사용법:
+  supervision watch ses-001,ses-002 --duration 120    — Long-poll watch (blocking)
+  supervision peers --wave xxx --role cto              — Peer session discovery
+  supervision abort ses-001 --reason "Wrong direction" — Abort session
+  supervision amend ses-001 "New instructions here"    — Amend session
+
+환경변수:
+  DISPATCH_API_URL    — API 서버 URL (default: http://localhost:3001)
+"""
+import sys, os, json, urllib.request, urllib.error
+sys.stdout.reconfigure(line_buffering=True)
+
+api = os.environ.get('DISPATCH_API_URL', 'http://localhost:3001')
+
+def log(msg):
+    print(msg, flush=True)
+
+if len(sys.argv) < 2:
+    log('Usage: supervision <watch|peers|abort|amend> [args...]')
+    sys.exit(1)
+
+cmd = sys.argv[1]
+
+if cmd == 'watch':
+    sessions = sys.argv[2] if len(sys.argv) > 2 else ''
+    duration = '120'
+    alert_on = 'msg:done,msg:error'
+    i = 3
+    while i < len(sys.argv):
+        if sys.argv[i] == '--duration' and i + 1 < len(sys.argv):
+            duration = sys.argv[i + 1]
+            i += 2
+        elif sys.argv[i] == '--alert-on' and i + 1 < len(sys.argv):
+            alert_on = sys.argv[i + 1]
+            i += 2
+        else:
+            i += 1
+
+    if not sessions:
+        log('Error: session IDs required (comma-separated)')
+        sys.exit(1)
+
+    url = f'{api}/api/supervision/watch?sessions={sessions}&duration={duration}&alertOn={alert_on}'
+    try:
+        resp = json.loads(urllib.request.urlopen(url, timeout=int(duration) + 10).read())
+        log(resp.get('text', '(no digest)'))
+        if resp.get('anomalies'):
+            log(f'\\nAnomalies: {len(resp["anomalies"])}')
+            for a in resp['anomalies']:
+                log(f'  [{a["type"]}] {a["message"]}')
+    except Exception as e:
+        log(f'ERROR: {e}')
+    sys.exit(0)
+
+elif cmd == 'peers':
+    wave_id = ''
+    role_id = ''
+    i = 2
+    while i < len(sys.argv):
+        if sys.argv[i] == '--wave' and i + 1 < len(sys.argv):
+            wave_id = sys.argv[i + 1]
+            i += 2
+        elif sys.argv[i] == '--role' and i + 1 < len(sys.argv):
+            role_id = sys.argv[i + 1]
+            i += 2
+        else:
+            i += 1
+
+    if not wave_id or not role_id:
+        log('Usage: supervision peers --wave <waveId> --role <roleId>')
+        sys.exit(1)
+
+    try:
+        url = f'{api}/api/supervision/peers?waveId={wave_id}&roleId={role_id}'
+        resp = json.loads(urllib.request.urlopen(url, timeout=10).read())
+        peers = resp.get('peers', [])
+        if not peers:
+            log('No peer C-Level sessions found in this wave.')
+        else:
+            for p in peers:
+                log(f'[{p["roleId"]}] {p["sessionId"]} — {p["status"]} — {p["task"][:80]}')
+    except Exception as e:
+        log(f'ERROR: {e}')
+    sys.exit(0)
+
+elif cmd == 'abort':
+    session_id = sys.argv[2] if len(sys.argv) > 2 else ''
+    reason = 'Aborted by supervisor'
+    i = 3
+    while i < len(sys.argv):
+        if sys.argv[i] == '--reason' and i + 1 < len(sys.argv):
+            reason = sys.argv[i + 1]
+            i += 2
+        else:
+            i += 1
+
+    if not session_id:
+        log('Usage: supervision abort <sessionId> [--reason "..."]')
+        sys.exit(1)
+
+    try:
+        body = json.dumps({'sessionId': session_id, 'reason': reason}).encode()
+        req = urllib.request.Request(f'{api}/api/jobs/{session_id}', method='DELETE')
+        urllib.request.urlopen(req, timeout=10)
+        log(f'Session {session_id} aborted. Reason: {reason}')
+    except Exception as e:
+        log(f'ERROR: {e}')
+    sys.exit(0)
+
+elif cmd == 'amend':
+    session_id = sys.argv[2] if len(sys.argv) > 2 else ''
+    instruction = ' '.join(sys.argv[3:]) if len(sys.argv) > 3 else ''
+
+    if not session_id or not instruction:
+        log('Usage: supervision amend <sessionId> "<instruction>"')
+        sys.exit(1)
+
+    # Amend uses continue-session with amended context
+    body = json.dumps({
+        'response': f'[SUPERVISION AMENDMENT] {instruction}',
+        'responderRole': os.environ.get('DISPATCH_SOURCE_ROLE', 'ceo'),
+    }).encode()
+
+    try:
+        req = urllib.request.Request(
+            f'{api}/api/exec/session/{session_id}/message',
+            body,
+            {'Content-Type': 'application/json'},
+        )
+        resp = json.loads(urllib.request.urlopen(req, timeout=10).read())
+        log(f'Session {session_id} amended with new instructions.')
+    except Exception as e:
+        log(f'ERROR: {e}')
+    sys.exit(0)
+
+else:
+    log(f'Unknown command: {cmd}')
+    log('Usage: supervision <watch|peers|abort|amend> [args...]')
+    sys.exit(1)
+`;
+
 /* ─── Claude CLI Runner ──────────────────────── */
 
 /**
@@ -302,6 +448,12 @@ export class ClaudeCliRunner implements ExecutionRunner {
     // Consult Bridge — available to ALL roles (not just managers)
     const consultScript = path.join(tmpDir, `consult-${roleId}-${Date.now()}.py`);
     fs.writeFileSync(consultScript, CONSULT_SCRIPT, { mode: 0o755 });
+
+    // Supervision Bridge — for C-Level roles with subordinates + heartbeat enabled
+    const supervisionScript = path.join(tmpDir, `supervision-${roleId}-${Date.now()}.py`);
+    if (subordinates.length > 0) {
+      fs.writeFileSync(supervisionScript, SUPERVISION_SCRIPT, { mode: 0o755 });
+    }
 
     // 5. Playwright MCP 설정 — 각 runner 인스턴스가 독립 브라우저 사용
     const runnerOutputDir = path.join(tmpDir, `playwright-${roleId}-${Date.now()}`);
@@ -361,6 +513,9 @@ export class ClaudeCliRunner implements ExecutionRunner {
     cleanEnv.DISPATCH_CMD = dispatchScript;
     cleanEnv.CONSULT_CMD = consultScript;
     cleanEnv.CONSULT_SOURCE_ROLE = roleId;
+    if (subordinates.length > 0) {
+      cleanEnv.SUPERVISION_CMD = supervisionScript;
+    }
 
     const modelName = config.model ?? 'claude-sonnet-4-5';
     // Use codeRoot as cwd — auto-creates ../{name}-code/ if not configured
@@ -499,6 +654,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
         try { fs.unlinkSync(promptFile); } catch { /* ignore */ }
         try { fs.unlinkSync(dispatchScript); } catch { /* ignore */ }
         try { fs.unlinkSync(consultScript); } catch { /* ignore */ }
+        try { fs.unlinkSync(supervisionScript); } catch { /* ignore */ }
         try { fs.rmSync(runnerOutputDir, { recursive: true, force: true }); } catch { /* ignore */ }
 
         // 비정상 종료 시에도 결과 반환 (output이 있을 수 있으므로)
@@ -517,6 +673,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
         try { fs.unlinkSync(promptFile); } catch { /* ignore */ }
         try { fs.unlinkSync(dispatchScript); } catch { /* ignore */ }
         try { fs.unlinkSync(consultScript); } catch { /* ignore */ }
+        try { fs.unlinkSync(supervisionScript); } catch { /* ignore */ }
         try { fs.rmSync(runnerOutputDir, { recursive: true, force: true }); } catch { /* ignore */ }
         reject(err);
       });

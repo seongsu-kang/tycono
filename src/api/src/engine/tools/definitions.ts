@@ -107,6 +107,54 @@ export const BASH_TOOL: ToolDefinition = {
 };
 
 /**
+ * Supervision 도구 — C-Level에게만 제공 (부하/동료 세션 감시)
+ */
+export const HEARTBEAT_WATCH_TOOL: ToolDefinition = {
+  name: 'heartbeat_watch',
+  description: 'Block and watch activity streams of subordinates (or peers). Returns a digest of events after the specified duration or when an alert event occurs. Use this to supervise running dispatches at zero LLM cost during the wait period.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      sessionIds: { type: 'array', items: { type: 'string' }, description: 'Session IDs to watch (subordinates or peers)' },
+      durationSec: { type: 'number', description: 'Watch duration in seconds (default 120, max 300)', default: 120 },
+      alertOn: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Event types that trigger early return (default: msg:done, msg:error)',
+        default: ['msg:done', 'msg:error'],
+      },
+    },
+    required: ['sessionIds'],
+  },
+};
+
+export const AMEND_SESSION_TOOL: ToolDefinition = {
+  name: 'amend_session',
+  description: 'Send additional instructions to a running subordinate session. The instructions will be injected at the next turn boundary. Use when a subordinate is going in the wrong direction and needs course correction.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      sessionId: { type: 'string', description: 'Target session ID to amend' },
+      instruction: { type: 'string', description: 'Additional instruction to inject into the session' },
+    },
+    required: ['sessionId', 'instruction'],
+  },
+};
+
+export const ABORT_SESSION_TOOL: ToolDefinition = {
+  name: 'abort_session',
+  description: 'Abort a running subordinate session immediately. Use when the subordinate is clearly doing the wrong thing and needs to be stopped. You can re-dispatch with different instructions afterwards.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      sessionId: { type: 'string', description: 'Target session ID to abort' },
+      reason: { type: 'string', description: 'Reason for aborting (logged in activity stream)' },
+    },
+    required: ['sessionId'],
+  },
+};
+
+/**
  * 상담 도구 — 모든 Role에게 제공 (동료/상관/부하에게 질문)
  */
 export const CONSULT_TOOL: ToolDefinition = {
@@ -124,8 +172,9 @@ export const CONSULT_TOOL: ToolDefinition = {
 
 /**
  * Role에 따른 도구 목록 반환
+ * @param heartbeatEnabled - C-Level supervision mode enabled (provides heartbeat_watch, amend_session, abort_session)
  */
-export function getToolsForRole(hasSubordinates: boolean, readOnly: boolean, hasBash = false): ToolDefinition[] {
+export function getToolsForRole(hasSubordinates: boolean, readOnly: boolean, hasBash = false, heartbeatEnabled = false): ToolDefinition[] {
   if (readOnly) {
     return [...READ_TOOLS];
   }
@@ -138,6 +187,11 @@ export function getToolsForRole(hasSubordinates: boolean, readOnly: boolean, has
 
   if (hasSubordinates) {
     tools.push(DISPATCH_TOOL);
+
+    // Supervision tools — only for roles with subordinates AND heartbeat enabled
+    if (heartbeatEnabled) {
+      tools.push(HEARTBEAT_WATCH_TOOL, AMEND_SESSION_TOOL, ABORT_SESSION_TOOL);
+    }
   }
 
   return tools;

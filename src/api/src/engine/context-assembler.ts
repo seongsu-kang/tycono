@@ -132,6 +132,12 @@ Use the code repository path for all source code work (reading, writing, buildin
     subordinates = subordinates.filter(id => options.targetRoles!.includes(id));
   }
 
+  // Supervision prompt (SV-11, SV-12: C-Level heartbeat mode)
+  const heartbeatEnabled = node.heartbeat?.enabled === true;
+  if (heartbeatEnabled && subordinates.length > 0) {
+    sections.push(buildSupervisionSection(node));
+  }
+
   // Dispatch 도구 안내 (하위 Role이 있는 경우)
   if (subordinates.length > 0) {
     sections.push(buildDispatchSection(orgTree, roleId, subordinates, options?.teamStatus));
@@ -695,6 +701,59 @@ Your final report MUST include a **Change Summary** with files changed and commi
   }
 
   return section;
+}
+
+function buildSupervisionSection(node: OrgNode): string {
+  const hb = node.heartbeat ?? { enabled: true, intervalSec: 120, maxTicks: 60 };
+  return `# Supervision Mode (Heartbeat)
+
+⛔ **When you dispatch subordinates, you MUST enter supervision mode using heartbeat_watch.**
+⛔ **Do NOT use sleep+curl polling. heartbeat_watch blocks server-side at zero cost.**
+
+## Supervision Protocol
+
+1. **Dispatch** subordinates with clear task descriptions
+2. **Call heartbeat_watch** with the returned session IDs:
+   \`heartbeat_watch(sessionIds=[...], durationSec=${hb.intervalSec})\`
+3. **Analyze the digest** against your plan:
+   - On track → call heartbeat_watch again (keep watching)
+   - Off track → \`amend_session(sessionId, instruction)\` to course-correct
+   - Seriously wrong → \`abort_session(sessionId)\` + re-dispatch with different instructions
+   - Need peer input → \`consult(peer_role_id, question)\`
+   - All done → compile results and report to your superior
+4. **Repeat** heartbeat_watch until all subordinates complete
+
+## Available Supervision Tools
+
+| Tool | When to Use |
+|------|-------------|
+| \`heartbeat_watch\` | Watch subordinate sessions (blocks ${hb.intervalSec}s, $0 LLM cost) |
+| \`amend_session\` | Inject new instructions into a running session |
+| \`abort_session\` | Kill a session that's going wrong |
+| \`consult\` | Ask a peer C-Level for their perspective |
+
+## Digest Response
+
+heartbeat_watch returns a digest with:
+- **Significance score** (0-10): How much attention this tick needs
+- **Anomalies**: Errors, stalls (3min+), sessions awaiting input
+- **Per-session activity**: What each subordinate has been doing
+- **Peer activity** (if peers are also in supervision mode)
+
+Quiet ticks (score 0-1) return a single line: "All N sessions progressing normally."
+
+## Budget
+
+- Max ticks: ${hb.maxTicks} (${Math.round(hb.maxTicks * hb.intervalSec / 60)} minutes total)
+- Quiet tick cost: ~$0.001 (minimal LLM analysis)
+- Alert tick cost: ~$0.02-0.05 (intervention decision)
+
+## ⛔ Anti-Patterns
+
+- ❌ Using \`bash_execute\` with sleep/curl to poll — use heartbeat_watch instead
+- ❌ Calling \`--check\` in a loop — heartbeat_watch handles this automatically
+- ❌ Ignoring digest anomalies — always address errors and stalls
+- ❌ Not re-watching after a quiet tick — keep the loop going until all done`;
 }
 
 function buildConsultSection(orgTree: OrgTree, roleId: string): string | null {

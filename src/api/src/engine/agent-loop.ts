@@ -37,6 +37,10 @@ export interface AgentConfig {
   onTurnComplete?: (turn: number) => void;
   /** Trace: emitted when system prompt is assembled */
   onPromptAssembled?: (systemPrompt: string, userTask: string) => void;
+  /** Supervision: abort a running session */
+  onAbortSession?: (sessionId: string) => boolean;
+  /** Supervision: amend a running session with new instructions */
+  onAmendSession?: (sessionId: string, instruction: string) => boolean;
 }
 
 export interface AgentResult {
@@ -51,19 +55,48 @@ export interface AgentResult {
 
 /**
  * Compress older messages to reduce token usage.
- * Strategy: Keep first 2 messages (initial task) and last 4 messages (recent context).
- * Middle messages: truncate long tool_result content, collapse text blocks.
+ *
+ * SV-9 Enhancement: Zone-based compression for supervision sessions.
+ * - Zone A (pinned): first 2 messages (system prompt + original task + plan) — never compress
+ * - Zone B (rolling): middle messages — heartbeat ticks get aggressive compression
+ * - Zone C (recent): last 4 messages — preserve for LLM context
+ *
+ * Heartbeat-specific: consecutive quiet ticks are merged into a single line.
  */
 function compressMessages(messages: LLMMessage[]): void {
   if (messages.length <= 6) return;
 
-  // Keep first 2 (task setup) and last 4 (recent context)
+  // Zone A: first 2, Zone C: last 4
   const keepHead = 2;
   const keepTail = 4;
   const compressRange = messages.slice(keepHead, messages.length - keepTail);
 
-  for (const msg of compressRange) {
+  // Track consecutive quiet heartbeat ticks for merging
+  let quietTickStart = -1;
+  let quietTickCount = 0;
+
+  for (let idx = 0; idx < compressRange.length; idx++) {
+    const msg = compressRange[idx];
+
     if (typeof msg.content === 'string') {
+      // Check if this is a heartbeat quiet tick result
+      const isQuietTick = msg.content.includes('sessions progressing normally') && msg.content.includes('No anomalies');
+
+      if (isQuietTick) {
+        quietTickCount++;
+        if (quietTickStart === -1) quietTickStart = idx;
+
+        // Merge consecutive quiet ticks
+        if (quietTickCount > 1) {
+          msg.content = `[Quiet ticks merged: ${quietTickCount} ticks, no anomalies]`;
+        }
+        continue;
+      }
+
+      // Reset quiet tick counter on non-quiet content
+      quietTickStart = -1;
+      quietTickCount = 0;
+
       // Truncate long text content
       if (msg.content.length > 500) {
         msg.content = msg.content.slice(0, 300) + '\n\n[... compressed ...]';
@@ -73,8 +106,13 @@ function compressMessages(messages: LLMMessage[]): void {
         const block = msg.content[i] as Record<string, unknown>;
         if (block.type === 'tool_result') {
           const content = typeof block.content === 'string' ? block.content : '';
-          if (content.length > 300) {
-            block.content = content.slice(0, 200) + '\n[... compressed, was ' + content.length + ' chars]';
+
+          // Heartbeat digest results: compress more aggressively
+          const isDigest = content.includes('Supervision Digest') || content.includes('sessions progressing normally');
+          const maxLen = isDigest ? 150 : 300;
+
+          if (content.length > maxLen) {
+            block.content = content.slice(0, maxLen - 50) + '\n[... compressed, was ' + content.length + ' chars]';
           }
         } else if (block.type === 'text' && typeof block.text === 'string' && block.text.length > 500) {
           block.text = (block.text as string).slice(0, 300) + '\n[... compressed ...]';
@@ -132,7 +170,9 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
   // 2. Determine tools
   const subordinates = getSubordinates(orgTree, roleId);
   const hasBash = !readOnly && !!config.codeRoot;
-  const tools = getToolsForRole(subordinates.length > 0, readOnly, hasBash);
+  const node = orgTree.nodes.get(roleId);
+  const heartbeatEnabled = node?.heartbeat?.enabled === true && subordinates.length > 0;
+  const tools = getToolsForRole(subordinates.length > 0, readOnly, hasBash, heartbeatEnabled);
 
   // 3. Set up tool executor
   const toolExecOptions: ToolExecutorOptions = {
@@ -140,7 +180,10 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
     roleId,
     orgTree,
     codeRoot: config.codeRoot,
+    sessionId: config.sessionId,
     onToolExec,
+    onAbortSession: config.onAbortSession,
+    onAmendSession: config.onAmendSession,
     onDispatch: async (targetRoleId: string, subTask: string) => {
       // Recursive dispatch — validate, then run sub-agent
       const authResult = validateDispatch(orgTree, roleId, targetRoleId);
@@ -318,9 +361,9 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
     );
 
     // EG-004: Parallel tool execution for independent tools
-    // dispatch/consult run sequentially (recursive agent calls)
+    // dispatch/consult/heartbeat run sequentially (recursive agent calls / blocking)
     // All other tools run in parallel via Promise.all()
-    const sequentialTools = new Set(['dispatch', 'consult']);
+    const sequentialTools = new Set(['dispatch', 'consult', 'heartbeat_watch']);
     const parallelCalls = toolCalls.filter(tc => !sequentialTools.has(tc.name));
     const sequentialCalls = toolCalls.filter(tc => sequentialTools.has(tc.name));
 
