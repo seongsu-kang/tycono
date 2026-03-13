@@ -287,9 +287,15 @@ class ExecutionManager {
             }
           }
 
+          // BUG-W02 fix: propagate waveId from parent session to child
+          const parentSession = getSession(execution.sessionId);
+          const parentWaveId = parentSession?.waveId;
+
           const childSession = createSession(subRoleId, {
             mode: 'do',
             source: 'dispatch',
+            parentSessionId: execution.sessionId,
+            ...(parentWaveId && { waveId: parentWaveId }),
           });
           const dispatchMsg: Message = {
             id: `msg-${Date.now()}-dispatch-${subRoleId}`,
@@ -761,7 +767,7 @@ class ExecutionManager {
         const status: ExecStatus = awaitingEvent && !doneEvent ? 'awaiting_input'
           : doneEvent ? 'done'
           : errorEvent ? 'error'
-          : 'done';
+          : 'running';  // No done/error event = still running
 
         const candidate = {
           streamId,
@@ -816,7 +822,7 @@ class ExecutionManager {
     const status: ExecStatus = awaitingEvent && !doneEvent ? 'awaiting_input'
       : doneEvent ? 'done'
       : errorEvent ? 'error'
-      : 'done';
+      : 'running';  // No done/error event = still running
 
     const stream = ActivityStream.getOrCreate(sessionId, startEvent.roleId);
     const execution: Execution = {

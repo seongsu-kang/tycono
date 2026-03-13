@@ -6,6 +6,7 @@ import { assembleContext } from '../context-assembler.js';
 import { getSubordinates } from '../org-tree.js';
 import { readConfig, resolveCodeRoot } from '../../services/company-config.js';
 import { getTokenLedger } from '../../services/token-ledger.js';
+import { getSession } from '../../services/session-store.js';
 import type { ExecutionRunner, RunnerConfig, RunnerCallbacks, RunnerHandle, RunnerResult } from './types.js';
 
 /* ─── Dispatch Bridge Script (Python3) ────── */
@@ -65,13 +66,17 @@ def get_status(job_id):
 def start_job(role_id, task):
     parent_session = os.environ.get('DISPATCH_PARENT_SESSION', os.environ.get('DISPATCH_PARENT_JOB', ''))
     source_role = os.environ.get('DISPATCH_SOURCE_ROLE', 'ceo')
-    body = json.dumps({
+    wave_id = os.environ.get('DISPATCH_WAVE_ID', '')
+    payload = {
         'type': 'assign',
         'roleId': role_id,
         'task': task,
         'sourceRole': source_role,
         'parentSessionId': parent_session if parent_session else None,
-        }).encode()
+    }
+    if wave_id:
+        payload['waveId'] = wave_id
+    body = json.dumps(payload).encode()
     req = urllib.request.Request(f'{api}/api/jobs', body, {'Content-Type': 'application/json'})
     resp = json.loads(urllib.request.urlopen(req, timeout=10).read())
     return resp['jobId']
@@ -347,6 +352,11 @@ export class ClaudeCliRunner implements ExecutionRunner {
     cleanEnv.DISPATCH_SUBORDINATES = subordinates.join(', ');
     cleanEnv.DISPATCH_PARENT_SESSION = config.sessionId;
     cleanEnv.DISPATCH_PARENT_JOB = config.sessionId; // deprecated, kept for backward compat
+    // BUG-W02 fix: propagate waveId to child dispatches via env
+    if (config.sessionId) {
+      const parentSes = getSession(config.sessionId);
+      if (parentSes?.waveId) cleanEnv.DISPATCH_WAVE_ID = parentSes.waveId;
+    }
     // dispatch 명령어 경로를 PATH에 추가하지 않고 절대 경로로 사용
     cleanEnv.DISPATCH_CMD = dispatchScript;
     cleanEnv.CONSULT_CMD = consultScript;

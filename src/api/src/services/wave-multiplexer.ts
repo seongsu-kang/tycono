@@ -1,5 +1,6 @@
 import { ActivityStream, type ActivityEvent, type ActivitySubscriber } from './activity-stream.js';
 import type { Execution } from './execution-manager.js';
+import { getSession } from './session-store.js';
 import type { Response } from 'express';
 
 /* ─── Types ──────────────────────────────── */
@@ -181,7 +182,19 @@ class WaveMultiplexer {
   }
 
   onExecutionCreated(execution: Execution): void {
-    const waveId = this.findWaveIdForSession(execution.sessionId) ?? this.findWaveIdForSession(execution.parentSessionId ?? '');
+    // Check multiplexer's in-memory map first
+    let waveId = this.findWaveIdForSession(execution.sessionId) ?? this.findWaveIdForSession(execution.parentSessionId ?? '');
+
+    // BUG-W02 fix: also check session-store for waveId (propagated from parent)
+    if (!waveId) {
+      const session = getSession(execution.sessionId);
+      if (session?.waveId) waveId = session.waveId;
+    }
+    if (!waveId && execution.parentSessionId) {
+      const parentSession = getSession(execution.parentSessionId);
+      if (parentSession?.waveId) waveId = parentSession.waveId;
+    }
+
     if (!waveId) return;
 
     this.registerSession(waveId, execution);

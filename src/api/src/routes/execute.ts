@@ -60,10 +60,14 @@ export function handleExecRequest(req: IncomingMessage, res: ServerResponse): vo
           waveGroups.get(ses.waveId)!.push(ses.id);
         }
       }
+      // BUG-W03 fix: register ALL wave sessions (including completed) for tree display
       for (const [wid, sids] of waveGroups) {
         for (const sid of sids) {
+          // getActiveExecution falls back to stream recovery for completed sessions
           const exec = executionManager.getActiveExecution(sid);
-          if (exec) waveMultiplexer.registerSession(wid, exec);
+          if (exec) {
+            waveMultiplexer.registerSession(wid, exec);
+          }
         }
       }
     }
@@ -272,6 +276,7 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
   const session = createSession(roleId, {
     mode: readOnly ? 'talk' : 'do',
     source: parentSessionId ? 'dispatch' : sessionSource,
+    ...(parentSessionId && { parentSessionId }),
     ...(waveId && { waveId }),
   });
   const sessionId = session.id;
@@ -320,8 +325,17 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
 
 function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): void {
   const directive = body.directive as string;
-  const sessionIds = (body.sessionIds ?? body.jobIds) as string[];
+  let sessionIds = (body.sessionIds ?? body.jobIds) as string[] | undefined;
   const waveId = body.waveId as string | undefined;
+
+  // BUG-W01 fix: auto-collect sessionIds from session-store when waveId is present
+  if (waveId && (!sessionIds || sessionIds.length === 0)) {
+    const allSessions = listSessions();
+    sessionIds = allSessions
+      .filter(s => s.waveId === waveId)
+      .map(s => s.id);
+    console.log(`[WaveSave] Auto-collected ${sessionIds.length} sessionIds for wave ${waveId}`);
+  }
 
   if (!directive || !sessionIds || sessionIds.length === 0) {
     jsonResponse(res, 400, { error: 'directive and sessionIds are required' });
@@ -426,6 +440,7 @@ function handleWaveStream(waveId: string, url: string, res: ServerResponse, req:
     const allSessions = listSessions();
     const waveSessions = allSessions.filter(s => s.waveId === waveId);
     for (const ses of waveSessions) {
+      // getActiveExecution recovers from stream files for completed sessions too
       const exec = executionManager.getActiveExecution(ses.id);
       if (exec) {
         waveMultiplexer.registerSession(waveId, exec);
@@ -715,7 +730,51 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
 function handleStatus(res: ServerResponse): void {
   const statuses: Record<string, string> = {};
 
-  const activeExecs = executionManager.listExecutions({ active: true });
+  let activeExecs = executionManager.listExecutions({ active: true });
+
+  // Recovery: if in-memory map is empty (e.g. after server restart),
+  // rebuild active executions from persisted session-store + activity-streams
+  if (activeExecs.length === 0) {
+    const allSessions = listSessions();
+    const activeSessions = allSessions.filter(s =>
+      s.status === 'active' &&
+      (s.source === 'wave' || s.source === 'dispatch' || s.source === 'chat')
+    );
+
+    const recovered: typeof activeExecs = [];
+    for (const ses of activeSessions) {
+      // Check activity-stream for actual running state
+      if (!ActivityStream.exists(ses.id)) continue;
+      const events = ActivityStream.readFrom(ses.id, 0);
+      if (events.length === 0) continue;
+
+      const startEvent = events.find(e => e.type === 'msg:start');
+      if (!startEvent) continue;
+
+      const doneEvent = events.find(e => e.type === 'msg:done');
+      const errorEvent = events.find(e => e.type === 'msg:error');
+
+      // Only include sessions that haven't finished yet
+      if (doneEvent || errorEvent) continue;
+
+      const task = (startEvent.data?.task as string) ?? ses.title ?? '';
+      recovered.push({
+        id: `recovered-${ses.id}`,
+        type: (startEvent.data?.type as string ?? 'assign') as 'assign' | 'wave' | 'consult',
+        roleId: ses.roleId,
+        task,
+        status: 'running',
+        childSessionIds: [],
+        createdAt: ses.createdAt,
+      });
+    }
+
+    if (recovered.length > 0) {
+      activeExecs = recovered;
+      console.log(`[ExecStatus] Recovered ${recovered.length} active executions from session-store`);
+    }
+  }
+
   for (const exec of activeExecs) {
     // ExecStatus 'running' → RoleStatus 'working' (not MessageStatus 'streaming')
     statuses[exec.roleId] = exec.status === 'running' ? 'working'
