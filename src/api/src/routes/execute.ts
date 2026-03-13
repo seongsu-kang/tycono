@@ -10,6 +10,7 @@ import {
   createSession,
   addMessage,
   updateMessage,
+  listSessions,
   type Message,
   type ImageAttachment,
 } from '../services/session-store.js';
@@ -48,6 +49,24 @@ export function handleExecRequest(req: IncomingMessage, res: ServerResponse): vo
 
   // ── /api/waves/active — restore active waves after refresh ──
   if (method === 'GET' && url === '/api/waves/active') {
+    // Recovery: rebuild wave→session mapping from session-store if lost
+    const waves = waveMultiplexer.getActiveWaves();
+    if (waves.length === 0) {
+      const allSessions = listSessions();
+      const waveGroups = new Map<string, string[]>();
+      for (const ses of allSessions) {
+        if (ses.waveId) {
+          if (!waveGroups.has(ses.waveId)) waveGroups.set(ses.waveId, []);
+          waveGroups.get(ses.waveId)!.push(ses.id);
+        }
+      }
+      for (const [wid, sids] of waveGroups) {
+        for (const sid of sids) {
+          const exec = executionManager.getActiveExecution(sid);
+          if (exec) waveMultiplexer.registerSession(wid, exec);
+        }
+      }
+    }
     jsonResponse(res, 200, { waves: waveMultiplexer.getActiveWaves() });
     return;
   }
@@ -399,7 +418,22 @@ function handleWaveStream(waveId: string, url: string, res: ServerResponse, req:
   const fromMatch = url.match(/[?&]from=(\d+)/);
   const fromWaveSeq = fromMatch ? parseInt(fromMatch[1], 10) : 0;
 
-  const sessionIds = waveMultiplexer.getWaveSessionIds(waveId);
+  let sessionIds = waveMultiplexer.getWaveSessionIds(waveId);
+
+  // Recovery: if wave→session mapping was lost (e.g. server restart),
+  // rebuild from session-store (sessions have waveId) + executionManager
+  if (sessionIds.length === 0) {
+    const allSessions = listSessions();
+    const waveSessions = allSessions.filter(s => s.waveId === waveId);
+    for (const ses of waveSessions) {
+      const exec = executionManager.getActiveExecution(ses.id);
+      if (exec) {
+        waveMultiplexer.registerSession(waveId, exec);
+      }
+    }
+    sessionIds = waveMultiplexer.getWaveSessionIds(waveId);
+  }
+
   if (sessionIds.length === 0) {
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: `No sessions found for wave: ${waveId}` }));
@@ -683,7 +717,10 @@ function handleStatus(res: ServerResponse): void {
 
   const activeExecs = executionManager.listExecutions({ active: true });
   for (const exec of activeExecs) {
-    statuses[exec.roleId] = messageStatusToRoleStatus(exec.status as MessageStatus);
+    // ExecStatus 'running' → RoleStatus 'working' (not MessageStatus 'streaming')
+    statuses[exec.roleId] = exec.status === 'running' ? 'working'
+      : exec.status === 'awaiting_input' ? 'awaiting_input'
+      : 'done';
   }
 
   const activeExecutions = activeExecs.map((e) => ({
