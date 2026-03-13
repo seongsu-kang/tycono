@@ -141,10 +141,12 @@ gitRouter.delete('/worktree/{*path}', (req: Request, res: Response, next: NextFu
     }
 
     try {
-      git(`worktree remove ${JSON.stringify(worktreePath)}`, COMPANY_ROOT);
+      const repoRoot = resolveRepoRoot('code');
+      git(`worktree remove ${JSON.stringify(worktreePath)}`, repoRoot);
     } catch {
       // Try force remove if normal remove fails
-      git(`worktree remove --force ${JSON.stringify(worktreePath)}`, COMPANY_ROOT);
+      const repoRoot = resolveRepoRoot('code');
+      git(`worktree remove --force ${JSON.stringify(worktreePath)}`, repoRoot);
     }
 
     res.json({ success: true, removed: worktreePath });
@@ -174,7 +176,8 @@ gitRouter.delete('/branch/{*name}', (req: Request, res: Response, next: NextFunc
 
     // Delete local branch
     try {
-      git(`branch -d ${JSON.stringify(branchName)}`, COMPANY_ROOT);
+      const repoRoot = resolveRepoRoot('code');
+      git(`branch -d ${JSON.stringify(branchName)}`, repoRoot);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       // If branch is not fully merged, report but continue to try remote
@@ -187,7 +190,8 @@ gitRouter.delete('/branch/{*name}', (req: Request, res: Response, next: NextFunc
 
     // Delete remote branch
     try {
-      git(`push origin --delete ${JSON.stringify(branchName)}`, COMPANY_ROOT);
+      const repoRoot = resolveRepoRoot('code');
+      git(`push origin --delete ${JSON.stringify(branchName)}`, repoRoot);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       if (!msg.includes('remote ref does not exist')) {
