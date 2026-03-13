@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { COMPANY_ROOT } from '../services/file-reader.js';
-import { getAllActivities, setActivity, updateActivity, completeActivity } from '../services/activity-tracker.js';
+// activity-tracker removed — executionManager is Single Source of Truth
 import { buildOrgTree, canDispatchTo, getSubordinates } from '../engine/org-tree.js';
 import { createRunner, type RunnerResult } from '../engine/runners/index.js';
 import {
@@ -14,7 +14,7 @@ import {
   type ImageAttachment,
 } from '../services/session-store.js';
 import { executionManager, type Execution } from '../services/execution-manager.js';
-import { type MessageStatus, type RoleStatus, type WaveRoleStatus, type TeamStatus, isMessageActive, isRoleActive, messageStatusToRoleStatus, eventTypeToMessageStatus } from '../../../shared/types.js';
+import { type MessageStatus, type WaveRoleStatus, type TeamStatus, messageStatusToRoleStatus, eventTypeToMessageStatus } from '../../../shared/types.js';
 import { ActivityStream, type ActivityEvent, type ActivitySubscriber } from '../services/activity-stream.js';
 import { earnCoinsInternal } from './coins.js';
 import { appendFollowUpToWave } from '../services/wave-tracker.js';
@@ -31,9 +31,7 @@ function getRunner() {
   return createRunner();
 }
 
-/* ─── Active execution tracking (legacy, kept for /api/exec/status compat) ──── */
-
-const roleStatus = new Map<string, RoleStatus>();
+/* ─── Execution status via executionManager (Single SoT) ──── */
 
 /* ─── Raw HTTP handler (Express 5 SSE 호환 문제 우회) ─── */
 
@@ -77,8 +75,6 @@ export function handleExecRequest(req: IncomingMessage, res: ServerResponse): vo
     readBody(req).then((body) => handleWave(body, req, res));
   } else if (method === 'GET' && url.endsWith('/status')) {
     handleStatus(res);
-  } else if (method === 'POST' && url.endsWith('/activity')) {
-    readBody(req).then((body) => handleActivity(body, res));
   } else {
     res.writeHead(404);
     res.end(JSON.stringify({ error: 'Not found' }));
@@ -524,7 +520,6 @@ function handleAssign(body: Record<string, unknown>, req: IncomingMessage, res: 
   sendSSE(res, 'start', { id: exec.id, roleId, task, sourceRole });
 
   const cleanupLifecycle = startSSELifecycle(res, () => {
-    roleStatus.set(roleId, 'idle');
     sendSSE(res, 'error', { message: 'SSE timeout — connection forcibly closed after 10 minutes' });
     if (!res.writableEnded) res.end();
     exec.stream.unsubscribe(subscriber);
@@ -573,7 +568,6 @@ function handleAssign(body: Record<string, unknown>, req: IncomingMessage, res: 
   req.on('close', () => {
     cleanupLifecycle();
     exec.stream.unsubscribe(subscriber);
-    roleStatus.set(roleId, 'idle');
   });
 }
 
@@ -687,35 +681,9 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
 function handleStatus(res: ServerResponse): void {
   const statuses: Record<string, string> = {};
 
-  const fileActivities = getAllActivities();
-  for (const activity of fileActivities) {
-    statuses[activity.roleId] = activity.status;
-  }
-
   const activeExecs = executionManager.listExecutions({ active: true });
-  const activeRoles = new Set(activeExecs.map(e => e.roleId));
-
-  const memoryWorking = new Set<string>();
-  for (const [rid, st] of roleStatus.entries()) {
-    if (isRoleActive(st as RoleStatus)) memoryWorking.add(rid);
-  }
-
-  for (const roleId of Object.keys(statuses)) {
-    const s = statuses[roleId];
-    if (isRoleActive(s as RoleStatus) && !activeRoles.has(roleId) && !memoryWorking.has(roleId)) {
-      statuses[roleId] = 'done';
-      completeActivity(roleId);
-    }
-  }
-
   for (const exec of activeExecs) {
-    const mappedStatus = messageStatusToRoleStatus(exec.status as MessageStatus);
-    if (statuses[exec.roleId] === 'working' && mappedStatus === 'awaiting_input') continue;
-    statuses[exec.roleId] = mappedStatus;
-  }
-
-  for (const rid of memoryWorking) {
-    statuses[rid] = 'working';
+    statuses[exec.roleId] = messageStatusToRoleStatus(exec.status as MessageStatus);
   }
 
   const activeExecutions = activeExecs.map((e) => ({
@@ -728,34 +696,7 @@ function handleStatus(res: ServerResponse): void {
   jsonResponse(res, 200, { statuses, activeExecutions });
 }
 
-/* ─── POST /api/exec/activity ────────────────── */
 
-function handleActivity(body: Record<string, unknown>, res: ServerResponse): void {
-  const roleId = body.roleId as string;
-  const action = body.action as string;
-
-  if (!roleId || !action) {
-    jsonResponse(res, 400, { error: 'roleId and action are required' });
-    return;
-  }
-
-  switch (action) {
-    case 'start':
-      setActivity(roleId, (body.task as string) ?? '');
-      break;
-    case 'update':
-      updateActivity(roleId, (body.output as string) ?? '');
-      break;
-    case 'complete':
-      completeActivity(roleId);
-      break;
-    default:
-      jsonResponse(res, 400, { error: `Unknown action: ${action}` });
-      return;
-  }
-
-  jsonResponse(res, 200, { ok: true });
-}
 
 /* ─── POST /api/exec/session/{id}/message ──── */
 
@@ -837,15 +778,10 @@ function handleSessionMessage(
   const cleanupSSELifecycle = startSSELifecycle(res, () => {
     cleanupChildSubscriptions();
     updateMessage(sessionId, roleMsg.id, { status: 'error' });
-    roleStatus.set(roleId, 'idle');
-    completeActivity(roleId);
     sendSSE(res, 'error', { message: 'SSE timeout — connection forcibly closed after 10 minutes' });
     if (!res.writableEnded) res.end();
     handle.abort();
   });
-
-  roleStatus.set(roleId, 'working');
-  setActivity(roleId, content.slice(0, 80));
 
   const childSubscriptions: Array<{ exec: Execution; subscriber: ActivitySubscriber }> = [];
   const pendingDispatches = new Set<string>();
@@ -890,11 +826,6 @@ function handleSessionMessage(
     if (teamStatus[e.roleId]?.status === 'working' && mapped === 'awaiting_input') continue;
     teamStatus[e.roleId] = { status: mapped, task: e.task };
   }
-  for (const [rid, status] of roleStatus) {
-    if (isRoleActive(status as RoleStatus) && rid !== roleId && !teamStatus[rid]) {
-      teamStatus[rid] = { status: status as RoleStatus };
-    }
-  }
 
   const handle = getRunner().execute(
     { companyRoot: COMPANY_ROOT, roleId, task: fullTask, sourceRole: 'ceo', orgTree, readOnly, model: orgTree.nodes.get(roleId)?.model, attachments, teamStatus, sessionId },
@@ -911,8 +842,6 @@ function handleSessionMessage(
         sendSSE(res, 'tool', { name, input: input ? summarizeInput(input) : undefined });
       },
       onDispatch: (subRoleId, subTask) => {
-        roleStatus.set(subRoleId, 'working');
-        setActivity(subRoleId, subTask);
         pendingDispatches.add(subRoleId);
         sendSSE(res, 'dispatch', { roleId: subRoleId, task: subTask });
       },
@@ -943,12 +872,6 @@ function handleSessionMessage(
         turns: result.turns,
         tokens: result.totalTokens,
       });
-      roleStatus.set(roleId, 'idle');
-      completeActivity(roleId);
-      for (const d of result.dispatches) {
-        roleStatus.set(d.roleId, 'idle');
-        completeActivity(d.roleId);
-      }
       sendSSE(res, 'done', {
         roleMessageId: roleMsg.id,
         output: roleMsg.content.slice(-500),
@@ -961,8 +884,6 @@ function handleSessionMessage(
       cleanupSSELifecycle();
       cleanupChildSubscriptions();
       updateMessage(sessionId, roleMsg.id, { status: 'error' });
-      roleStatus.set(roleId, 'idle');
-      completeActivity(roleId);
       sendSSE(res, 'error', { message: err.message });
       if (!res.writableEnded) res.end();
     });
@@ -973,8 +894,6 @@ function handleSessionMessage(
     if (roleMsg.status === 'streaming') {
       handle.abort();
       updateMessage(sessionId, roleMsg.id, { status: 'error' });
-      roleStatus.set(roleId, 'idle');
-      completeActivity(roleId);
     }
   });
 }

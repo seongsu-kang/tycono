@@ -4,7 +4,7 @@ import { buildOrgTree } from '../engine/org-tree.js';
 import { validateDispatch, validateConsult } from '../engine/authority-validator.js';
 import { createRunner } from '../engine/runners/index.js';
 import type { ExecutionRunner } from '../engine/runners/types.js';
-import { setActivity, updateActivity, completeActivity, markAwaitingInput } from './activity-tracker.js';
+// activity-tracker removed — executionManager is Single Source of Truth for role status
 import type { RunnerResult } from '../engine/runners/types.js';
 import { estimateCost } from './pricing.js';
 import { readConfig, getConversationLimits, resolveCodeRoot } from './company-config.js';
@@ -207,8 +207,6 @@ class ExecutionManager {
       }
     }
 
-    setActivity(params.roleId, params.task);
-
     const model = params.model ?? orgTree.nodes.get(params.roleId)?.model;
 
     const config = readConfig(COMPANY_ROOT);
@@ -255,7 +253,6 @@ class ExecutionManager {
       {
         onText: (text) => {
           accumulatedOutput += text;
-          updateActivity(params.roleId, text);
           execution.stream.emit('text', params.roleId, { text });
           if (execution.sessionId) {
             this.updateSessionRoleMessage(execution, text);
@@ -399,10 +396,6 @@ class ExecutionManager {
       .then((result: RunnerResult) => {
         execution.result = result;
 
-        for (const d of result.dispatches) {
-          completeActivity(d.roleId);
-        }
-
         const costUsd = estimateCost(
           result.totalTokens.input,
           result.totalTokens.output,
@@ -430,7 +423,6 @@ class ExecutionManager {
         if (hardLimitReached) {
           execution.status = 'awaiting_input';
           execution.targetRole = targetRole;
-          markAwaitingInput(params.roleId);
           const question = `[Turn limit] ${harnessTurnCount}턴 도달 (hardLimit: ${limits.hardLimit}). 계속 진행할까요?`;
           execution.stream.emit('msg:awaiting_input', params.roleId, {
             ...doneData,
@@ -442,7 +434,6 @@ class ExecutionManager {
         } else if (!params.isContinuation && hasQuestion(result.output)) {
           execution.status = 'awaiting_input';
           execution.targetRole = targetRole;
-          markAwaitingInput(params.roleId);
           execution.stream.emit('msg:awaiting_input', params.roleId, {
             ...doneData,
             question: result.output.trim().split('\n').slice(-5).join('\n'),
@@ -478,7 +469,6 @@ class ExecutionManager {
           }
 
           execution.status = 'done';
-          completeActivity(params.roleId);
           execution.stream.emit('msg:done', params.roleId, doneData);
           if (execution.sessionId) {
             this.finalizeSessionMessage(execution, 'done', result);
@@ -508,7 +498,6 @@ class ExecutionManager {
           const targetRole = resolveTargetRole(params.sourceRole, params.parentSessionId, this.executions);
           execution.status = 'awaiting_input';
           execution.targetRole = targetRole;
-          markAwaitingInput(params.roleId);
           const question = `[Turn limit] ${harnessTurnCount}턴 도달 (hardLimit: ${limits.hardLimit}). 계속 진행할까요?`;
           execution.stream.emit('msg:awaiting_input', params.roleId, {
             question,
@@ -521,7 +510,6 @@ class ExecutionManager {
 
         execution.status = 'error';
         execution.error = err.message;
-        completeActivity(params.roleId);
 
         execution.stream.emit('msg:error', params.roleId, { message: err.message });
         if (execution.sessionId) {
@@ -605,7 +593,6 @@ class ExecutionManager {
     for (const exec of this.executions.values()) {
       if (exec.parentSessionId === parentSessionId && exec.status === 'awaiting_input') {
         exec.status = 'done';
-        completeActivity(exec.roleId);
         exec.stream.emit('msg:done', exec.roleId, {
           output: '[Auto-closed] Parent session completed',
           turns: 0,
@@ -688,7 +675,6 @@ class ExecutionManager {
     if (exec.status === 'running') exec.abort();
     exec.status = 'error';
     exec.error = 'Aborted by user';
-    completeActivity(exec.roleId);
     exec.stream.emit('msg:error', exec.roleId, { message: 'Aborted by user' });
     return true;
   }
@@ -701,7 +687,6 @@ class ExecutionManager {
     if (exec.status === 'running') exec.abort();
     exec.status = 'error';
     exec.error = 'Aborted by user';
-    completeActivity(exec.roleId);
     exec.stream.emit('msg:error', exec.roleId, { message: 'Aborted by user' });
     return true;
   }
@@ -714,7 +699,6 @@ class ExecutionManager {
     const effectiveResponder = responderRole ?? exec.targetRole ?? 'ceo';
 
     exec.status = 'done';
-    if (!isFollowUp) completeActivity(exec.roleId);
     exec.stream.emit('msg:reply', exec.roleId, { response, responderRole: effectiveResponder, isFollowUp });
 
     const prevOutput = exec.result?.output ?? '';

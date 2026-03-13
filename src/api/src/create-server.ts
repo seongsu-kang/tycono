@@ -20,8 +20,7 @@ import { handleExecRequest } from './routes/execute.js';
 import { engineRouter } from './routes/engine.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { setupRouter } from './routes/setup.js';
-import { getAllActivities, completeActivity } from './services/activity-tracker.js';
-import { type RoleStatus, isRoleActive } from '../../shared/types.js';
+// activity-tracker removed — executionManager resets on restart
 import { knowledgeRouter } from './routes/knowledge.js';
 import { preferencesRouter } from './routes/preferences.js';
 import { saveRouter } from './routes/save.js';
@@ -42,21 +41,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const isProd = process.env.NODE_ENV === 'production';
 const corsOrigin = isProd ? true : /^http:\/\/localhost:\d+$/;
-
-/**
- * 서버 시작 시 stale "working" activity 파일을 정리한다.
- * tsx watch 모드에서 재시작 시 in-memory 상태가 초기화되어도
- * 파일이 "working"으로 남는 버그를 방지한다.
- */
-function cleanupStaleActivities(): void {
-  const activities = getAllActivities();
-  for (const activity of activities) {
-    if (isRoleActive(activity.status as RoleStatus)) {
-      completeActivity(activity.roleId);
-      console.log(`[STARTUP] Cleaned stale activity: ${activity.roleId} (was working on "${activity.currentTask}")`);
-    }
-  }
-}
 
 /* ─── Raw HTTP handler for import-knowledge SSE ─── */
 
@@ -109,7 +93,6 @@ function handleImportKnowledge(req: http.IncomingMessage, res: http.ServerRespon
 export function createHttpServer(): http.Server {
   // Only cleanup/ensure if a company is already initialized (avoid creating dirs in CWD)
   if (COMPANY_ROOT && fs.existsSync(path.join(COMPANY_ROOT, 'CLAUDE.md'))) {
-    cleanupStaleActivities();
     ensureClaudeMd(COMPANY_ROOT);
   }
 
