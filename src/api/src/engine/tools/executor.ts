@@ -463,7 +463,7 @@ async function heartbeatWatch(
     Math.max(Number(input.durationSec) || DEFAULT_WATCH_DURATION, 5),
     MAX_WATCH_DURATION,
   );
-  const alertOn = (input.alertOn as string[] | undefined) ?? ['msg:done', 'msg:error'];
+  const alertOn = (input.alertOn as string[] | undefined) ?? ['msg:done', 'msg:error', 'msg:awaiting_input'];
   const alertSet = new Set(alertOn);
 
   // Collect current checkpoints (last known seq for each session)

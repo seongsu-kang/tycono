@@ -120,8 +120,8 @@ export const HEARTBEAT_WATCH_TOOL: ToolDefinition = {
       alertOn: {
         type: 'array',
         items: { type: 'string' },
-        description: 'Event types that trigger early return (default: msg:done, msg:error)',
-        default: ['msg:done', 'msg:error'],
+        description: 'Event types that trigger early return (default: msg:done, msg:error, msg:awaiting_input)',
+        default: ['msg:done', 'msg:error', 'msg:awaiting_input'],
       },
     },
     required: ['sessionIds'],
