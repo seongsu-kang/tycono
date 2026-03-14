@@ -138,6 +138,11 @@ Use the code repository path for all source code work (reading, writing, buildin
     sections.push(buildSupervisionSection(node));
   }
 
+  // Knowledge consistency management (C-Level responsibility)
+  if (node.level === 'c-level') {
+    sections.push(buildKnowledgeManagementSection(roleId));
+  }
+
   // Dispatch 도구 안내 (하위 Role이 있는 경우)
   if (subordinates.length > 0) {
     sections.push(buildDispatchSection(orgTree, roleId, subordinates, options?.teamStatus));
@@ -526,36 +531,41 @@ ${subInfo}
 
 ## How to Dispatch
 
-**Dispatch is async: start a job → poll for result → review → next task.**
+**Dispatch is async: start a job → supervise with watch → review → next task.**
 
 \`\`\`bash
-# Step 1: Dispatch (returns immediately with job ID)
+# Step 1: Dispatch (returns immediately with session ID)
 python3 "$DISPATCH_CMD" ${exampleSubId} "Task description here"
+# → Session ID: ses-xxx
 
-# Step 2: Poll for result (repeat every 10-30s until DONE)
-python3 "$DISPATCH_CMD" --check <jobId>
+# Step 2: Supervise with watch (preferred) or poll with --check
+# Option A (preferred): Supervision watch — blocks server-side, returns digest
+python3 "$SUPERVISION_CMD" watch ses-xxx --duration 120
+# Option B (fallback): Poll for result
+python3 "$DISPATCH_CMD" --check ses-xxx
 \`\`\`
 
 ⛔ **NEVER use the Agent tool or Task tool to spawn sub-agents.** Those bypass the job tracking system. Use ONLY the dispatch command.
 
-### The Pattern: Dispatch → Poll → Review → Next
+### The Pattern: Dispatch → Watch → Analyze → Act
 
 \`\`\`bash
-# 1. Dispatch first task (returns job ID immediately)
+# 1. Dispatch tasks (save all session IDs)
 python3 "$DISPATCH_CMD" ${exampleSubId} "Task A"
-# Output includes: Job ID: job-xxx
+# → Session ID: ses-aaa
+${subordinates.length > 1 ? `python3 "$DISPATCH_CMD" ${subordinates[1]} "Task B"\n# → Session ID: ses-bbb` : ''}
 
-# 2. Poll for result (repeat until status is DONE)
-python3 "$DISPATCH_CMD" --check job-xxx
-# If RUNNING → wait 10-30s → --check again
-# If DONE → read the result → proceed to next task
+# 2. Enter supervision loop — watch ALL dispatched sessions
+python3 "$SUPERVISION_CMD" watch ses-aaa${subordinates.length > 1 ? ',ses-bbb' : ''} --duration 120
+# → Returns digest with significance score + activity summary
 
-# 3. Dispatch next task
-python3 "$DISPATCH_CMD" ${subordinates.length > 1 ? subordinates[1] : exampleSubId} "Task B"
-python3 "$DISPATCH_CMD" --check job-yyy
-# ... repeat
+# 3. Analyze digest → decide:
+#    - On track → watch again
+#    - Off track → amend: python3 "$SUPERVISION_CMD" amend ses-aaa "Fix: use adapter pattern"
+#    - Failed → abort: python3 "$SUPERVISION_CMD" abort ses-aaa --reason "wrong approach"
+#    - Need input → consult: python3 "$CONSULT_CMD" cbo "Is this direction right?"
 
-# 4. Continue until ALL tasks are done
+# 4. Repeat watch until ALL sessions complete
 \`\`\`
 
 ### --check Status Values
@@ -605,44 +615,52 @@ When you receive a directive:
 
 The loop:
 \`\`\`
-PLAN TASKS → DISPATCH → POLL (--check) → REVIEW RESULT → DECIDE
-                                                           ├── PASS → Next DIFFERENT Task
-                                                           └── FAIL → Re-dispatch with SPECIFIC fix
-                                                           └── ALL DONE → Update knowledge → Report
+PLAN TASKS → DISPATCH → SUPERVISION WATCH → ANALYZE DIGEST → DECIDE
+                                                               ├── On track → Watch again
+                                                               ├── Off track → Amend session
+                                                               ├── Failed → Abort + re-dispatch
+                                                               └── ALL DONE → Update knowledge → Report
 \`\`\`
 
 ### ⛔ CRITICAL: No Duplicate Dispatch
 
 **NEVER dispatch the same or similar task to the same role twice.**
-- If --check shows RUNNING, keep polling — do NOT re-dispatch
+- If watch shows sessions still running, keep watching — do NOT re-dispatch
 - If a subordinate completed a task, accept the result — do NOT re-dispatch
 - If the result is unsatisfactory, re-dispatch with SPECIFIC different instructions
-- Track dispatched job IDs — never repeat the same task
+- Track dispatched session IDs — never repeat the same task
 - After 2 dispatches to the same role, accept the result or report to CEO
 
 **Example: Full supervision session**
 \`\`\`bash
 # Task 1: Dispatch to engineer
 python3 "$DISPATCH_CMD" engineer "Implement feature X. Read tasks.md first."
-# → Job ID: job-001
+# → Session ID: ses-001
 
-# Poll until done
-python3 "$DISPATCH_CMD" --check job-001
-# → Status: RUNNING — check again in 10-30s
-python3 "$DISPATCH_CMD" --check job-001
-# → Status: DONE (result printed)
+# Supervision watch (blocks 120s, returns digest)
+python3 "$SUPERVISION_CMD" watch ses-001 --duration 120
+# → Digest: Engineer creating auth module (significance: 3, no anomalies)
+# Judgment: On track, continue watching
+
+python3 "$SUPERVISION_CMD" watch ses-001 --duration 120
+# → Digest: Engineer importing external API directly (significance: 7, anomaly: scope_creep)
+# Judgment: Wrong approach — amend!
+python3 "$SUPERVISION_CMD" amend ses-001 "Use our adapter pattern, not direct API import"
+
+python3 "$SUPERVISION_CMD" watch ses-001 --duration 120
+# → Digest: Engineer completed (msg:done)
 
 # Review result... looks good. Task 2 (QA):
 python3 "$DISPATCH_CMD" qa "Test feature X that engineer just implemented."
-# → Job ID: job-002
-python3 "$DISPATCH_CMD" --check job-002
-# → Status: DONE — found bugs
+# → Session ID: ses-002
+python3 "$SUPERVISION_CMD" watch ses-002 --duration 120
+# → Digest: QA found bugs (significance: 6)
 
 # Re-dispatch with SPECIFIC fix:
 python3 "$DISPATCH_CMD" engineer "Fix BUG: null check missing in auth.ts line 42"
-# → Job ID: job-003
-python3 "$DISPATCH_CMD" --check job-003
-# → Status: DONE — all good. Update knowledge and report.
+# → Session ID: ses-003
+python3 "$SUPERVISION_CMD" watch ses-003 --duration 120
+# → DONE — all good. Update knowledge and report.
 \`\`\`
 
 ⚠️ Do NOT use curl or other methods to create jobs — always use the dispatch command.
@@ -707,53 +725,110 @@ function buildSupervisionSection(node: OrgNode): string {
   const hb = node.heartbeat ?? { enabled: true, intervalSec: 120, maxTicks: 60 };
   return `# Supervision Mode (Heartbeat)
 
-⛔ **When you dispatch subordinates, you MUST enter supervision mode using heartbeat_watch.**
-⛔ **Do NOT use sleep+curl polling. heartbeat_watch blocks server-side at zero cost.**
+⛔ **After dispatching subordinates, you MUST enter supervision mode.**
+⛔ **Use \`python3 "$SUPERVISION_CMD" watch\` — it blocks server-side at zero LLM cost and returns a digest.**
+⛔ **Do NOT use sleep + \`--check\` polling. The supervision watch command is cheaper and gives better information.**
 
 ## Supervision Protocol
 
-1. **Dispatch** subordinates with clear task descriptions
-2. **Call heartbeat_watch** with the returned session IDs:
-   \`heartbeat_watch(sessionIds=[...], durationSec=${hb.intervalSec})\`
-3. **Analyze the digest** against your plan:
-   - On track → call heartbeat_watch again (keep watching)
-   - Off track → \`amend_session(sessionId, instruction)\` to course-correct
-   - Seriously wrong → \`abort_session(sessionId)\` + re-dispatch with different instructions
-   - Need peer input → \`consult(peer_role_id, question)\`
-   - All done → compile results and report to your superior
-4. **Repeat** heartbeat_watch until all subordinates complete
+1. **Dispatch** subordinates with clear task descriptions. Save returned session IDs.
+2. **Watch** with the supervision command:
+   \`\`\`bash
+   python3 "$SUPERVISION_CMD" watch <ses-id1>,<ses-id2> --duration ${hb.intervalSec}
+   \`\`\`
+   This blocks for ${hb.intervalSec}s (or until an alert event) and returns a digest summary.
+3. **Analyze the digest** — each tick, you must think critically:
+   - ✅ **Direction check**: Are subordinates on track with the plan?
+   - ✅ **Quality check**: Is the approach correct? (e.g., right patterns, right tools)
+   - ✅ **Peer consult**: Unsure about business/market direction? → \`python3 "$CONSULT_CMD" cbo "question"\`
+   - ⚠️ **Course correct**: Wrong direction → \`python3 "$SUPERVISION_CMD" amend <ses-id> "new instruction"\`
+   - 🛑 **Abort**: Seriously wrong → \`python3 "$SUPERVISION_CMD" abort <ses-id> --reason "why"\`
+   - ✅ **All done**: Compile results and report to your superior
+4. **Repeat** watch until all subordinates complete. Do NOT stop after one tick.
 
-## Available Supervision Tools
+## Supervision Commands
 
-| Tool | When to Use |
-|------|-------------|
-| \`heartbeat_watch\` | Watch subordinate sessions (blocks ${hb.intervalSec}s, $0 LLM cost) |
-| \`amend_session\` | Inject new instructions into a running session |
-| \`abort_session\` | Kill a session that's going wrong |
-| \`consult\` | Ask a peer C-Level for their perspective |
+| Command | Description |
+|---------|-------------|
+| \`python3 "$SUPERVISION_CMD" watch <ids> --duration ${hb.intervalSec}\` | Watch sessions (blocks ${hb.intervalSec}s, returns digest) |
+| \`python3 "$SUPERVISION_CMD" amend <ses-id> "instruction"\` | Inject new instructions into running session |
+| \`python3 "$SUPERVISION_CMD" abort <ses-id> --reason "why"\` | Kill a session going wrong |
+| \`python3 "$SUPERVISION_CMD" peers --wave <waveId> --role <roleId>\` | Discover peer C-Level sessions |
+| \`python3 "$CONSULT_CMD" <peer-role> "question"\` | Ask a peer C-Level for input |
 
 ## Digest Response
 
-heartbeat_watch returns a digest with:
-- **Significance score** (0-10): How much attention this tick needs
-- **Anomalies**: Errors, stalls (3min+), sessions awaiting input
-- **Per-session activity**: What each subordinate has been doing
-- **Peer activity** (if peers are also in supervision mode)
+The watch command returns a JSON digest with:
+- **significanceScore** (0-10): How much attention this tick needs
+- **anomalies**: Errors, stalls (3min+ no events), sessions awaiting input
+- **text**: Human-readable summary of per-session activity
 
-Quiet ticks (score 0-1) return a single line: "All N sessions progressing normally."
+Score 0-1 = quiet (all normal). Score 5+ = needs attention. Score 8+ = likely needs intervention.
+
+## Tick Quality (CRITICAL)
+
+⛔ **Each tick, you must make a REAL judgment — not just "still running, continuing".**
+
+Good tick response:
+\`\`\`
+Digest: Engineer working on auth module (seq 45), QA waiting.
+Judgment: Engineer is importing external API directly — should use our adapter pattern.
+Action: amend engineer session with instruction to use adapter.
+\`\`\`
+
+Bad tick response (DO NOT DO THIS):
+\`\`\`
+"Sessions are still running. Continuing to watch."
+\`\`\`
 
 ## Budget
 
 - Max ticks: ${hb.maxTicks} (${Math.round(hb.maxTicks * hb.intervalSec / 60)} minutes total)
-- Quiet tick cost: ~$0.001 (minimal LLM analysis)
-- Alert tick cost: ~$0.02-0.05 (intervention decision)
+- Quiet tick cost: ~$0.001 | Alert tick cost: ~$0.02-0.05
 
 ## ⛔ Anti-Patterns
 
-- ❌ Using \`bash_execute\` with sleep/curl to poll — use heartbeat_watch instead
-- ❌ Calling \`--check\` in a loop — heartbeat_watch handles this automatically
+- ❌ Using \`sleep\` + \`--check\` to poll — use supervision watch instead
+- ❌ Saying "still RUNNING, continuing to wait" without real analysis
 - ❌ Ignoring digest anomalies — always address errors and stalls
-- ❌ Not re-watching after a quiet tick — keep the loop going until all done`;
+- ❌ Stopping supervision after one tick — keep watching until ALL done
+- ❌ Not consulting peers when business/market judgment is needed`;
+}
+
+function buildKnowledgeManagementSection(roleId: string): string {
+  const domainScope = roleId === 'cto'
+    ? '`architecture/`, `knowledge/` (technical docs)'
+    : roleId === 'cbo'
+      ? '`knowledge/`, `company/` (business docs)'
+      : '`knowledge/` (your domain docs)';
+
+  return `# Knowledge Consistency Management (C-Level Responsibility)
+
+⛔ **You are responsible for keeping your domain's knowledge current and consistent.**
+
+## When to Check
+
+- After completing any task (The Loop step ④)
+- During supervision ticks when subordinates are progressing normally
+- When you notice conflicting information during work
+
+## Knowledge Gate
+
+1. Check if changes conflict with existing documents (grep 3+ keywords)
+2. Update or deprecate stale references — do NOT leave legacy docs pretending to be current
+3. Verify new docs are registered in their Hub
+4. Ensure cross-links between related documents
+
+## AKB Linting
+
+| Check | Description |
+|-------|-------------|
+| Orphan docs | Every document reachable from a Hub? |
+| Stale content | Deprecated designs still described as current? Mark ⚠️ |
+| Term consistency | Same concept called different names across docs? |
+| Date freshness | Old dates/status without warning? |
+
+**Your scope**: ${domainScope}`;
 }
 
 function buildConsultSection(orgTree: OrgTree, roleId: string): string | null {
