@@ -306,6 +306,7 @@ const BLOCKED_PATTERNS = [
   /\bnpm\s+publish\b/,
   /\beval\s*\(/,
   /:\(\)\s*\{/,  // fork bomb
+  /\bsleep\s+\d/,  // Block sleep — use heartbeat_watch or supervision watch instead
 ];
 
 function validateBashCommand(command: string): string | null {

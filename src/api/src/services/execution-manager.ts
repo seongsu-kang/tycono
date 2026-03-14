@@ -495,6 +495,7 @@ class ExecutionManager {
           }
 
           this.cleanupOrphanedChildren(execution.sessionId);
+          this.attemptSupervisionRecovery(execution);
         }
       })
       .catch((err: Error) => {
@@ -527,6 +528,9 @@ class ExecutionManager {
         if (execution.sessionId) {
           this.finalizeSessionMessage(execution, 'error');
         }
+
+        // SV: If C-Level crashed with running children, restart supervision
+        this.attemptSupervisionRecovery(execution);
       })
       .finally(() => {
         if (execution.ports) {
@@ -610,6 +614,79 @@ class ExecutionManager {
           turns: 0,
         });
       }
+    }
+  }
+
+  /**
+   * Get children of a parent session that are still running.
+   */
+  private getRunningChildren(parentSessionId: string): Execution[] {
+    const running: Execution[] = [];
+    for (const exec of this.executions.values()) {
+      if (exec.parentSessionId === parentSessionId && exec.status === 'running') {
+        running.push(exec);
+      }
+    }
+    return running;
+  }
+
+  /**
+   * SV: Crash Recovery — C-Level이 죽었는데 부하가 아직 실행 중이면 자동 재시작.
+   * "죽으면 오히려 이거하라고 다시 깨우는거야" (CEO 결정, 2026-03-14)
+   */
+  private attemptSupervisionRecovery(deadExecution: Execution): void {
+    const runningChildren = this.getRunningChildren(deadExecution.sessionId);
+    if (runningChildren.length === 0) return;
+
+    // Only restart C-Level roles (CTO, CBO etc.)
+    const orgTree = buildOrgTree(COMPANY_ROOT);
+    const node = orgTree.nodes.get(deadExecution.roleId);
+    if (!node || node.level !== 'c-level') return;
+
+    const childSummary = runningChildren.map(c =>
+      `- [${c.roleId}] Session: ${c.sessionId} | Task: ${c.task.slice(0, 150)}`
+    ).join('\n');
+
+    const recoveryTask = `[SUPERVISION RECOVERY] Your previous session ended, but subordinates are still running.
+
+Resume supervision immediately. These sessions are still active:
+${childSummary}
+
+Use supervision watch to monitor them:
+python3 "$SUPERVISION_CMD" watch ${runningChildren.map(c => c.sessionId).join(',')} --duration 120
+
+Your job: monitor progress, course-correct if needed, wait for completion, then compile results and report.`;
+
+    console.log(`[ExecMgr] Supervision recovery: ${deadExecution.roleId} died with ${runningChildren.length} running children. Restarting.`);
+
+    // Propagate waveId from the dead session
+    const deadSession = getSession(deadExecution.sessionId);
+    const waveId = deadSession?.waveId;
+
+    // Create new session for recovery
+    const newSession = createSession(deadExecution.roleId, {
+      mode: 'do',
+      source: 'wave',
+      ...(waveId && { waveId }),
+    });
+
+    // Re-parent running children to the new session
+    for (const child of runningChildren) {
+      child.parentSessionId = newSession.id;
+    }
+
+    // Start new execution
+    try {
+      this.startExecution({
+        type: 'assign',
+        roleId: deadExecution.roleId,
+        task: recoveryTask,
+        sourceRole: 'ceo',
+        sessionId: newSession.id,
+        targetRoles: deadExecution.targetRoles,
+      });
+    } catch (err) {
+      console.error(`[ExecMgr] Supervision recovery failed for ${deadExecution.roleId}:`, err);
     }
   }
 
