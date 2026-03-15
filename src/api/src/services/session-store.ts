@@ -101,7 +101,11 @@ function writeImmediate(session: Session): void {
     clearTimeout(timer);
     writeTimers.delete(session.id);
   }
-  fs.writeFileSync(sessionPath(session.id), JSON.stringify(session, null, 2));
+  try {
+    fs.writeFileSync(sessionPath(session.id), JSON.stringify(session, null, 2));
+  } catch (err) {
+    console.error(`[SessionStore] WRITE FAILED for ${session.id}:`, err);
+  }
 }
 
 /* ─── In-memory cache ───────────────────── */
@@ -254,6 +258,7 @@ export function deleteSession(id: string): boolean {
   const session = cache.get(id);
   if (!session) return false;
 
+  console.log(`[SessionStore] Deleting session ${id} (roleId=${session.roleId}, waveId=${session.waveId ?? 'none'}, messages=${session.messages.length})`);
   cache.delete(id);
   const p = sessionPath(id);
   if (fs.existsSync(p)) fs.unlinkSync(p);

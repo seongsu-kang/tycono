@@ -371,10 +371,9 @@ elif cmd == 'amend':
         log('Usage: supervision amend <sessionId> "<instruction>"')
         sys.exit(1)
 
-    # Amend uses continue-session with amended context
+    # Amend sends a message to the session with amendment instructions
     body = json.dumps({
-        'response': f'[SUPERVISION AMENDMENT] {instruction}',
-        'responderRole': os.environ.get('DISPATCH_SOURCE_ROLE', 'ceo'),
+        'content': f'[SUPERVISION AMENDMENT] {instruction}',
     }).encode()
 
     try:

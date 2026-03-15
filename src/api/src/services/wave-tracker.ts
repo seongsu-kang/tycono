@@ -168,11 +168,51 @@ export function updateFollowUpInWave(waveId: string, sessionId: string, roleId: 
  */
 export function saveCompletedWave(waveId: string, directive: string): { ok: boolean; path?: string } {
   try {
-    // Collect all sessionIds for this wave from session-store
-    const allSessions = listSessions();
-    const sessionIds = allSessions
-      .filter(s => s.waveId === waveId)
-      .map(s => s.id);
+    // BUG-009 fix: collect sessions from BOTH session-store AND activity-streams.
+    // Session-store cache may miss the CEO supervisor session (BUG-008).
+    // Activity-streams on disk are the source of truth for what actually ran.
+    const sessionIdSet = new Set(
+      listSessions().filter(s => s.waveId === waveId).map(s => s.id)
+    );
+
+    // Scan activity-streams for ALL sessions belonging to this wave.
+    // Wave sessions share a traceId chain: CEO → C-Level → subordinates.
+    // We find the CEO session (waveId timestamp embedded in its ID), then follow dispatch:start events.
+    const streamsDir = path.join(COMPANY_ROOT, 'operations', 'activity-streams');
+    if (fs.existsSync(streamsDir)) {
+      // Find all activity stream files and check if they belong to this wave
+      const waveTimestamp = waveId.replace('wave-', '');
+      for (const file of fs.readdirSync(streamsDir)) {
+        if (!file.endsWith('.jsonl')) continue;
+        const sid = file.replace('.jsonl', '');
+        if (sessionIdSet.has(sid)) continue;
+        // Check if session ID contains the wave timestamp (CEO session)
+        // or if the session was dispatched from a known wave session
+        if (sid.includes(waveTimestamp)) {
+          sessionIdSet.add(sid);
+        }
+      }
+
+      // Now recursively find all child sessions via dispatch:start events
+      let foundNew = true;
+      while (foundNew) {
+        foundNew = false;
+        for (const sid of Array.from(sessionIdSet)) {
+          try {
+            const events = ActivityStream.readAll(sid);
+            for (const e of events) {
+              const childSessionId = e.data.childSessionId as string | undefined;
+              if (e.type === 'dispatch:start' && childSessionId && !sessionIdSet.has(childSessionId)) {
+                sessionIdSet.add(childSessionId);
+                foundNew = true;
+              }
+            }
+          } catch { /* skip */ }
+        }
+      }
+    }
+
+    const sessionIds = Array.from(sessionIdSet);
 
     if (sessionIds.length === 0) {
       console.warn(`[WaveTracker] No sessions found for wave ${waveId}, skipping save`);

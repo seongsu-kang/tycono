@@ -310,12 +310,45 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
   let sessionIds = (body.sessionIds ?? body.jobIds) as string[] | undefined;
   const waveId = body.waveId as string | undefined;
 
-  // BUG-W01 fix: auto-collect sessionIds from session-store when waveId is present
+  // BUG-W01 + BUG-009 fix: auto-collect sessionIds from session-store AND activity-streams
   if (waveId && (!sessionIds || sessionIds.length === 0)) {
-    const allSessions = listSessions();
-    sessionIds = allSessions
-      .filter(s => s.waveId === waveId)
-      .map(s => s.id);
+    const sessionIdSet = new Set(
+      listSessions().filter(s => s.waveId === waveId).map(s => s.id)
+    );
+
+    // Scan activity-streams for sessions belonging to this wave
+    const streamsDir = path.join(COMPANY_ROOT, 'operations', 'activity-streams');
+    if (fs.existsSync(streamsDir)) {
+      const waveTimestamp = waveId.replace('wave-', '');
+      for (const file of fs.readdirSync(streamsDir)) {
+        if (!file.endsWith('.jsonl')) continue;
+        const sid = file.replace('.jsonl', '');
+        if (sessionIdSet.has(sid)) continue;
+        if (sid.includes(waveTimestamp)) {
+          sessionIdSet.add(sid);
+        }
+      }
+
+      // Recursively find all child sessions via dispatch:start events
+      let foundNew = true;
+      while (foundNew) {
+        foundNew = false;
+        for (const sid of Array.from(sessionIdSet)) {
+          try {
+            const events = ActivityStream.readAll(sid);
+            for (const e of events) {
+              const childSessionId = e.data.childSessionId as string | undefined;
+              if (e.type === 'dispatch:start' && childSessionId && !sessionIdSet.has(childSessionId)) {
+                sessionIdSet.add(childSessionId);
+                foundNew = true;
+              }
+            }
+          } catch { /* skip */ }
+        }
+      }
+    }
+
+    sessionIds = Array.from(sessionIdSet);
     console.log(`[WaveSave] Auto-collected ${sessionIds.length} sessionIds for wave ${waveId}`);
   }
 
@@ -387,14 +420,45 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
   }
   const jsonPath = path.join(wavesDir, `${baseName}.json`);
 
+  // Calculate actual duration from activity stream timestamps
+  let startedAt = now;
+  let endedAt = now;
+  for (const role of rolesData) {
+    if (role.events.length > 0) {
+      const firstTs = new Date(role.events[0].ts);
+      const lastTs = new Date(role.events[role.events.length - 1].ts);
+      if (firstTs < startedAt) startedAt = firstTs;
+      if (lastTs > endedAt) endedAt = lastTs;
+    }
+    for (const child of role.childSessions) {
+      if (child.events.length > 0) {
+        const firstTs = new Date(child.events[0].ts);
+        const lastTs = new Date(child.events[child.events.length - 1].ts);
+        if (firstTs < startedAt) startedAt = firstTs;
+        if (lastTs > endedAt) endedAt = lastTs;
+      }
+    }
+  }
+  const duration = Math.round((endedAt.getTime() - startedAt.getTime()) / 1000);
+
+  // Collect ALL session IDs including child sessions
+  const allSessionIds = [...sessionIds];
+  for (const role of rolesData) {
+    for (const child of role.childSessions) {
+      if (!allSessionIds.includes(child.sessionId)) {
+        allSessionIds.push(child.sessionId);
+      }
+    }
+  }
+
   const waveJson = {
     id: baseName,
     directive,
-    startedAt: now.toISOString(),
-    duration: 0,
+    startedAt: startedAt.toISOString(),
+    duration,
     roles: rolesData,
     ...(waveId && { waveId }),
-    ...(sessionIds.length > 0 && { sessionIds }),
+    sessionIds: allSessionIds,
   };
   fs.writeFileSync(jsonPath, JSON.stringify(waveJson, null, 2), 'utf-8');
 
