@@ -8,7 +8,7 @@
    Left/Right: ~12×8  (horizontal — side profile)
    ========================================================= */
 
-import type { Pixel } from '../engine/blueprint';
+import type { Pixel } from 'tyconoforge';
 
 /* ── Color Palette ── */
 const W = '#FAFAF7';  // white fur

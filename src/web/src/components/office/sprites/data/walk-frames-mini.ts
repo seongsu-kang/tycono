@@ -4,7 +4,7 @@
    Coordinates relative to character origin (0, 0).
    ========================================================= */
 
-import type { Pixel } from '../engine/blueprint';
+import type { Pixel } from 'tyconoforge';
 
 export type WalkDirection = 'down' | 'up' | 'left' | 'right';
 

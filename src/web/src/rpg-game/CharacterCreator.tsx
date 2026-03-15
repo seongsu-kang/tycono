@@ -3,7 +3,7 @@
    ========================================================= */
 
 import { useState, useEffect, useRef } from 'react';
-import * as TyconoForge from '../components/office/sprites/engine/forge-standalone';
+import * as TyconoForge from 'tyconoforge';
 import type { CharacterAppearance, Character } from './types';
 
 interface Props {

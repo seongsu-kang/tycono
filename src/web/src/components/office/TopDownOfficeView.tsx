@@ -3,8 +3,8 @@ import type { Role, Project, Wave, Standup, Decision, RoleStatus } from '../../t
 import { isRoleActive } from '../../types/index';
 import type { CharacterAppearance } from '../../types/appearance';
 import { getDefaultAppearance } from '../../types/appearance';
-import { getCharacterBlueprint, renderPixelsAt, getAccessoryForDirection, mirrorPixels } from './sprites/engine';
-import type { Direction } from './sprites/engine';
+import { getCharacterBlueprint, renderPixelsAt, getAccessoryForDirection, mirrorPixels } from 'tyconoforge';
+import type { Direction } from 'tyconoforge';
 import { applyStyles } from './TopDownCharCanvas';
 import './sprites/data'; // trigger blueprint registration
 import { WALK_FRAMES } from './sprites/data/walk-frames-mini';

@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react';
-import { getFacilityBlueprint, renderFacility } from './sprites/engine';
+import { getFacilityBlueprint, renderFacility } from 'tyconoforge';
 import './sprites/data'; // trigger blueprint registration
 
 type FacilityType = 'meeting' | 'bulletin' | 'decision' | 'knowledge';

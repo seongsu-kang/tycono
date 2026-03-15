@@ -23,7 +23,7 @@
     "dev:web": "npm run dev --prefix src/web",
     "build": "npm run build:web && npm run build:forge",
     "build:web": "npm run build --prefix src/web",
-    "build:forge": "tsup --config tsup.forge.ts",
+    "build:forge": "cp node_modules/tyconoforge/dist/tyconoforge.js src/web/dist/tyconoforge.js",
     "typecheck": "npm run typecheck:api && npm run typecheck:web",
     "typecheck:api": "cd src/api && npx tsc --noEmit",
     "typecheck:web": "cd src/web && npx tsc --noEmit",
@@ -38,6 +38,7 @@
     "gray-matter": "^4.0.3",
     "marked": "^15.0.6",
     "tsx": "^4.19.3",
+    "tyconoforge": "^0.1.0-beta.0",
     "yaml": "^2.7.0"
   },
   "devDependencies": {

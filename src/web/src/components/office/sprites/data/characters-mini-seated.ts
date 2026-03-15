@@ -7,8 +7,8 @@
    (no 'lower' layer — seated hides legs/shoes)
    ========================================================= */
 
-import type { Pixel } from '../engine/blueprint';
-import { registerCharacter } from '../engine/blueprint';
+import type { Pixel } from 'tyconoforge';
+import { registerCharacter } from 'tyconoforge';
 
 /* ─── Seated torso (shirt covering legs + arms) ────── */
 

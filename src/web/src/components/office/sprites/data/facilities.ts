@@ -3,8 +3,8 @@
    Converted from spriteDrawing.ts draw functions.
    ========================================================= */
 
-import type { FacilityBlueprint } from '../engine/blueprint';
-import { registerFacility } from '../engine/blueprint';
+import type { FacilityBlueprint } from 'tyconoforge';
+import { registerFacility } from 'tyconoforge';
 
 /* ── Meeting Table (160x80 canvas, Q=2, 80x40 grid) ───── */
 

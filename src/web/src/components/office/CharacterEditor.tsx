@@ -4,13 +4,12 @@ import type { CharacterAppearance } from '../../types/appearance';
 import {
   SKIN_PRESETS, HAIR_PRESETS, SHIRT_PRESETS, PANTS_PRESETS, SHOE_PRESETS,
 } from '../../types/appearance';
-import { getAllHairStyles, getAllOutfitStyles, getAllAccessories, extractAppearance } from './sprites/engine';
-import { getAccessoryRequiredLevel, isAccessoryUnlocked, getAccessoryCost } from './sprites/engine/accessories';
-import { getHairRequiredLevel, isHairUnlocked, getHairCost } from './sprites/engine/hairstyles';
-import { getOutfitRequiredLevel, isOutfitUnlocked, getOutfitCost } from './sprites/engine/outfits';
-import './sprites/engine/hairstyles'; // ensure registration
-import './sprites/engine/outfits';
-import './sprites/engine/accessories';
+import {
+  getAllHairStyles, getAllOutfitStyles, getAllAccessories, extractAppearance,
+  getAccessoryRequiredLevel, isAccessoryUnlocked, getAccessoryCost,
+  getHairRequiredLevel, isHairUnlocked, getHairCost,
+  getOutfitRequiredLevel, isOutfitUnlocked, getOutfitCost,
+} from 'tyconoforge';
 import TopDownCharCanvas from './TopDownCharCanvas';
 
 /* ─── Color Swatch ────────────────────────── */

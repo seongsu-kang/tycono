@@ -11,8 +11,8 @@
    - accessory: swappable via accessory
    ========================================================= */
 
-import type { CharacterBlueprint, Pixel } from '../engine/blueprint';
-import { registerCharacter } from '../engine/blueprint';
+import type { CharacterBlueprint, Pixel } from 'tyconoforge';
+import { registerCharacter } from 'tyconoforge';
 
 /* ─── Lower body (shadow + legs + shoes) ───────────── */
 

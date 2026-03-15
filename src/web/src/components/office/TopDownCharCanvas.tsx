@@ -4,7 +4,7 @@ import {
   getCharacterBlueprint, renderCharacter,
   swapHairLayer, getHairStyle,
   swapLayer, getOutfitStyle, getAccessory,
-} from './sprites/engine';
+} from 'tyconoforge';
 import './sprites/data'; // trigger blueprint registration
 
 /**
