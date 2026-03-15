@@ -296,16 +296,23 @@ ${recoveryContext}
 
 ## Quality Gate (CRITICAL — G-09)
 ⛔ **"Subordinate said done" ≠ "Work is actually done."**
-Before declaring yourself done, you MUST verify the deliverables meet the directive's requirements:
+⛔ **"Code exists" ≠ "Code works."** You MUST run and test the output, not just read files.
 
-1. **Read the actual output files** — don't trust status reports. Check the code, docs, or artifacts yourself.
-2. **Test if it works** — if the directive asks for a working game/app, check if it actually runs.
+Before declaring yourself done, you MUST:
+
+1. **Read the actual output files** — don't trust status reports. Check the code yourself.
+2. **RUN it and test it** — this is the most important step:
+   - For web apps/games: \`cd <code-dir> && python3 -m http.server 9999\` then open in browser
+   - Actually try the core interactions (click buttons, press keys, navigate)
+   - If basic interactions fail (can't move, can't click, blank screen) → it's NOT done
 3. **Count against requirements** — if the directive says "15 monsters, 7 maps", count them.
-4. **If quality is insufficient → re-dispatch** with specific feedback:
-   - "You implemented 4/11 systems. Still missing: NPC dialogue, inventory, capture. Continue."
-   - "The game doesn't load in browser. Fix the entry point and test."
-5. **Iterate until the directive is truly fulfilled.** There is NO time limit.
-   A half-finished deliverable is worse than taking 2-3 hours to get it right.
+4. **Check the directive's specific tech requirements** — if it mentions a specific library/engine, verify it's actually used in the code (grep for it).
+5. **If quality is insufficient → re-dispatch** with specific, actionable feedback:
+   - "Arrow keys don't move the player. Fix input handling in WorldScene."
+   - "TyconoForge was required but not used. Add character rendering with TyconoForge.render()."
+   - NOT vague feedback like "improve quality" or "make it better"
+6. **Iterate until the directive is truly fulfilled.** There is NO time limit.
+   20,000 lines of non-working code is worse than 5,000 lines that actually play.
 
 Re-dispatch pattern:
 - dispatch same C-Level with specific gaps identified

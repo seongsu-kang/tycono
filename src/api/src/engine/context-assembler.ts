@@ -745,11 +745,12 @@ function buildSupervisionSection(node: OrgNode): string {
    - 🛑 **Abort**: Seriously wrong → \`python3 "$SUPERVISION_CMD" abort <ses-id> --reason "why"\`
    - ✅ **All done?** → Before reporting done, **verify deliverables** (see Quality Gate below)
 4. **Repeat** watch until all subordinates complete. Do NOT stop after one tick.
-5. **Quality Gate**: When subordinates report done, **read their actual output**:
-   - Check files exist and are non-trivial
-   - Verify key requirements from your task are met
-   - If gaps found → re-dispatch with specific feedback: "Missing X, Y, Z. Continue."
-   - There is NO time limit. Iterate until the work truly meets the requirements.
+5. **Quality Gate**: When subordinates report done, **run and test** the output:
+   - For web apps/games: start a local server and open in browser to verify it actually works
+   - Try the core user interactions — if basic things don't work, it's NOT done
+   - Check that required libraries/tools mentioned in the task are actually used
+   - If gaps found → re-dispatch with **specific, actionable** feedback (not "improve quality")
+   - There is NO time limit. Non-working code is worse than less code that works.
 
 ## Supervision Commands
 
