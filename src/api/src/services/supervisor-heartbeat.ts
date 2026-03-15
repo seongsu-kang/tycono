@@ -384,6 +384,12 @@ Re-dispatch pattern:
       } else if (event.type === 'msg:error') {
         exec.stream.unsubscribe(subscriber);
         this.onSupervisorCrash(state, String(event.data.message ?? 'unknown error'));
+      } else if (event.type === 'msg:awaiting_input') {
+        // BUG-016: turn:limit causes awaiting_input — treat as done-guard
+        // If all children are done → complete wave. Otherwise restart supervisor.
+        exec.stream.unsubscribe(subscriber);
+        console.log(`[Supervisor] awaiting_input (turn limit) for wave ${state.waveId}. Running done-guard.`);
+        this.onSupervisorDone(state);
       }
     };
 
