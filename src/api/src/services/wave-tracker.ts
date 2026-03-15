@@ -232,15 +232,46 @@ export function saveCompletedWave(waveId: string, directive: string): { ok: bool
       : waveId;
     const jsonPath = existing ?? path.join(wavesDir, `${baseName}.json`);
 
+    // BUG-009 fix: calculate actual duration from activity stream timestamps
     const now = new Date();
+    let startedAt = now;
+    let endedAt = now;
+    for (const role of rolesData) {
+      if (role.events.length > 0) {
+        const firstTs = new Date(role.events[0].ts);
+        const lastTs = new Date(role.events[role.events.length - 1].ts);
+        if (firstTs < startedAt) startedAt = firstTs;
+        if (lastTs > endedAt) endedAt = lastTs;
+      }
+      for (const child of role.childSessions) {
+        if (child.events.length > 0) {
+          const firstTs = new Date(child.events[0].ts);
+          const lastTs = new Date(child.events[child.events.length - 1].ts);
+          if (firstTs < startedAt) startedAt = firstTs;
+          if (lastTs > endedAt) endedAt = lastTs;
+        }
+      }
+    }
+    const duration = Math.round((endedAt.getTime() - startedAt.getTime()) / 1000);
+
+    // Collect ALL session IDs including child sessions
+    const allSessionIds = [...sessionIds];
+    for (const role of rolesData) {
+      for (const child of role.childSessions) {
+        if (!allSessionIds.includes(child.sessionId)) {
+          allSessionIds.push(child.sessionId);
+        }
+      }
+    }
+
     const waveJson = {
       id: baseName,
       directive,
-      startedAt: now.toISOString(),
-      duration: 0,
+      startedAt: startedAt.toISOString(),
+      duration,
       roles: rolesData,
       waveId,
-      sessionIds,
+      sessionIds: allSessionIds,
     };
     fs.writeFileSync(jsonPath, JSON.stringify(waveJson, null, 2), 'utf-8');
 

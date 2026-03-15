@@ -272,6 +272,8 @@ export function deleteEmpty(): { deleted: number; ids: string[] } {
   const ids: string[] = [];
   for (const [id, session] of cache) {
     if (session.messages.length === 0) {
+      // BUG-008 fix: never delete wave sessions — they are managed by supervisor lifecycle
+      if (session.waveId) continue;
       ids.push(id);
     }
   }
