@@ -328,26 +328,32 @@ Re-dispatch pattern:
 6. If gaps exist → re-dispatch with specific feedback. Repeat 3-5.
 7. Only when ALL requirements are met → compile results and report`;
 
-    // Create supervisor session
-    const session = createSession('ceo', {
-      mode: 'do',
-      source: 'wave',
-      waveId: state.waveId,
-    });
+    // BUG-008 fix: Wave:Supervisor:Session = 1:1:1 invariant.
+    // Reuse existing session on restart instead of creating a new one.
+    let sessionId = state.supervisorSessionId;
+    if (sessionId && getSession(sessionId)) {
+      console.log(`[Supervisor] Reusing existing session ${sessionId} for wave ${state.waveId}`);
+    } else {
+      const session = createSession('ceo', {
+        mode: 'do',
+        source: 'wave',
+        waveId: state.waveId,
+      });
+      sessionId = session.id;
+      state.supervisorSessionId = sessionId;
 
-    state.supervisorSessionId = session.id;
+      // Add the directive as CEO message so the session isn't empty (prevents deleteEmpty cleanup)
+      const ceoMsg: Message = {
+        id: `msg-${Date.now()}-ceo-supervisor`,
+        from: 'ceo',
+        content: state.directive,
+        type: 'directive',
+        status: 'done',
+        timestamp: new Date().toISOString(),
+      };
+      addMessage(sessionId, ceoMsg);
+    }
     state.status = 'running';
-
-    // Add the directive as CEO message so the session isn't empty (prevents deleteEmpty cleanup)
-    const ceoMsg: Message = {
-      id: `msg-${Date.now()}-ceo-supervisor`,
-      from: 'ceo',
-      content: state.directive,
-      type: 'directive',
-      status: 'done',
-      timestamp: new Date().toISOString(),
-    };
-    addMessage(session.id, ceoMsg);
 
     try {
       const exec = executionManager.startExecution({
@@ -356,14 +362,14 @@ Re-dispatch pattern:
         task: supervisorTask,
         sourceRole: 'ceo',
         targetRoles: state.targetRoles,
-        sessionId: session.id,
+        sessionId,
       });
 
       state.executionId = exec.id;
 
       this.watchExecution(state, exec);
 
-      console.log(`[Supervisor] Started for wave ${state.waveId} | session=${session.id} | exec=${exec.id}`);
+      console.log(`[Supervisor] Started for wave ${state.waveId} | session=${sessionId} | exec=${exec.id}`);
     } catch (err) {
       console.error(`[Supervisor] Failed to start for wave ${state.waveId}:`, err);
       state.status = 'error';

@@ -263,6 +263,11 @@ export function deleteSession(id: string, force = false): boolean {
     console.warn(`[SessionStore] BLOCKED deletion of wave session ${id} (waveId=${session.waveId}, roleId=${session.roleId}). Use force=true to override.`);
     return false;
   }
+  // BUG-008 hard guard: CEO supervisor session is NEVER deletable during wave
+  if (session.roleId === 'ceo' && session.waveId && session.source === 'wave') {
+    console.error(`[SessionStore] HARD BLOCK: CEO supervisor session ${id} cannot be deleted (waveId=${session.waveId}). This is a 1:1:1 invariant.`);
+    return false;
+  }
 
   console.log(`[SessionStore] Deleting session ${id} (roleId=${session.roleId}, waveId=${session.waveId ?? 'none'}, messages=${session.messages.length})`);
   cache.delete(id);
