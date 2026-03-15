@@ -128,7 +128,8 @@ export function createHttpServer(): http.Server {
     }
 
     // SSE 엔드포인트: Express 우회하여 raw HTTP로 처리
-    if ((url.startsWith('/api/exec/') || url.startsWith('/api/jobs') || url === '/api/waves/save' || url === '/api/setup/import-knowledge') && method === 'POST') {
+    // BUG-008: /api/waves/:waveId/directive and /api/waves/:waveId/question POST도 포함
+    if ((url.startsWith('/api/exec/') || url.startsWith('/api/jobs') || url.startsWith('/api/waves/') || url === '/api/waves/save' || url === '/api/setup/import-knowledge') && method === 'POST') {
       setExecCors(req, res);
       if (url === '/api/setup/import-knowledge') {
         handleImportKnowledge(req, res);
