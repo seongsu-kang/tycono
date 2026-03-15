@@ -406,9 +406,9 @@ export default function OfficePage({ importReq, onImportDone }: { importReq?: Im
         setActiveSessionId(active.id);
         openTerminal();
       }
-      // Clean up wave sessions from server
-      const waveIds = metas.filter((m) => m.source === 'wave').map((m) => m.id);
-      if (waveIds.length > 0) api.deleteSessions(waveIds).catch(() => {});
+      // NOTE: Do NOT delete wave sessions here — they are managed by the
+      // Supervisor lifecycle and deleting them mid-wave causes BUG-008
+      // (CEO session disappears from disk, breaking wave metadata).
     }).catch((err) => {
       console.error('Failed to load sessions', err);
     });
@@ -2148,12 +2148,9 @@ export default function OfficePage({ importReq, onImportDone }: { importReq?: Im
               variant="modal"
               style={isWave && execStack.length === 1 ? { marginTop: 28 } : undefined}
               onClose={() => {
-                // Clean up wave sessions from local state and server
-                const waveSessionIds = sessions.filter(s => s.source === 'wave').map(s => s.id);
-                if (waveSessionIds.length > 0) {
-                  setSessions(prev => prev.filter(s => s.source !== 'wave'));
-                  api.deleteSessions(waveSessionIds).catch(() => {});
-                }
+                // Remove wave sessions from local UI state only — do NOT delete from server
+                // (BUG-008: server-side wave sessions are managed by Supervisor lifecycle)
+                setSessions(prev => prev.filter(s => s.source !== 'wave'));
                 setExecStack([]); setWaveDispatches([]); setWaveActiveIdx(0); setExecMinimized(false);
               }}
               onMinimize={() => setExecMinimized(true)}
