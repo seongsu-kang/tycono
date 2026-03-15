@@ -121,6 +121,7 @@ export default function WaveCenter({
     // replay (replayData/replayLoading) or composing a new wave.
   }, [activeWaves.length]);
 
+
   // Code git status
   const [codeGit, setCodeGit] = useState<GitInfo | null>(null);
   const codeGitBrief = useMemo(() => {
@@ -401,6 +402,16 @@ export default function WaveCenter({
     }
   }, []);
 
+
+  // BUG-010: Auto-load most recent past wave when no active waves on mount
+  const autoLoadedRef = useRef(false);
+  useEffect(() => {
+    if (autoLoadedRef.current) return;
+    if (activeWaves.length === 0 && pastWaves.length > 0 && !replayData && !replayLoading) {
+      autoLoadedRef.current = true;
+      handleLoadPastWave(pastWaves[0].id);
+    }
+  }, [activeWaves.length, pastWaves, replayData, replayLoading, handleLoadPastWave]);
 
   // Notify when done + auto-save to disk so completed waves appear in PAST WAVES
   const doneFired = useRef(false);

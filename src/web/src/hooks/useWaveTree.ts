@@ -94,6 +94,7 @@ export default function useWaveTree(
   }, [orgNodes, rootRoleId]);
 
   // Build initial tree from org nodes
+  const hadDispatchesRef = useRef(false);
   useEffect(() => {
     // Skip rebuild if static nodes were injected (replay mode)
     // Clear flag when active wave starts (rootDispatches non-empty)
@@ -104,6 +105,13 @@ export default function useWaveTree(
         return;
       }
     }
+
+    // BUG-010: Don't rebuild tree to "waiting" when dispatches go from non-empty to empty
+    // (wave completed → active wave removed). Preserve the final statuses.
+    if (rootDispatches.length === 0 && hadDispatchesRef.current && nodesRef.current.size > 0) {
+      return;
+    }
+    hadDispatchesRef.current = rootDispatches.length > 0;
 
     const result = buildOrgTree();
     if (!result) return;
