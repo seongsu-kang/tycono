@@ -12,10 +12,11 @@
  * - On restart, digest catches up with all missed events
  */
 import { executionManager, type Execution } from './execution-manager.js';
-import { createSession, getSession, listSessions } from './session-store.js';
+import { createSession, getSession, listSessions, addMessage, type Message } from './session-store.js';
 import { buildOrgTree, getSubordinates } from '../engine/org-tree.js';
 import { COMPANY_ROOT } from './file-reader.js';
 import { ActivityStream } from './activity-stream.js';
+import { saveCompletedWave } from './wave-tracker.js';
 
 /* ─── Types ──────────────────────────────────── */
 
@@ -290,6 +291,17 @@ ${recoveryContext}
     state.supervisorSessionId = session.id;
     state.status = 'running';
 
+    // Add the directive as CEO message so the session isn't empty (prevents deleteEmpty cleanup)
+    const ceoMsg: Message = {
+      id: `msg-${Date.now()}-ceo-supervisor`,
+      from: 'ceo',
+      content: state.directive,
+      type: 'directive',
+      status: 'done',
+      timestamp: new Date().toISOString(),
+    };
+    addMessage(session.id, ceoMsg);
+
     try {
       const exec = executionManager.startExecution({
         type: 'wave',
@@ -341,6 +353,18 @@ ${recoveryContext}
     } else {
       console.log(`[Supervisor] Wave ${state.waveId} complete. All subordinates done.`);
       state.status = 'stopped';
+
+      // Auto-save the completed wave to operations/waves/
+      try {
+        const result = saveCompletedWave(state.waveId, state.directive);
+        if (result.ok) {
+          console.log(`[Supervisor] Wave auto-saved: ${result.path}`);
+        } else {
+          console.warn(`[Supervisor] Wave auto-save returned no result for ${state.waveId}`);
+        }
+      } catch (err) {
+        console.error(`[Supervisor] Failed to auto-save wave ${state.waveId}:`, err);
+      }
     }
   }
 

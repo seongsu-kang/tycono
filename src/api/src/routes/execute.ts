@@ -21,7 +21,6 @@ import { earnCoinsInternal } from './coins.js';
 import { appendFollowUpToWave } from '../services/wave-tracker.js';
 import { waveMultiplexer } from '../services/wave-multiplexer.js';
 import { supervisorHeartbeat } from '../services/supervisor-heartbeat.js';
-import { readConfig } from '../services/company-config.js';
 
 /* ─── Auto-attach child executions to wave multiplexer ── */
 executionManager.onExecutionCreated((exec) => {
@@ -220,12 +219,8 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
 
     const targetRoles = body.targetRoles as string[] | undefined;
 
-    // Check supervision mode from config (same as legacy /api/exec/wave)
-    const config = readConfig(COMPANY_ROOT);
-    const supervisionMode = config.supervision?.mode ?? 'direct';
-
-    if (supervisionMode === 'supervisor') {
-      // Supervisor mode: start a single CEO Supervisor session that dispatches C-Levels
+    // Always use supervisor mode — CEO supervises C-Levels who supervise members
+    {
       const state = supervisorHeartbeat.start(
         `wave-${Date.now()}`,
         directive,
@@ -245,71 +240,6 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
       });
       return;
     }
-
-    // Direct mode (default): dispatch all C-Levels simultaneously
-    const orgTree = buildOrgTree(COMPANY_ROOT);
-    let cLevelRoles = getSubordinates(orgTree, 'ceo');
-
-    if (targetRoles && Array.isArray(targetRoles) && targetRoles.length > 0) {
-      const allowed = new Set(targetRoles);
-      cLevelRoles = cLevelRoles.filter(r => allowed.has(r));
-    }
-
-    if (cLevelRoles.length === 0) {
-      jsonResponse(res, 400, { error: 'No C-level roles found to dispatch wave.' });
-      return;
-    }
-
-    const fullTargetScope = targetRoles && targetRoles.length > 0 ? targetRoles : undefined;
-
-    const newWaveId = `wave-${Date.now()}`;
-    const sessionIds: string[] = [];
-
-    for (const cRole of cLevelRoles) {
-      const session = createSession(cRole, {
-        mode: 'do',
-        source: 'wave',
-        waveId: newWaveId,
-      });
-      sessionIds.push(session.id);
-
-      const ceoMsg: Message = {
-        id: `msg-${Date.now()}-ceo-${cRole}`,
-        from: 'ceo',
-        content: directive,
-        type: 'directive',
-        status: 'done',
-        timestamp: new Date().toISOString(),
-        attachments,
-      };
-      addMessage(session.id, ceoMsg);
-
-      const exec = executionManager.startExecution({
-        type: 'wave',
-        roleId: cRole,
-        task: `[CEO Wave] ${directive}`,
-        sourceRole: 'ceo',
-        parentSessionId,
-        targetRoles: fullTargetScope,
-        sessionId: session.id,
-        attachments,
-      });
-
-      waveMultiplexer.registerSession(newWaveId, exec);
-
-      const roleMsg: Message = {
-        id: `msg-${Date.now() + 1}-role-${cRole}`,
-        from: 'role',
-        content: '',
-        type: 'conversation',
-        status: 'streaming',
-        timestamp: new Date().toISOString(),
-      };
-      addMessage(session.id, roleMsg, true);
-    }
-
-    jsonResponse(res, 200, { sessionIds, waveId: newWaveId });
-    return;
   }
 
   // Assign
@@ -684,15 +614,8 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
 
   const targetRoles = body.targetRoles as string[] | undefined;
 
-  // Check supervision mode from config
-  const config = readConfig(COMPANY_ROOT);
-  const supervisionMode = config.supervision?.mode ?? 'direct';
-
-  if (supervisionMode === 'supervisor') {
-    handleWaveSupervisor(directive, targetRoles, req, res);
-  } else {
-    handleWaveDirect(directive, targetRoles, req, res);
-  }
+  // Always supervisor mode — CEO supervises C-Levels
+  handleWaveSupervisor(directive, targetRoles, req, res);
 }
 
 /**
@@ -718,105 +641,6 @@ function handleWaveSupervisor(directive: string, targetRoles: string[] | undefin
     supervisorSessionId: state.supervisorSessionId,
     mode: 'supervisor',
     directive,
-  });
-}
-
-/**
- * Direct mode (legacy): Dispatch all C-Levels simultaneously.
- * No CEO Supervisor — each C-Level runs independently.
- */
-function handleWaveDirect(directive: string, targetRoles: string[] | undefined, req: IncomingMessage, res: ServerResponse): void {
-  const orgTree = buildOrgTree(COMPANY_ROOT);
-  let cLevelRoles = getSubordinates(orgTree, 'ceo');
-
-  if (targetRoles && Array.isArray(targetRoles) && targetRoles.length > 0) {
-    const allowed = new Set(targetRoles);
-    cLevelRoles = cLevelRoles.filter(r => allowed.has(r));
-  }
-
-  if (cLevelRoles.length === 0) {
-    jsonResponse(res, 400, { error: 'No C-level roles found to dispatch wave.' });
-    return;
-  }
-
-  const fullTargetScope = targetRoles && targetRoles.length > 0 ? targetRoles : undefined;
-
-  const executions: Execution[] = [];
-  for (const cRole of cLevelRoles) {
-    const session = createSession(cRole, { mode: 'do' });
-    const exec = executionManager.startExecution({
-      type: 'wave',
-      roleId: cRole,
-      task: `[CEO Wave] ${directive}`,
-      sourceRole: 'ceo',
-      targetRoles: fullTargetScope,
-      sessionId: session.id,
-    });
-    executions.push(exec);
-  }
-
-  startSSE(res);
-  sendSSE(res, 'start', {
-    ids: executions.map((e) => e.id),
-    directive,
-    targetRoles: cLevelRoles,
-  });
-
-  let doneCount = 0;
-  const subscribers: Array<{ exec: Execution; sub: ActivitySubscriber }> = [];
-
-  for (const exec of executions) {
-    const subscriber: ActivitySubscriber = (event: ActivityEvent) => {
-      const rolePrefix = exec.roleId;
-      switch (event.type) {
-        case 'text':
-          sendSSE(res, 'output', { roleId: rolePrefix, text: event.data.text });
-          break;
-        case 'thinking':
-          sendSSE(res, 'thinking', { roleId: rolePrefix, text: event.data.text });
-          break;
-        case 'tool:start':
-          sendSSE(res, 'tool', { roleId: rolePrefix, name: event.data.name, input: event.data.input });
-          break;
-        case 'dispatch:start':
-          sendSSE(res, 'dispatch', { roleId: rolePrefix, targetRoleId: event.data.targetRoleId, task: event.data.task, childSessionId: event.data.childSessionId });
-          break;
-        case 'msg:turn-complete':
-          sendSSE(res, 'turn', { roleId: rolePrefix, turn: event.data.turn });
-          break;
-        case 'stderr':
-          sendSSE(res, 'stderr', { roleId: rolePrefix, message: event.data.message });
-          break;
-        case 'msg:awaiting_input':
-          sendSSE(res, 'role:awaiting_input', { roleId: rolePrefix, question: event.data.question, targetRole: event.data.targetRole, reason: event.data.reason });
-          break;
-        case 'msg:done':
-          sendSSE(res, 'role:done', { roleId: rolePrefix, ...event.data });
-          doneCount++;
-          if (doneCount >= executions.length) {
-            sendSSE(res, 'done', { directive, completedRoles: cLevelRoles });
-            res.end();
-          }
-          break;
-        case 'msg:error':
-          sendSSE(res, 'role:error', { roleId: rolePrefix, message: event.data.message });
-          doneCount++;
-          if (doneCount >= executions.length) {
-            sendSSE(res, 'done', { directive, completedRoles: cLevelRoles });
-            res.end();
-          }
-          break;
-      }
-    };
-
-    exec.stream.subscribe(subscriber);
-    subscribers.push({ exec, sub: subscriber });
-  }
-
-  req.on('close', () => {
-    for (const { exec, sub } of subscribers) {
-      exec.stream.unsubscribe(sub);
-    }
   });
 }
 

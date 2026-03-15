@@ -7,6 +7,7 @@ import path from 'node:path';
 import { COMPANY_ROOT } from './file-reader.js';
 import { ActivityStream, type ActivityEvent } from './activity-stream.js';
 import { executionManager } from './execution-manager.js';
+import { listSessions } from './session-store.js';
 import { type WaveRoleStatus, eventTypeToMessageStatus } from '../../../shared/types.js';
 
 /* ─── Find wave file ──────────────────────── */
@@ -155,6 +156,109 @@ export function updateFollowUpInWave(waveId: string, sessionId: string, roleId: 
     console.log(`[WaveTracker] Updated session ${sessionId} in wave ${waveId} → ${status}`);
   } catch (err) {
     console.error(`[WaveTracker] Failed to update wave:`, err);
+  }
+}
+
+/* ─── Save completed wave to operations/waves/ ── */
+
+/**
+ * Auto-save a completed wave to disk.
+ * Called by supervisor-heartbeat when all children are done.
+ * Mirrors the logic of handleSaveWave in execute.ts but callable from services.
+ */
+export function saveCompletedWave(waveId: string, directive: string): { ok: boolean; path?: string } {
+  try {
+    // Collect all sessionIds for this wave from session-store
+    const allSessions = listSessions();
+    const sessionIds = allSessions
+      .filter(s => s.waveId === waveId)
+      .map(s => s.id);
+
+    if (sessionIds.length === 0) {
+      console.warn(`[WaveTracker] No sessions found for wave ${waveId}, skipping save`);
+      return { ok: false };
+    }
+
+    console.log(`[WaveTracker] Auto-saving wave ${waveId} with ${sessionIds.length} sessions`);
+
+    interface WaveRoleData {
+      roleId: string;
+      roleName: string;
+      sessionId: string;
+      status: WaveRoleStatus | 'unknown';
+      events: ReturnType<typeof ActivityStream.readAll>;
+      childSessions: Array<{ roleId: string; roleName: string; sessionId: string; status: WaveRoleStatus | 'unknown'; events: ReturnType<typeof ActivityStream.readAll> }>;
+    }
+    const rolesData: WaveRoleData[] = [];
+
+    for (const sid of sessionIds) {
+      const events = ActivityStream.readAll(sid);
+      const startEvent = events.find(e => e.type === 'msg:start');
+      const roleId = startEvent?.roleId ?? 'unknown';
+      const roleName = (startEvent?.data?.roleName as string) ?? roleId;
+      const doneEvent = events.find(e => e.type === 'msg:done' || e.type === 'msg:awaiting_input' || e.type === 'msg:error');
+      const status: WaveRoleStatus | 'unknown' = doneEvent ? eventTypeToMessageStatus(doneEvent.type) as WaveRoleStatus : 'unknown';
+
+      const childSessions: WaveRoleData['childSessions'] = [];
+      for (const e of events) {
+        const childSessionId = e.data.childSessionId as string | undefined;
+        if (e.type === 'dispatch:start' && childSessionId) {
+          const targetRoleId = (e.data.targetRoleId as string) ?? 'unknown';
+          const childEvents = ActivityStream.readAll(childSessionId);
+          const childDone = childEvents.find(ce => ce.type === 'msg:done' || ce.type === 'msg:error' || ce.type === 'msg:awaiting_input');
+          const childStatus: WaveRoleStatus | 'unknown' = childDone ? eventTypeToMessageStatus(childDone.type) as WaveRoleStatus : 'unknown';
+          childSessions.push({
+            roleId: targetRoleId,
+            roleName: (childEvents.find(ce => ce.type === 'msg:start')?.data?.roleName as string) ?? targetRoleId,
+            sessionId: childSessionId,
+            status: childStatus,
+            events: childEvents,
+          });
+        }
+      }
+
+      rolesData.push({ roleId, roleName, sessionId: sid, status, events, childSessions });
+    }
+
+    const wavesDir = path.join(COMPANY_ROOT, 'operations', 'waves');
+    if (!fs.existsSync(wavesDir)) {
+      fs.mkdirSync(wavesDir, { recursive: true });
+    }
+
+    // Check if wave file already exists (e.g. from appendFollowUp)
+    const existing = findWaveFile(waveId);
+    const baseName = existing
+      ? path.basename(existing, '.json')
+      : waveId;
+    const jsonPath = existing ?? path.join(wavesDir, `${baseName}.json`);
+
+    const now = new Date();
+    const waveJson = {
+      id: baseName,
+      directive,
+      startedAt: now.toISOString(),
+      duration: 0,
+      roles: rolesData,
+      waveId,
+      sessionIds,
+    };
+    fs.writeFileSync(jsonPath, JSON.stringify(waveJson, null, 2), 'utf-8');
+
+    const relativePath = `operations/waves/${baseName}.json`;
+    console.log(`[WaveTracker] Wave saved: ${relativePath} (${rolesData.length} roles)`);
+
+    // Earn coins for wave completion (non-critical)
+    try {
+      const { earnCoinsInternal } = require('../routes/coins.js');
+      if (rolesData.length > 0) {
+        earnCoinsInternal(rolesData.length * 500, `Wave done: ${rolesData.length} roles`, `wave:${baseName}`);
+      }
+    } catch { /* non-critical */ }
+
+    return { ok: true, path: relativePath };
+  } catch (err) {
+    console.error(`[WaveTracker] Failed to auto-save wave ${waveId}:`, err);
+    return { ok: false };
   }
 }
 
