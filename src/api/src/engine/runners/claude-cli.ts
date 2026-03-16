@@ -477,7 +477,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
       '--output-format', 'stream-json',
       '--verbose',
       '--dangerously-skip-permissions',
-      '--model', config.model ?? 'claude-sonnet-4-5',
+      '--model', config.model ?? 'claude-opus-4-6',
       '--max-turns', String(maxTurns),
       '--mcp-config', mcpConfig,
       '--strict-mcp-config',
@@ -516,7 +516,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
       cleanEnv.SUPERVISION_CMD = supervisionScript;
     }
 
-    const modelName = config.model ?? 'claude-sonnet-4-5';
+    const modelName = config.model ?? 'claude-opus-4-6';
     // Use codeRoot as cwd — auto-creates ../{name}-code/ if not configured
     const codeRoot = resolveCodeRoot(companyRoot);
     const cwd = codeRoot;
