@@ -218,6 +218,7 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
     }
 
     const targetRoles = body.targetRoles as string[] | undefined;
+    const continuous = body.continuous === true;
 
     // Always use supervisor mode — CEO supervises C-Levels who supervise members
     {
@@ -225,6 +226,7 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
         `wave-${Date.now()}`,
         directive,
         targetRoles && targetRoles.length > 0 ? targetRoles : undefined,
+        continuous,
       );
 
       if (state.status === 'error') {
@@ -677,20 +679,22 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
   }
 
   const targetRoles = body.targetRoles as string[] | undefined;
+  const continuous = body.continuous === true;
 
   // Always supervisor mode — CEO supervises C-Levels
-  handleWaveSupervisor(directive, targetRoles, req, res);
+  handleWaveSupervisor(directive, targetRoles, continuous, req, res);
 }
 
 /**
  * Supervisor mode: Start a single CEO Supervisor session that dispatches C-Levels.
  * The supervisor uses dispatch/watch/amend tools — same pattern as any supervisor node.
  */
-function handleWaveSupervisor(directive: string, targetRoles: string[] | undefined, req: IncomingMessage, res: ServerResponse): void {
+function handleWaveSupervisor(directive: string, targetRoles: string[] | undefined, continuous: boolean, req: IncomingMessage, res: ServerResponse): void {
   const state = supervisorHeartbeat.start(
     `wave-${Date.now()}`,
     directive,
     targetRoles && targetRoles.length > 0 ? targetRoles : undefined,
+    continuous,
   );
 
   if (state.status === 'error') {

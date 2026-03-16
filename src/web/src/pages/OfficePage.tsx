@@ -725,10 +725,10 @@ export default function OfficePage({ importReq, onImportDone }: { importReq?: Im
   };
 
 
-  const handleWaveDispatch = async (directive: string, targetRoles?: string[], attachments?: ImageAttachment[]) => {
+  const handleWaveDispatch = async (directive: string, targetRoles?: string[], attachments?: ImageAttachment[], continuous?: boolean) => {
     setShowWaveModal(false);
     try {
-      const resp = await api.execute({ type: 'wave', directive, targetRoles, ...(attachments && { attachments }) });
+      const resp = await api.execute({ type: 'wave', directive, targetRoles, ...(attachments && { attachments }), ...(continuous && { continuous }) });
       fireQuestTrigger({ type: 'wave_dispatched' });
       // D-014: Extract server-generated waveId and sessionIds
       const serverWaveId = resp.waveId ?? `wave-${Date.now()}`;
@@ -1931,7 +1931,7 @@ export default function OfficePage({ importReq, onImportDone }: { importReq?: Im
                 : roles.filter(r => r.level === 'c-level')}
               pastWaves={waves}
               activeWaves={waveCenterWaves}
-              onDispatch={(d, t) => handleWaveDispatch(d, t)}
+              onDispatch={(d, t, a, c) => handleWaveDispatch(d, t, a, c)}
               onClose={() => setProChannel({ type: 'dashboard' })}
               onDone={() => {
                 handleJobDone();
@@ -1966,6 +1966,7 @@ export default function OfficePage({ importReq, onImportDone }: { importReq?: Im
               onClose={() => setProChannel({ type: 'dashboard' })}
               onRefresh={() => api.getKnowledge().then(setKnowledgeDocs).catch(() => {})}
               terminalWidth={0}
+              hideHeader
             />
           )}
 
@@ -2078,7 +2079,7 @@ export default function OfficePage({ importReq, onImportDone }: { importReq?: Im
             : roles.filter(r => r.level === 'c-level')}
           pastWaves={waves}
           activeWaves={waveCenterWaves}
-          onDispatch={(d, t) => handleWaveDispatch(d, t)}
+          onDispatch={(d, t, a, c) => handleWaveDispatch(d, t, a, c)}
           onClose={() => setShowWaveCenter(false)}
           onMaximize={() => { prevViewModeRef.current = 'iso'; setProChannel({ type: 'wave' }); setViewMode('pro'); }}
           onDone={() => {
@@ -2339,7 +2340,14 @@ export default function OfficePage({ importReq, onImportDone }: { importReq?: Im
       {showSessionPanel && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={() => setShowSessionPanel(false)}>
           <div style={{ width: 520, maxHeight: '80vh', background: 'var(--terminal-bg)', border: '2px solid var(--pixel-border)', borderRadius: 8, overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
-            <SessionPanel onClose={() => setShowSessionPanel(false)} />
+            <SessionPanel
+              onClose={() => setShowSessionPanel(false)}
+              onOpenSession={(roleId) => {
+                setShowSessionPanel(false);
+                setProChannel({ type: 'role', roleId });
+                setViewMode('pro');
+              }}
+            />
           </div>
         </div>
       )}

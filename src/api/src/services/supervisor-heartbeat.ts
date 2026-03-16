@@ -24,6 +24,7 @@ interface SupervisorState {
   waveId: string;
   directive: string;
   targetRoles?: string[];
+  continuous: boolean;
   supervisorSessionId: string | null;
   executionId: string | null;
   status: 'starting' | 'running' | 'restarting' | 'stopped' | 'error';
@@ -62,7 +63,7 @@ class SupervisorHeartbeat {
    * This creates a supervisor session and starts an execution.
    * If the execution dies, it auto-restarts (heartbeat).
    */
-  start(waveId: string, directive: string, targetRoles?: string[]): SupervisorState {
+  start(waveId: string, directive: string, targetRoles?: string[], continuous = false): SupervisorState {
     // Check if supervisor already running for this wave
     const existing = this.supervisors.get(waveId);
     if (existing && (existing.status === 'running' || existing.status === 'starting')) {
@@ -74,6 +75,7 @@ class SupervisorHeartbeat {
       waveId,
       directive,
       targetRoles,
+      continuous,
       supervisorSessionId: null,
       executionId: null,
       status: 'starting',
@@ -322,7 +324,15 @@ Re-dispatch pattern:
 - Each iteration should close specific gaps, not redo everything
 - Maximum 5 iterations per C-Level before escalating
 
-## Instructions
+${state.continuous ? `## Continuous Improvement Mode (ON)
+⛔ 첫 번째 완성 후 멈추지 마라.
+1. 모든 subordinate done + QA pass 후, 즉시 CBO에게 "사용자 관점에서 부족한 점, 개선할 점"을 물어라.
+2. CTO에게 "기술적으로 개선할 점, 코드 품질, 성능"을 물어라.
+3. CBO/CTO 의견을 종합하여 의미있는 개선이 있으면 re-dispatch.
+4. 이 사이클을 반복하라. 각 iteration마다 게임/산출물이 점점 나아져야 한다.
+5. 사용자가 Stop을 누를 때까지 계속한다. 스스로 done 선언하지 마라.
+
+` : ''}## Instructions
 1. Analyze the directive and decide which C-Level roles to dispatch (not necessarily all)
 2. Dispatch them with clear tasks
 3. Enter supervision watch loop
@@ -412,6 +422,11 @@ Re-dispatch pattern:
       console.log(`[Supervisor] Done but ${runningChildren.length} children still running. Restarting.`);
       state.crashCount = 0; // Not a crash, intentional restart
       this.scheduleRestart(state, 5_000); // 5s delay
+    } else if (state.continuous) {
+      // Continuous Improvement Mode: don't stop — restart supervisor to ask C-Levels for improvements
+      console.log(`[Supervisor] Wave ${state.waveId} iteration complete. Continuous mode ON — restarting for next improvement cycle.`);
+      state.crashCount = 0;
+      this.scheduleRestart(state, 5_000);
     } else {
       console.log(`[Supervisor] Wave ${state.waveId} complete. All subordinates done.`);
       state.status = 'stopped';

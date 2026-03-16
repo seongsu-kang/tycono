@@ -35,7 +35,7 @@ interface Props {
   cLevelRoles: { id: string; name: string }[];
   pastWaves: Wave[];
   activeWaves: ActiveWave[];
-  onDispatch: (directive: string, targetRoles?: string[], attachments?: ImageAttachment[]) => void;
+  onDispatch: (directive: string, targetRoles?: string[], attachments?: ImageAttachment[], continuous?: boolean) => void;
   onClose: () => void;
   onDone?: () => void;
   onSave?: (directive: string, sessionIds: string[], extra?: { waveId?: string; sessionIds?: string[] }) => Promise<void>;
@@ -59,6 +59,7 @@ export default function WaveCenter({
   onOpenSaveModal,
 }: Props) {
   const [directive, setDirective] = useState('');
+  const [continuous, setContinuous] = useState(false);
   const [replayData, setReplayData] = useState<WaveReplay | null>(null);
   const [replayLoading, setReplayLoading] = useState(false);
   const [selectedWaveIdx, setSelectedWaveIdx] = useState(activeWaves.length > 0 ? 0 : -1);
@@ -314,7 +315,7 @@ export default function WaveCenter({
     const allNonCeo = Array.from(waveTree.nodes.keys()).filter(id => id !== rootRoleId);
     const allChecked = allNonCeo.every(id => waveTree.checkedRoles.has(id));
     const atts = attachments.length > 0 ? attachments : undefined;
-    onDispatch(directive.trim(), allChecked ? undefined : Array.from(waveTree.checkedRoles), atts);
+    onDispatch(directive.trim(), allChecked ? undefined : Array.from(waveTree.checkedRoles), atts, continuous || undefined);
     setDirective('');
     setAttachments([]);
   };
@@ -680,8 +681,21 @@ export default function WaveCenter({
                       Dispatch to {checkedTargetCount} Role{checkedTargetCount !== 1 ? 's' : ''}
                     </button>
                   </div>
-                  <div className="text-[9px] text-[var(--terminal-text-muted)] mt-1">
-                    Cmd+Enter to dispatch
+                  <div className="flex items-center justify-between mt-1">
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={continuous}
+                        onChange={(e) => setContinuous(e.target.checked)}
+                        className="accent-[#B71C1C] w-3 h-3 cursor-pointer"
+                      />
+                      <span className="text-[10px] text-[var(--terminal-text-muted)]">
+                        Continuous
+                      </span>
+                    </label>
+                    <div className="text-[9px] text-[var(--terminal-text-muted)]">
+                      Cmd+Enter to dispatch
+                    </div>
                   </div>
                 </div>
               </div>
