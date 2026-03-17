@@ -1,5 +1,10 @@
 /**
- * PanelMode — Tab view: Org Tree (left) + selected Role's stream (right)
+ * PanelMode — Tab view: Org Tree (left) + Agent Detail + Stream (right)
+ *
+ * Left:  Org Tree with status icons
+ *        + compact resource summary (waves, ports)
+ * Right: Selected role's resource info (port, worktree, browser)
+ *        + event stream
  *
  * Navigation:
  *   j/k or arrow keys — move in Org Tree
@@ -12,7 +17,8 @@ import { Box, Text, useInput } from 'ink';
 import { OrgTree } from './OrgTree';
 import { StreamView } from './StreamView';
 import type { OrgNode } from '../store';
-import type { SSEEvent } from '../api';
+import type { SSEEvent, ActiveSessionInfo } from '../api';
+import type { WaveInfo } from '../hooks/useCommand';
 
 interface PanelModeProps {
   tree: OrgNode[];
@@ -22,9 +28,29 @@ interface PanelModeProps {
   selectedRoleId: string | null;
   streamStatus: 'idle' | 'streaming' | 'done' | 'error';
   waveId: string | null;
+  activeSessions: ActiveSessionInfo[];
+  waves: WaveInfo[];
+  focusedWaveId: string | null;
+  portSummary: { active: number; totalPorts: number };
   onMove: (direction: 'up' | 'down') => void;
   onSelect: () => void;
   onEscape: () => void;
+}
+
+/** Find active session for a given roleId */
+function findSessionForRole(activeSessions: ActiveSessionInfo[], roleId: string): ActiveSessionInfo | null {
+  // Prefer active sessions, then any
+  return activeSessions.find(s => s.roleId === roleId && s.status === 'active')
+    ?? activeSessions.find(s => s.roleId === roleId)
+    ?? null;
+}
+
+/** Format elapsed time */
+function elapsed(startedAt: string): string {
+  const ms = Date.now() - new Date(startedAt).getTime();
+  if (ms < 60_000) return `${Math.floor(ms / 1000)}s`;
+  if (ms < 3600_000) return `${Math.floor(ms / 60_000)}m`;
+  return `${Math.floor(ms / 3600_000)}h`;
 }
 
 export const PanelMode: React.FC<PanelModeProps> = ({
@@ -35,6 +61,10 @@ export const PanelMode: React.FC<PanelModeProps> = ({
   selectedRoleId,
   streamStatus,
   waveId,
+  activeSessions,
+  waves,
+  focusedWaveId,
+  portSummary,
   onMove,
   onSelect,
   onEscape,
@@ -75,11 +105,30 @@ export const PanelMode: React.FC<PanelModeProps> = ({
     ? flatRoles.includes(selectedRoleId) ? selectedRoleId : 'All'
     : 'All';
 
+  // Find resource info for selected role
+  const selectedSession = selectedRoleId
+    ? findSessionForRole(activeSessions, selectedRoleId)
+    : null;
+
+  // Focused wave info
+  const focusedWave = waves.find(w => w.waveId === focusedWaveId);
+  const focusedWaveIndex = focusedWaveId
+    ? waves.findIndex(w => w.waveId === focusedWaveId) + 1
+    : 0;
+
+  // Count sessions per wave for summary
+  const waveSessionCounts = new Map<string, number>();
+  for (const s of activeSessions) {
+    if (s.waveId) {
+      waveSessionCounts.set(s.waveId, (waveSessionCounts.get(s.waveId) ?? 0) + 1);
+    }
+  }
+
   return (
     <Box flexDirection="column" flexGrow={1}>
-      {/* Main content: Org Tree left | Stream right */}
+      {/* Main content: Org Tree left | Detail + Stream right */}
       <Box flexGrow={1}>
-        {/* Left: Org Tree */}
+        {/* Left: Org Tree + Resource Summary */}
         <Box flexDirection="column" width={28}>
           <OrgTree
             tree={tree}
@@ -87,15 +136,109 @@ export const PanelMode: React.FC<PanelModeProps> = ({
             selectedIndex={selectedRoleIndex}
             flatRoles={flatRoles}
           />
+
+          {/* Resource Summary — below org tree */}
+          <Box flexDirection="column" paddingX={1} marginTop={1}>
+            <Text color="gray">{'\u2500'.repeat(24)}</Text>
+
+            {/* Waves */}
+            {waves.length > 0 && (
+              <Box flexDirection="column">
+                {waves.map((w, i) => {
+                  const isFocused = w.waveId === focusedWaveId;
+                  const count = waveSessionCounts.get(w.waveId) ?? 0;
+                  return (
+                    <Box key={w.waveId}>
+                      <Text color={isFocused ? 'green' : 'gray'}>
+                        {isFocused ? '\u25B8' : ' '} W{i + 1}
+                      </Text>
+                      <Text color="gray"> {count > 0 ? `${count} agents` : 'idle'}</Text>
+                    </Box>
+                  );
+                })}
+              </Box>
+            )}
+
+            {/* Port summary */}
+            {portSummary.totalPorts > 0 && (
+              <Box marginTop={0}>
+                <Text color="blue">{portSummary.totalPorts} ports</Text>
+                <Text color="gray"> allocated</Text>
+              </Box>
+            )}
+          </Box>
         </Box>
 
         {/* Vertical separator — fill available height */}
         <Box flexDirection="column" marginX={0}>
-          <Text color="gray">{'│\n'.repeat(Math.max(5, termHeight - 6))}</Text>
+          <Text color="gray">{'\u2502\n'.repeat(Math.max(5, termHeight - 6))}</Text>
         </Box>
 
-        {/* Right: Stream for selected role */}
+        {/* Right: Agent Detail + Stream */}
         <Box flexGrow={1} flexDirection="column" overflow="hidden">
+          {/* Agent Resource Header — shown when a role is selected */}
+          {selectedRoleId && selectedSession && (
+            <Box flexDirection="column" paddingX={1} marginBottom={0}>
+              <Box justifyContent="space-between">
+                <Text bold color="cyan">{selectedRoleId}</Text>
+                <Text color={selectedSession.status === 'active' ? 'green' : 'gray'}>
+                  {selectedSession.status === 'active' ? '\u25CF' : '\u25CB'} {selectedSession.status}
+                  {selectedSession.startedAt ? ` (${elapsed(selectedSession.startedAt)})` : ''}
+                </Text>
+              </Box>
+
+              {/* Ports */}
+              <Box>
+                <Text color="gray">Port  </Text>
+                <Text color="white">
+                  API:{selectedSession.ports.api} Vite:{selectedSession.ports.vite}
+                  {selectedSession.ports.hmr ? ` HMR:${selectedSession.ports.hmr}` : ''}
+                </Text>
+              </Box>
+
+              {/* Worktree */}
+              {selectedSession.worktreePath && (
+                <Box>
+                  <Text color="gray">Tree  </Text>
+                  <Text color="white">{selectedSession.worktreePath}</Text>
+                </Box>
+              )}
+
+              {/* Wave association */}
+              {selectedSession.waveId && (
+                <Box>
+                  <Text color="gray">Wave  </Text>
+                  <Text color="white">
+                    {(() => {
+                      const wi = waves.findIndex(w => w.waveId === selectedSession.waveId);
+                      return wi >= 0 ? `Wave ${wi + 1}` : selectedSession.waveId;
+                    })()}
+                  </Text>
+                </Box>
+              )}
+
+              {/* Task */}
+              {selectedSession.task && (
+                <Box>
+                  <Text color="gray">Task  </Text>
+                  <Text color="white">{selectedSession.task.slice(0, 60)}</Text>
+                </Box>
+              )}
+
+              <Text color="gray">{'\u2500'.repeat(40)}</Text>
+            </Box>
+          )}
+
+          {/* Agent Resource Header — role selected but no active session */}
+          {selectedRoleId && !selectedSession && (
+            <Box flexDirection="column" paddingX={1} marginBottom={0}>
+              <Text bold color="cyan">{selectedRoleId}</Text>
+              <Text color="gray">(no active session)</Text>
+              <Text color="gray">{'\u2500'.repeat(40)}</Text>
+            </Box>
+          )}
+
+          {/* Stream */}
           <StreamView
             events={roleEvents}
             allRoleIds={flatRoles}
@@ -108,7 +251,7 @@ export const PanelMode: React.FC<PanelModeProps> = ({
 
       {/* Separator */}
       <Box width="100%">
-        <Text color="gray">{'─'.repeat(process.stdout.columns || 70)}</Text>
+        <Text color="gray">{'\u2500'.repeat(process.stdout.columns || 70)}</Text>
       </Box>
 
       {/* Footer hints */}

@@ -427,6 +427,10 @@ export const App: React.FC = () => {
           selectedRoleId={selectedRoleId}
           streamStatus={sse.streamStatus}
           waveId={focusedWaveId}
+          activeSessions={api.activeSessions}
+          waves={waves}
+          focusedWaveId={focusedWaveId}
+          portSummary={api.portSummary}
           onMove={(dir) => {
             if (dir === 'up') {
               setSelectedRoleIndex(Math.max(0, selectedRoleIndex - 1));
