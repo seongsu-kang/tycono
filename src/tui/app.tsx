@@ -109,14 +109,6 @@ export const App: React.FC = () => {
     return waveStatus;
   }, [sse.streamStatus, waveStatus, activeCount]);
 
-  // Auto-clear waveId when wave completes → next message starts fresh wave
-  useEffect(() => {
-    if (derivedWaveStatus === 'done' && waveId) {
-      setWaveId(null);
-      setWaveStatus('idle');
-    }
-  }, [derivedWaveStatus, waveId]);
-
   // Command handler
   const { execute } = useCommand({
     activeWaveId: effectiveWaveId,
