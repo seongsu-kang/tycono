@@ -205,7 +205,7 @@ export const CommandMode: React.FC<CommandModeProps> = ({
 
       {/* Separator */}
       <Box width="100%">
-        <Text color="gray">{'\u2500'.repeat(70)}</Text>
+        <Text color="gray">{'─'.repeat(process.stdout.columns || 70)}</Text>
       </Box>
 
       {/* Command input */}

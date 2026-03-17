@@ -84,7 +84,7 @@ export const OrgTree: React.FC<OrgTreeProps> = ({ tree, focused, selectedIndex, 
 
   return (
     <Box flexDirection="column" paddingX={1}>
-      <Text bold color={focused ? 'cyan' : 'gray'}>\u2500\u2500 Org Tree \u2500\u2500</Text>
+      <Text bold color={focused ? 'cyan' : 'gray'}>{'── Org Tree ──'}</Text>
       <Box marginTop={1}>
         <Text color="yellow" bold>{'\uD83D\uDC51'} CEO</Text>
       </Box>

@@ -209,8 +209,11 @@ export const App: React.FC = () => {
     );
   }
 
+  // Terminal full height
+  const termHeight = process.stdout.rows || 30;
+
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" height={termHeight}>
       {/* Status Bar — always shown */}
       <StatusBar
         companyName={api.company?.name ?? 'Loading...'}
@@ -222,10 +225,11 @@ export const App: React.FC = () => {
 
       {/* Separator */}
       <Box width="100%">
-        <Text color="gray">{'\u2500'.repeat(70)}</Text>
+        <Text color="gray">{'─'.repeat(process.stdout.columns || 70)}</Text>
       </Box>
 
-      {/* Mode content */}
+      {/* Mode content — fill remaining height */}
+      <Box flexGrow={1} flexDirection="column">
       {mode === 'command' ? (
         <CommandMode
           events={sse.events}
@@ -256,6 +260,7 @@ export const App: React.FC = () => {
           onEscape={() => setMode('command')}
         />
       )}
+      </Box>
     </Box>
   );
 };
