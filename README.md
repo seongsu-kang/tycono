@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".github/assets/hero-office.png" alt="Tycono — AI Office" width="720" />
+  <img src=".github/assets/wave-org-propagation.png" alt="Tycono — CEO dispatches through org hierarchy in real time" width="720" />
 </p>
 
 <h1 align="center">tycono</h1>
@@ -33,6 +33,54 @@ One command. Your AI company is running.
 npx tycono
 ```
 
+## Core Pillars
+
+### 1. CEO Supervisor — Org-chart orchestration
+
+You give one order. The system dispatches through a real hierarchy.
+
+```
+dispatch → watch → relay → quality gate → re-dispatch (if needed)
+```
+
+CEO delegates to C-levels, C-levels dispatch to their teams. Authority is enforced — engineers can't make CEO decisions, PMs can't merge code. The org chart isn't decoration, it's the execution engine.
+
+<p align="center">
+  <img src=".github/assets/wave-org-propagation.png" alt="Wave Center — org propagation with real-time status" width="640" />
+</p>
+
+### 2. Observability — See everything, intervene anytime
+
+Your AI team isn't a black box. Watch every agent work in real time, inject directives mid-execution, and drill down to any level.
+
+- **Wave Center** — Org-tree dispatch with real-time streaming
+- **Activity Stream** — Every event logged (dispatches, tool calls, decisions)
+- **CEO Directive** — Change direction while agents are running
+- **Cost Tracking** — Per-role, per-model token breakdown
+
+### 3. Isolation Infrastructure — Agents don't collide
+
+Multiple agents working simultaneously without stepping on each other.
+
+| Resource | Isolation | Status |
+|----------|-----------|--------|
+| **Code** | Git worktree per session | Designed |
+| **Ports** | Dynamic port registry | ✅ Live |
+| **Browser** | Separate daemon per session | ✅ Live |
+| **Knowledge** | Shared reads, scoped writes | ✅ Live |
+
+### 4. AKB (Pre-K / Post-K) — Knowledge that compounds
+
+Every AI tool today: `Plan → Execute → Done`. Knowledge resets. Tycono adds what the industry doesn't have:
+
+```
+Pre-K:  Read existing knowledge → Plan grounded in what the company knows
+Execute: Do the work
+Post-K: Extract insights → Cross-link → Register in knowledge graph
+```
+
+Session 50 is dramatically smarter than session 1. Your company learns.
+
 ## Why Tycono?
 
 Coding agents simulate **one developer**. Tycono simulates **the entire company**.
@@ -40,11 +88,11 @@ Coding agents simulate **one developer**. Tycono simulates **the entire company*
 | | Single AI Agent | Tycono |
 |---|---|---|
 | **What it runs** | One agent, one context | Multiple roles with org hierarchy |
-| **Knowledge** | Resets every session | Compounds forever — file-based, cross-linked |
+| **Knowledge** | Resets every session | Compounds forever (AKB Pre-K/Post-K) |
 | **Authority** | Can do anything (or nothing) | Scoped — each role has clear boundaries |
 | **Delegation** | Manual prompt chaining | CEO dispatches, org chart routes automatically |
 | **Scale** | 1 agent | 7 → 700 agents |
-| **Visibility** | Terminal output | Isometric office + Slack-style Pro dashboard |
+| **Visibility** | Terminal output | Real-time org tree + activity stream |
 
 ## Company-as-Code
 
@@ -80,33 +128,46 @@ A setup wizard guides you through:
 - Node.js >= 18
 - [Anthropic API key](https://console.anthropic.com/) or Claude Max subscription
 
-## Two Ways to Work
+## Interfaces
 
-### Office View — Watch your AI team
+### Web Dashboard — Visual management
 
-An isometric pixel-art office where your AI agents sit at their desks, work, chat, and think. Click any agent to talk to them directly.
-
-<p align="center">
-  <img src=".github/assets/hero-office.png" alt="Office View" width="640" />
-</p>
-
-- Pixel-art characters with personalities and levels
-- Ambient speech bubbles — agents think out loud
-- Rooms: Leadership, Engineering, Meeting, Knowledge Library
-- Edit mode — rearrange furniture, customize your office
-
-### Pro View — Manage your AI company
-
-A Slack-style professional dashboard for serious work. Chats, Wave dispatch, Decisions log, Knowledge graph.
+A browser-based dashboard for visual management. Org tree, Wave dispatch, Knowledge graph, Activity stream.
 
 <p align="center">
-  <img src=".github/assets/pro-view.png" alt="Pro View" width="640" />
+  <img src=".github/assets/hero-office.png" alt="Web Dashboard" width="640" />
 </p>
 
 - **Wave Center** — selective org-tree dispatch with target checkboxes
 - **Chats** — 1:1 conversations with any role, persistent sessions
-- **Knowledge Base** — graph/tree/list views, 194+ cross-linked documents
+- **Knowledge Base** — graph/tree/list views, cross-linked documents
 - **Decisions** — CEO strategic decision log with full context
+
+### TUI — Terminal-native operations *(coming soon)*
+
+For developers who live in the terminal. A k9s/lazygit-style multi-panel TUI built with [Ink](https://github.com/vadimdemedes/ink).
+
+```
+┌──────────────────────────────────────────────────┐
+│ TYCONO v0.2  │ Wave #37 running │ 3 active │$2.1│
+├──────────────┬───────────────────────────────────┤
+│ [Org Tree]   │ [Real-time Stream]                │
+│  CEO         │  CTO: "Reviewing architecture..." │
+│  ├ CTO ●     │    → dispatch → Engineer          │
+│  │ ├ ENG ○   │  CBO: "Market analysis done" ✓    │
+│  │ └ QA  ○   │                                   │
+│  └ CBO ●     │                                   │
+├──────────────┴───────────────────────────────────┤
+│ > wave "Write the Q1 strategy report"            │
+└──────────────────────────────────────────────────┘
+```
+
+```bash
+npx tycono --tui     # Terminal mode (coming soon)
+npx tycono           # Web dashboard (current)
+```
+
+Same API server, same engine — just a different frontend. Use what fits your workflow.
 
 ## Key Features
 
@@ -129,10 +190,6 @@ Every task produces knowledge. Cross-linked Markdown documents that grow with ev
 ### Role-Based Authority
 
 Each role has scoped authority defined in `role.yaml`. Engineers can't make CEO decisions. PMs can't merge code. The org chart isn't decoration — it's enforcement.
-
-### Level System
-
-Roles gain XP from completed work. Level up unlocks accessories and reflects experience. Your CTO at Lv.14 has seen things your new intern hasn't.
 
 ### Local-First, BYOK
 
@@ -181,7 +238,8 @@ your-company/
 ## CLI Usage
 
 ```bash
-npx tycono              # Start server + open dashboard
+npx tycono              # Start server + web dashboard
+npx tycono --tui        # Terminal UI (coming soon)
 npx tycono --help       # Show help
 npx tycono --version    # Show version
 ```
@@ -193,6 +251,17 @@ npx tycono --version    # Show version
 | `ANTHROPIC_API_KEY` | Your Anthropic API key | — |
 | `PORT` | Server port | auto-detect |
 | `COMPANY_ROOT` | Company directory | current directory |
+
+## Roadmap
+
+- [x] Web dashboard (Office + Pro views)
+- [x] CEO Wave dispatch with org-tree targeting
+- [x] AKB — Pre-K / Post-K knowledge loop
+- [x] Port Registry for multi-agent isolation
+- [ ] **TUI mode** — terminal-native multi-panel interface
+- [ ] Git worktree isolation per agent session
+- [ ] Desktop app (.dmg / .exe) — background execution, system notifications
+- [ ] Multi-LLM support (OpenAI, local models)
 
 ## Built with Tycono
 
