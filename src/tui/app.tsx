@@ -16,18 +16,18 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 import { Box, Text, useApp } from 'ink';
-import { StatusBar } from './components/StatusBar.js';
-import { OrgTree } from './components/OrgTree.js';
-import { SessionList } from './components/SessionList.js';
-import { StreamPanel } from './components/StreamPanel.js';
-import { CommandInput } from './components/CommandInput.js';
-import { WaveDialog } from './components/WaveDialog.js';
-import { HelpOverlay } from './components/HelpOverlay.js';
-import { useApi } from './hooks/useApi.js';
-import { useSSE } from './hooks/useSSE.js';
-import { useKeyboard } from './hooks/useKeyboard.js';
-import { buildOrgTree } from './store.js';
-import { dispatchWave } from './api.js';
+import { StatusBar } from './components/StatusBar';
+import { OrgTree } from './components/OrgTree';
+import { SessionList } from './components/SessionList';
+import { StreamPanel } from './components/StreamPanel';
+import { CommandInput } from './components/CommandInput';
+import { WaveDialog } from './components/WaveDialog';
+import { HelpOverlay } from './components/HelpOverlay';
+import { useApi } from './hooks/useApi';
+import { useSSE } from './hooks/useSSE';
+import { useKeyboard } from './hooks/useKeyboard';
+import { buildOrgTree } from './store';
+import { dispatchWave } from './api';
 
 type Panel = 'org' | 'sessions' | 'stream' | 'command';
 type Dialog = 'none' | 'wave' | 'help';

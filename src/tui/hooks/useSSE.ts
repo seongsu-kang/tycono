@@ -3,7 +3,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { subscribeToWaveStream, type SSEEvent, type SSEConnection } from '../api.js';
+import { subscribeToWaveStream, type SSEEvent, type SSEConnection } from '../api';
 
 const MAX_EVENTS = 500;
 

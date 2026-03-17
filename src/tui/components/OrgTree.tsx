@@ -4,8 +4,8 @@
 
 import React from 'react';
 import { Box, Text } from 'ink';
-import type { OrgNode } from '../store.js';
-import { statusIcon } from '../theme.js';
+import type { OrgNode } from '../store';
+import { statusIcon } from '../theme';
 
 interface OrgTreeProps {
   tree: OrgNode[];

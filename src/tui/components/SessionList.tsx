@@ -4,7 +4,7 @@
 
 import React from 'react';
 import { Box, Text } from 'ink';
-import type { SessionInfo } from '../api.js';
+import type { SessionInfo } from '../api';
 
 interface SessionListProps {
   sessions: SessionInfo[];

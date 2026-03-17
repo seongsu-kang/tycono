@@ -233,7 +233,7 @@ async function startServerForTui(): Promise<void> {
   process.on('SIGTERM', shutdown);
 
   // Start TUI
-  const { startTui } = await import('../src/tui/index.js');
+  const { startTui } = await import('../src/tui/index.tsx');
   await startTui({ port });
 }
 
@@ -256,7 +256,7 @@ export async function main(args: string[]): Promise<void> {
     // If --attach, skip server start — just connect to existing API
     if (attachMode) {
       const port = process.env.PORT ? Number(process.env.PORT) : 3000;
-      const { startTui } = await import('../src/tui/index.js');
+      const { startTui } = await import('../src/tui/index.tsx');
       await startTui({ port });
       return;
     }

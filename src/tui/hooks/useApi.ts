@@ -11,7 +11,7 @@ import {
   type CompanyInfo,
   type SessionInfo,
   type ExecStatus,
-} from '../api.js';
+} from '../api';
 
 const POLL_INTERVAL = 3000; // 3 seconds
 

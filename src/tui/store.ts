@@ -2,7 +2,7 @@
  * TUI Global State — simple shared state with React useState pattern
  */
 
-import type { RoleInfo, CompanyInfo, SessionInfo, SSEEvent, ExecStatus } from './api.js';
+import type { RoleInfo, CompanyInfo, SessionInfo, SSEEvent, ExecStatus } from './api';
 
 export interface TuiState {
   // Company

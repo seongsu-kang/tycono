@@ -4,8 +4,8 @@
 
 import React from 'react';
 import { Box, Text } from 'ink';
-import type { SSEEvent } from '../api.js';
-import { getRoleColor } from '../theme.js';
+import type { SSEEvent } from '../api';
+import { getRoleColor } from '../theme';
 
 interface StreamPanelProps {
   events: SSEEvent[];
