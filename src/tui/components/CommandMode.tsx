@@ -1,19 +1,17 @@
 /**
- * CommandMode — chat-first mode
+ * CommandMode — scrollable terminal mode (like Claude Code)
  *
- * User = CEO. Supervisor (ceo role) = user's AI proxy.
- * - Supervisor responses: shown directly (no prefix), like a conversation
- * - Team activity: indented with roleId, concise
- * - System prompts, internal noise: filtered out
+ * Uses Ink's <Static> to push past output into terminal scrollback.
+ * Only the input prompt + status remain in the re-rendered area.
+ * User can scroll up with mouse wheel to see history.
  */
 
-import React, { useState, useCallback } from 'react';
-import { Box, Text } from 'ink';
+import React, { useState, useCallback, useRef } from 'react';
+import { Box, Text, Static } from 'ink';
 import TextInput from 'ink-text-input';
 import type { SSEEvent } from '../api';
 import { getRoleColor } from '../theme';
 
-const MAX_STREAM_LINES = 30;
 const SUPERVISOR_ROLE = 'ceo';
 
 export interface StreamLine {
@@ -38,14 +36,13 @@ let lineCounter = 0;
 function isSystemNoise(text: string): boolean {
   const t = text.trim();
   if (!t) return true;
-  // System prompt fragments
   if (t.startsWith('## Your Role')) return true;
   if (t.startsWith('You are')) return true;
   if (t.startsWith('[CEO Supervisor]')) return true;
   if (t.startsWith('[Question from')) return true;
-  if (t.includes('⛔ AKB Rule')) return true;
-  if (t.includes('⛔  Read the')) return true;
-  if (t.startsWith('⛔')) return true;
+  if (t.includes('\u26D4 AKB Rule')) return true;
+  if (t.includes('\u26D4  Read the')) return true;
+  if (t.startsWith('\u26D4')) return true;
   return false;
 }
 
@@ -60,14 +57,12 @@ export function summarizeEvent(event: SSEEvent, allRoleIds: string[]): StreamLin
       if (isSystemNoise(text)) return null;
 
       if (isSupervisor) {
-        // Supervisor text → direct response (no prefix, generous length)
         return {
           id: ++lineCounter,
           text: text.slice(0, 200),
           color: 'white',
         };
       } else {
-        // Team text → indented with role prefix, concise
         return {
           id: ++lineCounter,
           prefix: event.roleId,
@@ -82,12 +77,11 @@ export function summarizeEvent(event: SSEEvent, allRoleIds: string[]): StreamLin
     case 'dispatch:start': {
       const target = (event.data.targetRole as string) ?? '';
       const task = ((event.data.task as string) ?? '');
-      // Filter out system prompt from task display
-      const cleanTask = task.replace(/⛔[^⛔]*⛔[^"]*/g, '').trim().slice(0, 50);
+      const cleanTask = task.replace(/\u26D4[^\u26D4]*\u26D4[^"]*/g, '').trim().slice(0, 50);
       if (isSupervisor) {
         return {
           id: ++lineCounter,
-          text: `→ ${target} 배정${cleanTask ? ': ' + cleanTask : ''}`,
+          text: `\u2192 ${target} \uBC30\uC815${cleanTask ? ': ' + cleanTask : ''}`,
           color: 'yellow',
         };
       }
@@ -95,7 +89,7 @@ export function summarizeEvent(event: SSEEvent, allRoleIds: string[]): StreamLin
         id: ++lineCounter,
         prefix: event.roleId,
         prefixColor: roleColor,
-        text: `→ ${target} 배정`,
+        text: `\u2192 ${target} \uBC30\uC815`,
         color: 'yellow',
         indent: true,
       };
@@ -107,7 +101,7 @@ export function summarizeEvent(event: SSEEvent, allRoleIds: string[]): StreamLin
         id: ++lineCounter,
         prefix: event.roleId,
         prefixColor: roleColor,
-        text: `← ${target} 완료`,
+        text: `\u2190 ${target} \uC644\uB8CC`,
         color: 'yellow',
         indent: !isSupervisor,
       };
@@ -124,10 +118,9 @@ export function summarizeEvent(event: SSEEvent, allRoleIds: string[]): StreamLin
       }
 
       if (isSupervisor) {
-        // Supervisor tool use → subtle
         return {
           id: ++lineCounter,
-          text: `  → ${toolName}${detail}`,
+          text: `  \u2192 ${toolName}${detail}`,
           color: 'gray',
         };
       }
@@ -135,21 +128,21 @@ export function summarizeEvent(event: SSEEvent, allRoleIds: string[]): StreamLin
         id: ++lineCounter,
         prefix: event.roleId,
         prefixColor: roleColor,
-        text: `→ ${toolName}${detail}`,
+        text: `\u2192 ${toolName}${detail}`,
         color: 'gray',
         indent: true,
       };
     }
 
     case 'msg:start': {
-      if (isSupervisor) return null; // Hide supervisor start (noise)
+      if (isSupervisor) return null;
       const task = ((event.data.task as string) ?? '');
-      const cleanTask = task.replace(/⛔[^⛔]*⛔[^"]*/g, '').trim().slice(0, 40);
+      const cleanTask = task.replace(/\u26D4[^\u26D4]*\u26D4[^"]*/g, '').trim().slice(0, 40);
       return {
         id: ++lineCounter,
         prefix: event.roleId,
         prefixColor: roleColor,
-        text: `▶ ${cleanTask || 'started'}`,
+        text: `\u25B6 ${cleanTask || 'started'}`,
         color: 'green',
         indent: true,
       };
@@ -157,25 +150,25 @@ export function summarizeEvent(event: SSEEvent, allRoleIds: string[]): StreamLin
 
     case 'msg:done': {
       const turns = event.data.turns as number | undefined;
-      if (isSupervisor) return null; // Hide supervisor done
+      if (isSupervisor) return null;
       return {
         id: ++lineCounter,
         prefix: event.roleId,
         prefixColor: roleColor,
-        text: `✓ done${turns ? ` (${turns} turns)` : ''}`,
+        text: `\u2713 done${turns ? ` (${turns} turns)` : ''}`,
         color: 'green',
         indent: true,
       };
     }
 
     case 'msg:error': {
-      if (isSupervisor) return null; // Supervisor errors handled by system messages
+      if (isSupervisor) return null;
       const error = ((event.data.error as string) ?? '').slice(0, 60);
       return {
         id: ++lineCounter,
         prefix: event.roleId,
         prefixColor: roleColor,
-        text: `✗ ${error}`,
+        text: `\u2717 ${error}`,
         color: 'red',
         indent: true,
       };
@@ -202,6 +195,21 @@ export function summarizeEvent(event: SSEEvent, allRoleIds: string[]): StreamLin
   }
 }
 
+/** Render a single StreamLine */
+function StreamLineRow({ line }: { line: StreamLine }) {
+  return (
+    <Box>
+      {line.indent && <Text>  </Text>}
+      {line.prefix && (
+        <Text color={line.prefixColor} bold>
+          {(line.prefix).padEnd(12)}
+        </Text>
+      )}
+      <Text color={line.color}>{line.text}</Text>
+    </Box>
+  );
+}
+
 export const CommandMode: React.FC<CommandModeProps> = ({
   events,
   allRoleIds,
@@ -209,6 +217,7 @@ export const CommandMode: React.FC<CommandModeProps> = ({
   onSubmit,
 }) => {
   const [input, setInput] = useState('');
+  const committedRef = useRef(0);
 
   // Convert events to stream lines
   const eventLines: StreamLine[] = [];
@@ -217,8 +226,20 @@ export const CommandMode: React.FC<CommandModeProps> = ({
     if (line) eventLines.push(line);
   }
 
-  // Merge system messages and event lines, show last MAX_STREAM_LINES
-  const allLines = [...systemMessages, ...eventLines].slice(-MAX_STREAM_LINES);
+  // Merge system messages and event lines
+  const allLines = [...systemMessages, ...eventLines];
+
+  // Split into committed (scrollback) and live (re-rendered)
+  // Lines up to committedRef are frozen in scrollback
+  const newCommitted = allLines.slice(committedRef.current);
+  if (newCommitted.length > 5) {
+    // Keep last 5 lines live, push rest to scrollback
+    const toCommit = newCommitted.slice(0, -5);
+    committedRef.current += toCommit.length;
+  }
+
+  const committedLines = allLines.slice(0, committedRef.current);
+  const liveLines = allLines.slice(committedRef.current);
 
   const handleSubmit = useCallback((value: string) => {
     const trimmed = value.trim();
@@ -229,48 +250,35 @@ export const CommandMode: React.FC<CommandModeProps> = ({
   }, [onSubmit]);
 
   return (
-    <Box flexDirection="column" flexGrow={1}>
-      {/* Stream area */}
-      <Box flexDirection="column" flexGrow={1} paddingX={1} overflow="hidden">
-        {allLines.length === 0 && (
-          <Box marginTop={1}>
-            <Text color="gray" dimColor>
-              Type a message to your AI team, or /help for commands.
-            </Text>
-          </Box>
-        )}
-        {allLines.map((line) => (
-          <Box key={line.id}>
-            {line.indent && <Text>  </Text>}
-            {line.prefix && (
-              <Text color={line.prefixColor} bold>
-                {(line.prefix).padEnd(12)}
-              </Text>
-            )}
-            <Text color={line.color}>{line.text}</Text>
-          </Box>
-        ))}
-      </Box>
+    <Box flexDirection="column">
+      {/* Committed lines → pushed to terminal scrollback (scrollable with mouse wheel) */}
+      <Static items={committedLines}>
+        {(line) => <StreamLineRow key={line.id} line={line} />}
+      </Static>
 
-      {/* Separator */}
-      <Box width="100%">
-        <Text color="gray">{'─'.repeat(process.stdout.columns || 70)}</Text>
-      </Box>
+      {/* Live lines → re-rendered on each update */}
+      {liveLines.map((line) => (
+        <StreamLineRow key={line.id} line={line} />
+      ))}
+
+      {/* Empty state */}
+      {allLines.length === 0 && (
+        <Box>
+          <Text color="gray" dimColor>
+            Type a message to your AI team, or /help for commands.
+          </Text>
+        </Box>
+      )}
 
       {/* Input */}
-      <Box paddingX={1} justifyContent="space-between">
-        <Box>
-          <Text color="yellow" bold>&gt; </Text>
-          <TextInput
-            value={input}
-            onChange={setInput}
-            onSubmit={handleSubmit}
-            placeholder=""
-          />
-        </Box>
-        <Box>
-          <Text color="gray" dimColor>[Tab] panel</Text>
-        </Box>
+      <Box paddingX={0} marginTop={0}>
+        <Text color="yellow" bold>&gt; </Text>
+        <TextInput
+          value={input}
+          onChange={setInput}
+          onSubmit={handleSubmit}
+          placeholder=""
+        />
       </Box>
     </Box>
   );

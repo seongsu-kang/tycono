@@ -407,47 +407,60 @@ export const App: React.FC = () => {
     );
   }
 
-  return (
-    <Box flexDirection="column" height={termHeight}>
-      {/* Mode content — fill remaining height */}
-      <Box flexGrow={1} flexDirection="column">
-      {mode === 'command' ? (
-        <CommandMode
-          events={sse.events}
-          allRoleIds={flatRoleIds}
-          systemMessages={systemMessages}
-          onSubmit={handleCommandSubmit}
+  // Command Mode: scrollable terminal (no fullscreen)
+  // Panel Mode: fullscreen (intentional — like vim for inspection)
+  if (mode === 'panel') {
+    return (
+      <Box flexDirection="column" height={termHeight}>
+        <Box flexGrow={1} flexDirection="column">
+          <PanelMode
+            tree={orgTree}
+            flatRoles={flatRoleIds}
+            events={sse.events}
+            selectedRoleIndex={selectedRoleIndex}
+            selectedRoleId={selectedRoleId}
+            streamStatus={sse.streamStatus}
+            waveId={focusedWaveId}
+            activeSessions={api.activeSessions}
+            waves={waves}
+            focusedWaveId={focusedWaveId}
+            portSummary={api.portSummary}
+            onMove={(dir) => {
+              if (dir === 'up') {
+                setSelectedRoleIndex(Math.max(0, selectedRoleIndex - 1));
+              } else {
+                setSelectedRoleIndex(Math.min(flatRoleIds.length - 1, selectedRoleIndex + 1));
+              }
+            }}
+            onSelect={() => {
+              const roleId = flatRoleIds[selectedRoleIndex] ?? null;
+              setSelectedRoleId(roleId === selectedRoleId ? null : roleId);
+            }}
+            onEscape={() => setMode('command')}
+          />
+        </Box>
+        <StatusBar
+          companyName={api.company?.name ?? 'Loading...'}
+          waveIndex={focusedWaveIndex}
+          waveCount={waves.length}
+          waveStatus={derivedWaveStatus}
+          activeCount={activeCount}
+          portCount={api.portSummary.totalPorts}
+          totalCost={0}
         />
-      ) : (
-        <PanelMode
-          tree={orgTree}
-          flatRoles={flatRoleIds}
-          events={sse.events}
-          selectedRoleIndex={selectedRoleIndex}
-          selectedRoleId={selectedRoleId}
-          streamStatus={sse.streamStatus}
-          waveId={focusedWaveId}
-          activeSessions={api.activeSessions}
-          waves={waves}
-          focusedWaveId={focusedWaveId}
-          portSummary={api.portSummary}
-          onMove={(dir) => {
-            if (dir === 'up') {
-              setSelectedRoleIndex(Math.max(0, selectedRoleIndex - 1));
-            } else {
-              setSelectedRoleIndex(Math.min(flatRoleIds.length - 1, selectedRoleIndex + 1));
-            }
-          }}
-          onSelect={() => {
-            const roleId = flatRoleIds[selectedRoleIndex] ?? null;
-            setSelectedRoleId(roleId === selectedRoleId ? null : roleId);
-          }}
-          onEscape={() => setMode('command')}
-        />
-      )}
       </Box>
+    );
+  }
 
-      {/* Status Bar — bottom (Claude Code style) */}
+  // Command Mode: natural terminal flow (scrollable with mouse wheel)
+  return (
+    <Box flexDirection="column">
+      <CommandMode
+        events={sse.events}
+        allRoleIds={flatRoleIds}
+        systemMessages={systemMessages}
+        onSubmit={handleCommandSubmit}
+      />
       <StatusBar
         companyName={api.company?.name ?? 'Loading...'}
         waveIndex={focusedWaveIndex}
