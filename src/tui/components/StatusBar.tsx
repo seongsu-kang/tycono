@@ -1,5 +1,6 @@
 /**
- * StatusBar — top bar showing company name, wave status, active count, cost
+ * StatusBar — bottom bar (Claude Code style)
+ * Shows: company name, wave status, active roles, cost
  */
 
 import React from 'react';
@@ -21,29 +22,33 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   totalCost,
 }) => {
   const waveLabel = waveId
-    ? `Wave ${waveId.replace('wave-', '#')} ${waveStatus === 'running' ? '\u25CF' : waveStatus === 'done' ? '\u2713' : ''} ${waveStatus}`
-    : 'No active wave';
+    ? `Wave ${waveId.replace('wave-', '#')}`
+    : '';
+  const statusDot = waveStatus === 'running' ? ' ●'
+    : waveStatus === 'done' ? ' ✓'
+    : '';
 
   return (
-    <Box
-      width="100%"
-      paddingX={1}
-      justifyContent="space-between"
-    >
-      <Box>
-        <Text bold color="cyan">TYCONO</Text>
-        <Text color="white"> </Text>
-        <Text color="white">{companyName}</Text>
-      </Box>
-      <Box>
-        <Text color={waveStatus === 'running' ? 'green' : 'gray'}>
-          {waveLabel}
-        </Text>
-        <Text color="white">  </Text>
-        <Text color="yellow">{activeCount} active</Text>
-        <Text color="white">  </Text>
-        <Text color="green">${totalCost.toFixed(2)}</Text>
-      </Box>
+    <Box width="100%" paddingX={1}>
+      <Text color="cyan" bold>Tycono</Text>
+      <Text color="gray"> | </Text>
+      <Text color="white">{companyName}</Text>
+      {waveLabel && (
+        <>
+          <Text color="gray"> | </Text>
+          <Text color={waveStatus === 'running' ? 'green' : 'gray'}>
+            {waveLabel}{statusDot}
+          </Text>
+        </>
+      )}
+      {activeCount > 0 && (
+        <>
+          <Text color="gray"> | </Text>
+          <Text color="yellow">{activeCount} active</Text>
+        </>
+      )}
+      <Text color="gray"> | </Text>
+      <Text color="green">${totalCost.toFixed(2)}</Text>
     </Box>
   );
 };

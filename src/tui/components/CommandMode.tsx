@@ -185,7 +185,7 @@ export const CommandMode: React.FC<CommandModeProps> = ({
         {allLines.length === 0 && (
           <Box marginTop={1}>
             <Text color="gray" dimColor>
-              Ready. Type "wave &lt;directive&gt;" to start, or "help" for commands.
+              Type a message to your AI team, or /help for commands.
             </Text>
           </Box>
         )}
@@ -211,7 +211,7 @@ export const CommandMode: React.FC<CommandModeProps> = ({
       {/* Command input */}
       <Box paddingX={1} justifyContent="space-between">
         <Box>
-          <Text color="green" bold>&gt; </Text>
+          <Text color="yellow" bold>&gt; </Text>
           <TextInput
             value={input}
             onChange={setInput}

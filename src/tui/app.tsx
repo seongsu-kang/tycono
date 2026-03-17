@@ -146,16 +146,14 @@ export const App: React.FC = () => {
         addSystemMessage(result.message, 'red');
         break;
       case 'help':
-        addSystemMessage('Commands:', 'cyan');
-        addSystemMessage('  wave <directive> [--continuous]  Start a wave', 'white');
-        addSystemMessage('  directive <text>                 Send directive to active wave', 'white');
-        addSystemMessage('  stop                             Stop all active executions', 'white');
-        addSystemMessage('  status                           Show current status', 'white');
-        addSystemMessage('  assign <role> <task>             Assign task to role', 'white');
-        addSystemMessage('  summary                          Show last wave summary', 'white');
-        addSystemMessage('  roles                            Show org tree (Panel Mode)', 'white');
-        addSystemMessage('  help                             Show this help', 'white');
-        addSystemMessage('  quit                             Exit TUI', 'white');
+        addSystemMessage('Type naturally to talk to your AI team.', 'cyan');
+        addSystemMessage('Commands (/ prefix):', 'cyan');
+        addSystemMessage('  /stop                Stop all executions', 'white');
+        addSystemMessage('  /status              Show current status', 'white');
+        addSystemMessage('  /assign <role> <task> Assign task to role', 'white');
+        addSystemMessage('  /roles               Org tree (Panel Mode)', 'white');
+        addSystemMessage('  /help                Show this help', 'white');
+        addSystemMessage('  /quit                Exit TUI', 'white');
         addSystemMessage('Keys: [Tab] panel  [Esc] back  [Ctrl+C] stop/quit', 'gray');
         break;
       case 'info':
@@ -231,20 +229,6 @@ export const App: React.FC = () => {
 
   return (
     <Box flexDirection="column" height={termHeight}>
-      {/* Status Bar — always shown */}
-      <StatusBar
-        companyName={api.company?.name ?? 'Loading...'}
-        waveId={effectiveWaveId}
-        waveStatus={derivedWaveStatus}
-        activeCount={activeCount}
-        totalCost={0}
-      />
-
-      {/* Separator */}
-      <Box width="100%">
-        <Text color="gray">{'─'.repeat(process.stdout.columns || 70)}</Text>
-      </Box>
-
       {/* Mode content — fill remaining height */}
       <Box flexGrow={1} flexDirection="column">
       {mode === 'command' ? (
@@ -278,6 +262,15 @@ export const App: React.FC = () => {
         />
       )}
       </Box>
+
+      {/* Status Bar — bottom (Claude Code style) */}
+      <StatusBar
+        companyName={api.company?.name ?? 'Loading...'}
+        waveId={effectiveWaveId}
+        waveStatus={derivedWaveStatus}
+        activeCount={activeCount}
+        totalCost={0}
+      />
     </Box>
   );
 };
