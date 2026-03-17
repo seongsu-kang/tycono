@@ -495,12 +495,8 @@ function handleWaveStream(waveId: string, url: string, res: ServerResponse, req:
     sessionIds = waveMultiplexer.getWaveSessionIds(waveId);
   }
 
-  if (sessionIds.length === 0) {
-    res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: `No sessions found for wave: ${waveId}` }));
-    return;
-  }
-
+  // Don't 404 on empty waves — keep SSE alive, sessions will appear later
+  // (e.g. idle wave waiting for first directive, or supervisor restarting)
   const client = waveMultiplexer.attach(waveId, res as any, fromWaveSeq);
 
   req.on('close', () => {
