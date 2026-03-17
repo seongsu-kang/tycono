@@ -213,16 +213,26 @@ async function startServerForTui(): Promise<void> {
   const port = process.env.PORT ? Number(process.env.PORT) : await findFreePort();
   process.env.PORT = String(port);
 
-  // Suppress ALL server logs BEFORE creating server — redirect to file
+  // Suppress ALL server output BEFORE creating server — hijack process streams
   const logFile = path.resolve(process.env.COMPANY_ROOT || process.cwd(), '.tycono', 'server.log');
   try { fs.mkdirSync(path.dirname(logFile), { recursive: true }); } catch {}
-  const logStream = fs.createWriteStream(logFile, { flags: 'a' });
-  const origLog = console.log;
-  const origErr = console.error;
-  const origWarn = console.warn;
-  console.log = (...args: unknown[]) => logStream.write(args.join(' ') + '\n');
-  console.error = (...args: unknown[]) => logStream.write('[ERROR] ' + args.join(' ') + '\n');
-  console.warn = (...args: unknown[]) => logStream.write('[WARN] ' + args.join(' ') + '\n');
+  const logFd = fs.openSync(logFile, 'a');
+  const logStream = fs.createWriteStream(logFile, { fd: logFd });
+  const origStdoutWrite = process.stdout.write.bind(process.stdout);
+  const origStderrWrite = process.stderr.write.bind(process.stderr);
+  // Intercept all stdout/stderr — only allow Ink's output (ANSI escape sequences)
+  const isInkOutput = (s: string) => s.includes('\x1b[') || s.includes('\x1b(');
+  process.stdout.write = ((chunk: any, ...args: any[]) => {
+    const str = typeof chunk === 'string' ? chunk : chunk.toString();
+    if (isInkOutput(str)) return origStdoutWrite(chunk, ...args);
+    logStream.write(str);
+    return true;
+  }) as any;
+  process.stderr.write = ((chunk: any, ...args: any[]) => {
+    logStream.write(typeof chunk === 'string' ? chunk : chunk.toString());
+    return true;
+  }) as any;
+  const origLog = (...args: unknown[]) => origStdoutWrite(args.join(' ') + '\n');
 
   const { createHttpServer } = await import('../src/api/src/create-server.js');
   const server = createHttpServer();
