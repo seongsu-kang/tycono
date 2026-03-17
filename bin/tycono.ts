@@ -20,6 +20,8 @@ function printHelp(): void {
 
   Usage:
     tycono [path]       Start the server (optionally point to a company directory)
+    tycono tui          Start API server + TUI mode
+    tycono tui --attach Connect TUI to existing API server
     tycono --help       Show this help message
     tycono --version    Show version
 
@@ -27,6 +29,8 @@ function printHelp(): void {
     tycono                      Start in current directory
     tycono ./my-company         Start with existing company folder
     tycono /path/to/akb         Start with absolute path
+    tycono tui                  Start with terminal UI
+    PORT=3000 tycono tui --attach  Attach TUI to running server
 
   AI Engine (auto-detected):
     1. Claude Code CLI       Install from https://claude.ai/download (recommended)
@@ -190,6 +194,49 @@ async function startServer(): Promise<void> {
   process.on('SIGTERM', shutdown);
 }
 
+async function startServerForTui(): Promise<void> {
+  // Load .env from current directory
+  const dotenvPath = path.resolve(process.cwd(), '.env');
+  if (fs.existsSync(dotenvPath)) {
+    const { config } = await import('dotenv');
+    config({ path: dotenvPath });
+  }
+
+  if (!process.env.COMPANY_ROOT) {
+    process.env.COMPANY_ROOT = process.cwd();
+  }
+
+  process.env.NODE_ENV = 'production';
+  const auth = detectAuth();
+  process.env.EXECUTION_ENGINE = auth.engine === 'claude-cli' ? 'claude-cli' : auth.engine === 'direct-api' ? 'direct-api' : 'none';
+
+  const port = process.env.PORT ? Number(process.env.PORT) : await findFreePort();
+  process.env.PORT = String(port);
+
+  const { createHttpServer } = await import('../src/api/src/create-server.js');
+  const server = createHttpServer();
+
+  const host = process.env.HOST || '0.0.0.0';
+
+  await new Promise<void>((resolve) => {
+    server.listen(port, host, () => resolve());
+  });
+
+  console.log(`  API server started on port ${port}`);
+
+  // Graceful shutdown
+  const shutdown = () => {
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(1), 5000);
+  };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+
+  // Start TUI
+  const { startTui } = await import('../src/tui/index.js');
+  await startTui({ port });
+}
+
 export async function main(args: string[]): Promise<void> {
   const command = args[0];
 
@@ -200,6 +247,22 @@ export async function main(args: string[]): Promise<void> {
 
   if (command === '--version' || command === '-v') {
     console.log(VERSION);
+    return;
+  }
+
+  // tui subcommand: start API server + TUI mode
+  if (command === 'tui') {
+    const attachMode = args.includes('--attach');
+    // If --attach, skip server start — just connect to existing API
+    if (attachMode) {
+      const port = process.env.PORT ? Number(process.env.PORT) : 3000;
+      const { startTui } = await import('../src/tui/index.js');
+      await startTui({ port });
+      return;
+    }
+
+    // Start API server, then TUI
+    await startServerForTui();
     return;
   }
 
