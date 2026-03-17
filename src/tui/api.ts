@@ -16,7 +16,7 @@ export function getBaseUrl(): string {
 
 /* ─── HTTP helpers ─── */
 
-async function fetchJson<T>(path: string, options?: { method?: string; body?: unknown }): Promise<T> {
+export async function fetchJson<T>(path: string, options?: { method?: string; body?: unknown }): Promise<T> {
   const url = `${BASE_URL}${path}`;
   const method = options?.method ?? 'GET';
   const bodyStr = options?.body ? JSON.stringify(options.body) : undefined;

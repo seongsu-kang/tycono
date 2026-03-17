@@ -1,46 +1,34 @@
 /**
- * TUI App — main layout with 4 panels
+ * TUI App v2 — Hybrid Mode (Command + Panel)
  *
- * Layout:
- * ┌─────────────────────────────────────────┐
- * │ StatusBar                               │
- * ├──────────────┬──────────────────────────┤
- * │ OrgTree      │ StreamPanel              │
- * │              │                          │
- * ├──────────────┤                          │
- * │ SessionList  │                          │
- * ├──────────────┴──────────────────────────┤
- * │ CommandInput                            │
- * └─────────────────────────────────────────┘
+ * Two modes:
+ *   Command Mode (default) — stream summary + command input (> prompt)
+ *   Panel Mode (Tab)       — Org Tree left + Role stream right
+ *
+ * Tab toggles between modes, Esc returns to Command Mode.
  */
 
 import React, { useState, useCallback, useMemo } from 'react';
-import { Box, Text, useApp } from 'ink';
+import { Box, Text, useApp, useInput } from 'ink';
 import { StatusBar } from './components/StatusBar';
-import { OrgTree } from './components/OrgTree';
-import { SessionList } from './components/SessionList';
-import { StreamPanel } from './components/StreamPanel';
-import { CommandInput } from './components/CommandInput';
-import { WaveDialog } from './components/WaveDialog';
-import { HelpOverlay } from './components/HelpOverlay';
+import { CommandMode, type StreamLine } from './components/CommandMode';
+import { PanelMode } from './components/PanelMode';
 import { SetupWizard } from './components/SetupWizard';
 import { useApi } from './hooks/useApi';
 import { useSSE } from './hooks/useSSE';
-import { useKeyboard } from './hooks/useKeyboard';
+import { useCommand } from './hooks/useCommand';
 import { buildOrgTree } from './store';
-import { dispatchWave } from './api';
 
-type Panel = 'org' | 'sessions' | 'stream' | 'command';
-type Dialog = 'none' | 'wave' | 'help';
+type Mode = 'command' | 'panel';
 type View = 'loading' | 'setup' | 'dashboard';
 
-const PANELS: Panel[] = ['org', 'sessions', 'stream', 'command'];
+let sysLineId = 100000;
 
 export const App: React.FC = () => {
   const { exit } = useApp();
   const api = useApi();
 
-  // Determine view: loading → setup (no company) → dashboard
+  // View state: loading -> setup (no company) -> dashboard
   const [view, setView] = useState<View>('loading');
 
   React.useEffect(() => {
@@ -55,16 +43,31 @@ export const App: React.FC = () => {
     setView('dashboard');
   }, [api]);
 
-  const [activePanel, setActivePanel] = useState<Panel>('org');
-  const [dialog, setDialog] = useState<Dialog>('none');
-  const [selectedRoleIndex, setSelectedRoleIndex] = useState(0);
-  const [selectedSessionIndex, setSelectedSessionIndex] = useState(0);
+  // Mode state
+  const [mode, setMode] = useState<Mode>('command');
+
+  // Wave state
   const [waveId, setWaveId] = useState<string | null>(null);
   const [waveStatus, setWaveStatus] = useState<'idle' | 'running' | 'done'>('idle');
 
-  // Derive active wave from API if we don't have one
+  // Panel mode state
+  const [selectedRoleIndex, setSelectedRoleIndex] = useState(0);
+  const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
+
+  // System messages (command feedback displayed in stream area)
+  const [systemMessages, setSystemMessages] = useState<StreamLine[]>([]);
+
+  const addSystemMessage = useCallback((text: string, color: string = 'yellow') => {
+    setSystemMessages(prev => {
+      const next = [...prev, { id: ++sysLineId, text, color }];
+      return next.length > 50 ? next.slice(-50) : next;
+    });
+  }, []);
+
+  // Derive effective wave ID (from manual set or API polling)
   const effectiveWaveId = waveId ?? api.activeWaveId;
 
+  // SSE subscription
   const sse = useSSE(effectiveWaveId);
 
   // Build org tree
@@ -73,10 +76,12 @@ export const App: React.FC = () => {
   const statuses = api.execStatus?.statuses ?? {};
   const orgTree = useMemo(() => buildOrgTree(roles, statuses), [roles, statuses]);
 
-  // Count active
-  const activeCount = Object.values(statuses).filter(s => s === 'working' || s === 'streaming').length;
+  // Active count
+  const activeCount = Object.values(statuses).filter(
+    s => s === 'working' || s === 'streaming'
+  ).length;
 
-  // Determine wave status from SSE
+  // Derived wave status
   const derivedWaveStatus = useMemo(() => {
     if (sse.streamStatus === 'streaming') return 'running' as const;
     if (sse.streamStatus === 'done') return 'done' as const;
@@ -84,55 +89,94 @@ export const App: React.FC = () => {
     return waveStatus;
   }, [sse.streamStatus, waveStatus, activeCount]);
 
-  // Handle wave dispatch
-  const handleWaveSubmit = useCallback(async (directive: string) => {
-    setDialog('none');
-    try {
-      const result = await dispatchWave(directive);
-      setWaveId(result.waveId);
+  // Command handler
+  const { execute } = useCommand({
+    activeWaveId: effectiveWaveId,
+    onWaveStarted: (newWaveId) => {
+      setWaveId(newWaveId);
       setWaveStatus('running');
       sse.clearEvents();
       api.refresh();
-    } catch (err) {
-      // Show error briefly
-      console.error('Wave dispatch failed:', err);
-    }
-  }, [sse, api]);
-
-  // Keyboard actions — disabled when dialog is open
-  const keyboardEnabled = dialog === 'none';
-
-  useKeyboard({
-    onWave: () => setDialog('wave'),
+    },
+    onStopped: () => {
+      setWaveStatus('idle');
+      api.refresh();
+    },
     onQuit: () => exit(),
-    onHelp: () => setDialog(dialog === 'help' ? 'none' : 'help'),
-    onTab: () => {
-      const idx = PANELS.indexOf(activePanel);
-      setActivePanel(PANELS[(idx + 1) % PANELS.length]);
-    },
-    onUp: () => {
-      if (activePanel === 'org') {
-        setSelectedRoleIndex(Math.max(0, selectedRoleIndex - 1));
-      } else if (activePanel === 'sessions') {
-        setSelectedSessionIndex(Math.max(0, selectedSessionIndex - 1));
+    onShowPanel: () => setMode('panel'),
+  });
+
+  // Handle command submission from CommandMode
+  const handleCommandSubmit = useCallback(async (input: string) => {
+    addSystemMessage(`> ${input}`, 'white');
+
+    const result = await execute(input);
+
+    switch (result.type) {
+      case 'wave_started':
+        addSystemMessage(`\u26A1 ${result.message}`, 'yellow');
+        break;
+      case 'directive_sent':
+        addSystemMessage(`\u26A1 ${result.message}`, 'yellow');
+        break;
+      case 'stopped':
+        addSystemMessage(`\u26A1 ${result.message}`, 'red');
+        break;
+      case 'error':
+        addSystemMessage(result.message, 'red');
+        break;
+      case 'help':
+        addSystemMessage('Commands:', 'cyan');
+        addSystemMessage('  wave <directive> [--continuous]  Start a wave', 'white');
+        addSystemMessage('  directive <text>                 Send directive to active wave', 'white');
+        addSystemMessage('  stop                             Stop all active executions', 'white');
+        addSystemMessage('  status                           Show current status', 'white');
+        addSystemMessage('  assign <role> <task>             Assign task to role', 'white');
+        addSystemMessage('  summary                          Show last wave summary', 'white');
+        addSystemMessage('  roles                            Show org tree (Panel Mode)', 'white');
+        addSystemMessage('  help                             Show this help', 'white');
+        addSystemMessage('  quit                             Exit TUI', 'white');
+        addSystemMessage('Keys: [Tab] panel  [Esc] back  [Ctrl+C] stop/quit', 'gray');
+        break;
+      case 'info':
+        if (result.message === '__status__') {
+          const wLabel = effectiveWaveId
+            ? `Wave ${effectiveWaveId.replace('wave-', '#')}: ${derivedWaveStatus}`
+            : 'No active wave';
+          addSystemMessage(wLabel, derivedWaveStatus === 'running' ? 'green' : 'gray');
+          addSystemMessage(`Sessions: ${api.sessions.length}  Active: ${activeCount}`, 'white');
+        } else if (result.message === '__summary__') {
+          addSystemMessage('Summary: not yet implemented', 'gray');
+        }
+        break;
+      case 'panel':
+        // mode already switched
+        break;
+      case 'quit':
+        // exit already called
+        break;
+      default:
+        if (result.message) {
+          addSystemMessage(result.message, 'green');
+        }
+    }
+  }, [execute, addSystemMessage, effectiveWaveId, derivedWaveStatus, api.sessions.length, activeCount]);
+
+  // Global key handler: Tab to toggle mode, Ctrl+C handling
+  useInput((input, key) => {
+    if (mode === 'command' && key.tab) {
+      setMode('panel');
+      return;
+    }
+    // Ctrl+C in command mode: stop wave or exit
+    if (key.ctrl && input === 'c') {
+      if (derivedWaveStatus === 'running') {
+        execute('stop');
+      } else {
+        exit();
       }
-    },
-    onDown: () => {
-      if (activePanel === 'org') {
-        setSelectedRoleIndex(Math.min(flatRoleIds.length - 1, selectedRoleIndex + 1));
-      } else if (activePanel === 'sessions') {
-        setSelectedSessionIndex(Math.min(Math.max(0, api.sessions.length - 1), selectedSessionIndex + 1));
-      }
-    },
-    onEnter: () => {
-      // Future: select role/session to show in stream
-    },
-    onEscape: () => {
-      if (dialog !== 'none') {
-        setDialog('none');
-      }
-    },
-  }, keyboardEnabled);
+    }
+  }, { isActive: mode === 'command' });
 
   // Loading state
   if (view === 'loading') {
@@ -144,7 +188,7 @@ export const App: React.FC = () => {
     );
   }
 
-  // Setup wizard — no company found
+  // Setup wizard
   if (view === 'setup') {
     return (
       <Box flexDirection="column" paddingX={1}>
@@ -160,49 +204,14 @@ export const App: React.FC = () => {
         <Text color="cyan" bold>TYCONO TUI</Text>
         <Text color="red">API Error: {api.error}</Text>
         <Text color="gray">Make sure the API server is running on the configured port.</Text>
-        <Text color="gray" dimColor>Press q to quit</Text>
-      </Box>
-    );
-  }
-
-  // Help overlay
-  if (dialog === 'help') {
-    return (
-      <Box flexDirection="column">
-        <StatusBar
-          companyName={api.company?.name ?? 'Loading...'}
-          waveId={effectiveWaveId}
-          waveStatus={derivedWaveStatus}
-          activeCount={activeCount}
-          totalCost={0}
-        />
-        <HelpOverlay onClose={() => setDialog('none')} />
-      </Box>
-    );
-  }
-
-  // Wave dialog
-  if (dialog === 'wave') {
-    return (
-      <Box flexDirection="column">
-        <StatusBar
-          companyName={api.company?.name ?? 'Loading...'}
-          waveId={effectiveWaveId}
-          waveStatus={derivedWaveStatus}
-          activeCount={activeCount}
-          totalCost={0}
-        />
-        <WaveDialog
-          onSubmit={handleWaveSubmit}
-          onCancel={() => setDialog('none')}
-        />
+        <Text color="gray" dimColor>Press Ctrl+C to quit</Text>
       </Box>
     );
   }
 
   return (
     <Box flexDirection="column">
-      {/* Status Bar */}
+      {/* Status Bar — always shown */}
       <StatusBar
         companyName={api.company?.name ?? 'Loading...'}
         waveId={effectiveWaveId}
@@ -216,51 +225,37 @@ export const App: React.FC = () => {
         <Text color="gray">{'\u2500'.repeat(70)}</Text>
       </Box>
 
-      {/* Main content: left (org + sessions) | right (stream) */}
-      <Box flexGrow={1}>
-        {/* Left column */}
-        <Box flexDirection="column" width={28}>
-          <OrgTree
-            tree={orgTree}
-            focused={activePanel === 'org'}
-            selectedIndex={selectedRoleIndex}
-            flatRoles={flatRoleIds}
-          />
-          <Box marginTop={1}>
-            <SessionList
-              sessions={api.sessions}
-              focused={activePanel === 'sessions'}
-              selectedIndex={selectedSessionIndex}
-            />
-          </Box>
-        </Box>
-
-        {/* Vertical separator */}
-        <Box flexDirection="column" marginX={0}>
-          <Text color="gray">{'\u2502\n'.repeat(15)}</Text>
-        </Box>
-
-        {/* Right column: Stream */}
-        <StreamPanel
+      {/* Mode content */}
+      {mode === 'command' ? (
+        <CommandMode
           events={sse.events}
           allRoleIds={flatRoleIds}
-          focused={activePanel === 'stream'}
+          systemMessages={systemMessages}
+          onSubmit={handleCommandSubmit}
+        />
+      ) : (
+        <PanelMode
+          tree={orgTree}
+          flatRoles={flatRoleIds}
+          events={sse.events}
+          selectedRoleIndex={selectedRoleIndex}
+          selectedRoleId={selectedRoleId}
           streamStatus={sse.streamStatus}
           waveId={effectiveWaveId}
+          onMove={(dir) => {
+            if (dir === 'up') {
+              setSelectedRoleIndex(Math.max(0, selectedRoleIndex - 1));
+            } else {
+              setSelectedRoleIndex(Math.min(flatRoleIds.length - 1, selectedRoleIndex + 1));
+            }
+          }}
+          onSelect={() => {
+            const roleId = flatRoleIds[selectedRoleIndex] ?? null;
+            setSelectedRoleId(roleId === selectedRoleId ? null : roleId);
+          }}
+          onEscape={() => setMode('command')}
         />
-      </Box>
-
-      {/* Separator */}
-      <Box width="100%">
-        <Text color="gray">{'\u2500'.repeat(70)}</Text>
-      </Box>
-
-      {/* Command Input */}
-      <CommandInput
-        focused={activePanel === 'command'}
-        waveStatus={derivedWaveStatus}
-        dialog={dialog}
-      />
+      )}
     </Box>
   );
 };
