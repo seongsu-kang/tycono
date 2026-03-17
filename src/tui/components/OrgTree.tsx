@@ -32,7 +32,6 @@ function statusColor(status: string): string {
 
 interface FlatEntry {
   roleId: string;
-  name: string;
   level: string;
   status: string;
   prefix: string;
@@ -55,7 +54,6 @@ function flattenTree(nodes: OrgNode[], prefix: string = '', isLast: boolean[] = 
 
     result.push({
       roleId: node.role.id,
-      name: node.role.name || node.role.id,
       level: node.role.level,
       status: node.status,
       prefix: linePrefix,
@@ -71,16 +69,6 @@ function flattenTree(nodes: OrgNode[], prefix: string = '', isLast: boolean[] = 
 
 export const OrgTree: React.FC<OrgTreeProps> = ({ tree, focused, selectedIndex, flatRoles }) => {
   const entries = flattenTree(tree);
-
-  // Map flatRoles index to entries
-  const flatRoleIdToEntryIdx = new Map<number, number>();
-  let roleIdx = 0;
-  for (let i = 0; i < entries.length; i++) {
-    if (roleIdx < flatRoles.length && flatRoles[roleIdx] === entries[i].roleId) {
-      flatRoleIdToEntryIdx.set(roleIdx, i);
-      roleIdx++;
-    }
-  }
 
   return (
     <Box flexDirection="column" paddingX={1}>
@@ -108,9 +96,8 @@ export const OrgTree: React.FC<OrgTreeProps> = ({ tree, focused, selectedIndex, 
               bold={isSelected}
               inverse={isSelected}
             >
-              {entry.level === 'c-level' ? entry.name : entry.name}
+              {entry.roleId}
             </Text>
-            <Text color="gray" dimColor> {entry.roleId}</Text>
           </Box>
         );
       })}

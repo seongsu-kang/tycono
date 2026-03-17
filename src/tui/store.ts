@@ -97,3 +97,15 @@ export function buildOrgTree(roles: RoleInfo[], statuses: Record<string, string>
 
   return roots;
 }
+
+/** Flatten org tree into visual top-to-bottom order of role IDs */
+export function flattenOrgRoleIds(nodes: OrgNode[]): string[] {
+  const result: string[] = [];
+  for (const node of nodes) {
+    result.push(node.role.id);
+    if (node.children.length > 0) {
+      result.push(...flattenOrgRoleIds(node.children));
+    }
+  }
+  return result;
+}

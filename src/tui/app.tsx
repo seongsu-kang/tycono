@@ -17,7 +17,7 @@ import { SetupWizard } from './components/SetupWizard';
 import { useApi } from './hooks/useApi';
 import { useSSE } from './hooks/useSSE';
 import { useCommand } from './hooks/useCommand';
-import { buildOrgTree } from './store';
+import { buildOrgTree, flattenOrgRoleIds } from './store';
 
 type Mode = 'command' | 'panel';
 type View = 'loading' | 'setup' | 'dashboard';
@@ -90,11 +90,11 @@ export const App: React.FC = () => {
   // SSE subscription
   const sse = useSSE(effectiveWaveId);
 
-  // Build org tree
+  // Build org tree — flatRoleIds follows visual top-to-bottom order
   const roles = api.company?.roles ?? [];
-  const flatRoleIds = useMemo(() => roles.map(r => r.id), [roles]);
   const statuses = api.execStatus?.statuses ?? {};
   const orgTree = useMemo(() => buildOrgTree(roles, statuses), [roles, statuses]);
+  const flatRoleIds = useMemo(() => flattenOrgRoleIds(orgTree), [orgTree]);
 
   // Active count
   const activeCount = Object.values(statuses).filter(
