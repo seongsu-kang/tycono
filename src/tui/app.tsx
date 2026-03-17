@@ -1,5 +1,8 @@
 /**
- * TUI App v2 — Hybrid Mode (Command + Panel)
+ * TUI App v2 — Multi-Wave Hybrid Mode (Command + Panel)
+ *
+ * Wave = Claude Code session. Persistent, resumable.
+ * Multiple waves can be open; user switches with /focus.
  *
  * Two modes:
  *   Command Mode (default) — stream summary + command input (> prompt)
@@ -8,7 +11,7 @@
  * Tab toggles between modes, Esc returns to Command Mode.
  */
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
 import { StatusBar } from './components/StatusBar';
 import { CommandMode, type StreamLine } from './components/CommandMode';
@@ -16,13 +19,130 @@ import { PanelMode } from './components/PanelMode';
 import { SetupWizard } from './components/SetupWizard';
 import { useApi } from './hooks/useApi';
 import { useSSE } from './hooks/useSSE';
-import { useCommand } from './hooks/useCommand';
+import { useCommand, type WaveInfo } from './hooks/useCommand';
+import { dispatchWave } from './api';
+import type { ActiveSessionInfo } from './api';
 import { buildOrgTree, flattenOrgRoleIds } from './store';
 
 type Mode = 'command' | 'panel';
 type View = 'loading' | 'setup' | 'dashboard';
 
 let sysLineId = 100000;
+
+/** Format agent tree for /agents command */
+function formatAgentsTree(
+  waves: WaveInfo[],
+  activeSessions: ActiveSessionInfo[],
+  focusedWaveId: string | null,
+): StreamLine[] {
+  const lines: StreamLine[] = [];
+
+  if (waves.length === 0 && activeSessions.length === 0) {
+    lines.push({ id: ++sysLineId, text: 'No active agents.', color: 'gray' });
+    return lines;
+  }
+
+  // Group sessions by waveId
+  const sessionsByWave = new Map<string, ActiveSessionInfo[]>();
+  const unlinked: ActiveSessionInfo[] = [];
+  for (const s of activeSessions) {
+    if (s.waveId) {
+      if (!sessionsByWave.has(s.waveId)) sessionsByWave.set(s.waveId, []);
+      sessionsByWave.get(s.waveId)!.push(s);
+    } else {
+      unlinked.push(s);
+    }
+  }
+
+  // Display each wave
+  for (let i = 0; i < waves.length; i++) {
+    const w = waves[i];
+    const isFocused = w.waveId === focusedWaveId;
+    const marker = isFocused ? '*' : ' ';
+    const label = w.directive ? w.directive.slice(0, 50) : '(idle)';
+    lines.push({
+      id: ++sysLineId,
+      text: `${marker}Wave ${i + 1}: "${label}"`,
+      color: isFocused ? 'green' : 'cyan',
+    });
+
+    const waveSessions = sessionsByWave.get(w.waveId) ?? [];
+    if (waveSessions.length === 0) {
+      lines.push({ id: ++sysLineId, text: '  (no agents)', color: 'gray' });
+    }
+    for (const s of waveSessions) {
+      const statusIcon = s.status === 'active' ? '\u25CF' : s.status === 'dead' ? '\u25CF' : '\u25CB';
+      const statusColor = s.status === 'active' ? 'green' : s.status === 'dead' ? 'red' : 'gray';
+      const portInfo = s.ports.api ? `API:${s.ports.api} Vite:${s.ports.vite}` : '(no ports)';
+      const worktree = s.worktreePath ? `\u{1F33F} ${s.worktreePath.split('/').pop()}` : '';
+      lines.push({
+        id: ++sysLineId,
+        text: `  ${statusIcon} ${s.roleId.padEnd(14)} ${portInfo}${worktree ? ' ' + worktree : ''}`,
+        color: statusColor,
+      });
+      if (s.task) {
+        lines.push({
+          id: ++sysLineId,
+          text: `    ${s.task.slice(0, 60)}`,
+          color: 'gray',
+        });
+      }
+    }
+  }
+
+  // Unlinked sessions (not associated with any wave)
+  if (unlinked.length > 0) {
+    lines.push({ id: ++sysLineId, text: '', color: 'white' });
+    lines.push({ id: ++sysLineId, text: 'Unlinked sessions:', color: 'yellow' });
+    for (const s of unlinked) {
+      const portInfo = s.ports.api ? `API:${s.ports.api} Vite:${s.ports.vite}` : '(no ports)';
+      lines.push({
+        id: ++sysLineId,
+        text: `  ${s.roleId.padEnd(14)} ${portInfo}  ${s.task?.slice(0, 40) ?? ''}`,
+        color: 'gray',
+      });
+    }
+  }
+
+  return lines;
+}
+
+/** Format port allocations for /ports command */
+function formatPortsList(activeSessions: ActiveSessionInfo[], portSummary: { active: number; totalPorts: number }): StreamLine[] {
+  const lines: StreamLine[] = [];
+
+  if (activeSessions.length === 0) {
+    lines.push({ id: ++sysLineId, text: 'No port allocations.', color: 'gray' });
+    return lines;
+  }
+
+  lines.push({
+    id: ++sysLineId,
+    text: `Port Allocations (${portSummary.active} active, ${portSummary.totalPorts} ports):`,
+    color: 'cyan',
+  });
+
+  for (const s of activeSessions) {
+    const alive = s.alive === false ? ' DEAD' : s.pid ? ` PID:${s.pid}` : '';
+    const waveLabel = s.waveId ? ` (${s.waveId.replace('wave-', 'W')})` : '';
+    lines.push({
+      id: ++sysLineId,
+      text: `  :${s.ports.api}/:${s.ports.vite} \u2192 ${s.roleId}${waveLabel}${alive}`,
+      color: s.alive === false ? 'red' : 'white',
+    });
+  }
+
+  // Available range hint
+  const usedApi = activeSessions.map(s => s.ports.api).filter(Boolean);
+  const maxApi = usedApi.length > 0 ? Math.max(...usedApi) + 1 : 3001;
+  lines.push({
+    id: ++sysLineId,
+    text: `  Available: :${maxApi}+ API, :${5173 + activeSessions.length}+ Vite`,
+    color: 'gray',
+  });
+
+  return lines;
+}
 
 export const App: React.FC = () => {
   const { exit } = useApp();
@@ -46,9 +166,10 @@ export const App: React.FC = () => {
   // Mode state
   const [mode, setMode] = useState<Mode>('command');
 
-  // Wave state
-  const [waveId, setWaveId] = useState<string | null>(null);
-  const [waveStatus, setWaveStatus] = useState<'idle' | 'running' | 'done'>('idle');
+  // Multi-Wave state
+  const [waves, setWaves] = useState<WaveInfo[]>([]);
+  const [focusedWaveId, setFocusedWaveId] = useState<string | null>(null);
+  const autoWaveCreated = useRef(false);
 
   // Panel mode state
   const [selectedRoleIndex, setSelectedRoleIndex] = useState(0);
@@ -77,18 +198,47 @@ export const App: React.FC = () => {
     });
   }, []);
 
-  // Auto-sync: when waveId is null (e.g. --attach), pick up api.activeWaveId
+  const addSystemLines = useCallback((lines: StreamLine[]) => {
+    setSystemMessages(prev => {
+      const next = [...prev, ...lines];
+      return next.length > 80 ? next.slice(-80) : next;
+    });
+  }, []);
+
+  // Auto-wave: on dashboard entry, create an empty wave or attach to existing
   useEffect(() => {
-    if (waveId === null && api.activeWaveId) {
-      setWaveId(api.activeWaveId);
+    if (view !== 'dashboard' || autoWaveCreated.current) return;
+
+    if (api.activeWaves.length > 0) {
+      // Attach to existing waves from API
+      const apiWaves: WaveInfo[] = api.activeWaves.map(w => ({
+        waveId: w.waveId,
+        directive: w.directive ?? '',
+        startedAt: w.startedAt ?? Date.now(),
+      }));
+      setWaves(apiWaves);
+      setFocusedWaveId(apiWaves[apiWaves.length - 1].waveId);
+      autoWaveCreated.current = true;
+    } else if (api.loaded) {
+      // Create a new empty wave
+      autoWaveCreated.current = true;
+      dispatchWave().then(result => {
+        const newWave: WaveInfo = {
+          waveId: result.waveId,
+          directive: '',
+          startedAt: Date.now(),
+        };
+        setWaves([newWave]);
+        setFocusedWaveId(result.waveId);
+      }).catch(() => {
+        // If empty wave creation fails, still proceed — user can /new
+        autoWaveCreated.current = true;
+      });
     }
-  }, [waveId, api.activeWaveId]);
+  }, [view, api.activeWaves, api.loaded]);
 
-  // Derive effective wave ID (from manual set or API polling)
-  const effectiveWaveId = waveId ?? api.activeWaveId;
-
-  // SSE subscription
-  const sse = useSSE(effectiveWaveId);
+  // SSE subscription to focused wave
+  const sse = useSSE(focusedWaveId);
 
   // Build org tree — flatRoleIds follows visual top-to-bottom order
   const roles = api.company?.roles ?? [];
@@ -105,23 +255,34 @@ export const App: React.FC = () => {
   const derivedWaveStatus = useMemo(() => {
     if (sse.streamStatus === 'streaming') return 'running' as const;
     if (sse.streamStatus === 'done') return 'done' as const;
-    if (waveStatus === 'running' && activeCount > 0) return 'running' as const;
-    return waveStatus;
-  }, [sse.streamStatus, waveStatus, activeCount]);
+    if (activeCount > 0) return 'running' as const;
+    return 'idle' as const;
+  }, [sse.streamStatus, activeCount]);
+
+  // Focused wave index (1-based)
+  const focusedWaveIndex = useMemo(() => {
+    if (!focusedWaveId) return 0;
+    return waves.findIndex(w => w.waveId === focusedWaveId) + 1;
+  }, [focusedWaveId, waves]);
 
   // Command handler
   const { execute } = useCommand({
-    activeWaveId: effectiveWaveId,
-    onWaveStarted: (newWaveId) => {
-      setWaveId(newWaveId);
-      setWaveStatus('running');
+    focusedWaveId,
+    waves,
+    onWaveCreated: (newWaveId, directive) => {
+      const newWave: WaveInfo = {
+        waveId: newWaveId,
+        directive,
+        startedAt: Date.now(),
+      };
+      setWaves(prev => [...prev, newWave]);
+      setFocusedWaveId(newWaveId);
       sse.clearEvents();
       api.refresh();
     },
-    onStopped: () => {
-      setWaveId(null);
-      setWaveStatus('idle');
-      api.refresh();
+    onFocusWave: (waveId) => {
+      setFocusedWaveId(waveId);
+      sse.clearEvents();
     },
     onQuit: () => exit(),
     onShowPanel: () => setMode('panel'),
@@ -135,51 +296,73 @@ export const App: React.FC = () => {
 
     switch (result.type) {
       case 'wave_started':
-        // Don't show wave ID noise — supervisor handles it
         break;
       case 'directive_sent':
-        // Silently sent — supervisor will respond
         break;
-      case 'stopped':
-        addSystemMessage(`\u26A1 ${result.message}`, 'red');
+      case 'focus_changed':
+        addSystemMessage(`\u2192 ${result.message}`, 'cyan');
         break;
+      case 'waves_list': {
+        if (waves.length === 0) {
+          addSystemMessage('No waves.', 'gray');
+        } else {
+          addSystemMessage('Waves:', 'cyan');
+          waves.forEach((w, i) => {
+            const isFocused = w.waveId === focusedWaveId;
+            const prefix = isFocused ? '*' : ' ';
+            const label = w.directive ? w.directive.slice(0, 60) : '(idle)';
+            addSystemMessage(`${prefix}${i + 1}. Wave ${i + 1} \u2014 ${label}`, isFocused ? 'green' : 'white');
+          });
+        }
+        break;
+      }
+      case 'agents': {
+        const lines = formatAgentsTree(waves, api.activeSessions, focusedWaveId);
+        addSystemLines(lines);
+        break;
+      }
+      case 'ports': {
+        const lines = formatPortsList(api.activeSessions, api.portSummary);
+        addSystemLines(lines);
+        break;
+      }
       case 'error':
         addSystemMessage(result.message, 'red');
         break;
       case 'help':
         addSystemMessage('Type naturally to talk to your AI team.', 'cyan');
-        addSystemMessage('Commands (/ prefix):', 'cyan');
-        addSystemMessage('  /stop                Stop all executions', 'white');
+        addSystemMessage('Commands:', 'cyan');
+        addSystemMessage('  /new [text]          Create new wave', 'white');
+        addSystemMessage('  /waves               List all waves', 'white');
+        addSystemMessage('  /focus <n>           Switch to wave n', 'white');
+        addSystemMessage('  /agents              Agent tree + resources', 'white');
+        addSystemMessage('  /ports               Port allocations', 'white');
         addSystemMessage('  /status              Show current status', 'white');
         addSystemMessage('  /assign <role> <task> Assign task to role', 'white');
         addSystemMessage('  /roles               Org tree (Panel Mode)', 'white');
         addSystemMessage('  /help                Show this help', 'white');
         addSystemMessage('  /quit                Exit TUI', 'white');
-        addSystemMessage('Keys: [Tab] panel  [Esc] back  [Ctrl+C] stop/quit', 'gray');
+        addSystemMessage('Keys: [Tab] panel  [Esc] back  [Ctrl+C] quit', 'gray');
         break;
       case 'info':
         if (result.message === '__status__') {
-          const wLabel = effectiveWaveId
-            ? `Wave ${effectiveWaveId.replace('wave-', '#')}: ${derivedWaveStatus}`
+          const wLabel = focusedWaveId
+            ? `Wave ${focusedWaveIndex}: ${derivedWaveStatus}`
             : 'No active wave';
           addSystemMessage(wLabel, derivedWaveStatus === 'running' ? 'green' : 'gray');
-          addSystemMessage(`Sessions: ${api.sessions.length}  Active: ${activeCount}`, 'white');
-        } else if (result.message === '__summary__') {
-          addSystemMessage('Summary: not yet implemented', 'gray');
+          addSystemMessage(`Sessions: ${api.sessions.length}  Active: ${activeCount}  Waves: ${waves.length}  Ports: ${api.portSummary.totalPorts}`, 'white');
         }
         break;
       case 'panel':
-        // mode already switched
         break;
       case 'quit':
-        // exit already called
         break;
       default:
         if (result.message) {
           addSystemMessage(result.message, 'green');
         }
     }
-  }, [execute, addSystemMessage, effectiveWaveId, derivedWaveStatus, api.sessions.length, activeCount]);
+  }, [execute, addSystemMessage, addSystemLines, focusedWaveId, focusedWaveIndex, derivedWaveStatus, api.sessions.length, activeCount, waves, api.activeSessions, api.portSummary]);
 
   // Global key handler: Tab to toggle mode, Ctrl+C handling
   useInput((input, key) => {
@@ -187,13 +370,9 @@ export const App: React.FC = () => {
       setMode('panel');
       return;
     }
-    // Ctrl+C in command mode: stop wave or exit
+    // Ctrl+C in command mode: exit
     if (key.ctrl && input === 'c') {
-      if (derivedWaveStatus === 'running') {
-        execute('stop');
-      } else {
-        exit();
-      }
+      exit();
     }
   }, { isActive: mode === 'command' });
 
@@ -247,7 +426,7 @@ export const App: React.FC = () => {
           selectedRoleIndex={selectedRoleIndex}
           selectedRoleId={selectedRoleId}
           streamStatus={sse.streamStatus}
-          waveId={effectiveWaveId}
+          waveId={focusedWaveId}
           onMove={(dir) => {
             if (dir === 'up') {
               setSelectedRoleIndex(Math.max(0, selectedRoleIndex - 1));
@@ -267,9 +446,11 @@ export const App: React.FC = () => {
       {/* Status Bar — bottom (Claude Code style) */}
       <StatusBar
         companyName={api.company?.name ?? 'Loading...'}
-        waveId={effectiveWaveId}
+        waveIndex={focusedWaveIndex}
+        waveCount={waves.length}
         waveStatus={derivedWaveStatus}
         activeCount={activeCount}
+        portCount={api.portSummary.totalPorts}
         totalCost={0}
       />
     </Box>

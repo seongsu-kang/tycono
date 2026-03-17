@@ -129,7 +129,7 @@ export async function fetchExecStatus(): Promise<ExecStatus> {
   return fetchJson<ExecStatus>('/api/exec/status');
 }
 
-export async function dispatchWave(directive: string, options?: {
+export async function dispatchWave(directive?: string, options?: {
   targetRoles?: string[];
   continuous?: boolean;
 }): Promise<WaveResponse> {
@@ -137,7 +137,7 @@ export async function dispatchWave(directive: string, options?: {
     method: 'POST',
     body: {
       type: 'wave',
-      directive,
+      directive: directive ?? '',
       targetRoles: options?.targetRoles,
       continuous: options?.continuous ?? false,
     },
@@ -153,6 +153,31 @@ export async function sendDirective(waveId: string, text: string): Promise<{ ok:
 
 export async function fetchActiveWaves(): Promise<{ waves: Array<{ waveId: string; sessionIds: string[] }> }> {
   return fetchJson('/api/waves/active');
+}
+
+/* ─── Active Sessions (port/worktree visibility) ─── */
+
+export interface ActiveSessionInfo {
+  sessionId: string;
+  roleId: string;
+  task: string;
+  ports: { api: number; vite: number; hmr?: number };
+  worktreePath?: string;
+  pid?: number;
+  startedAt: string;
+  status: 'active' | 'idle' | 'dead';
+  waveId?: string | null;
+  messageStatus?: string | null;
+  alive?: boolean | null;
+}
+
+export interface ActiveSessionsResponse {
+  sessions: ActiveSessionInfo[];
+  summary: { active: number; totalPorts: number };
+}
+
+export async function fetchActiveSessions(): Promise<ActiveSessionsResponse> {
+  return fetchJson<ActiveSessionsResponse>('/api/active-sessions');
 }
 
 /* ─── Setup API calls ─── */

@@ -6,6 +6,7 @@
 import { Router } from 'express';
 import { portRegistry } from '../services/port-registry.js';
 import { executionManager } from '../services/execution-manager.js';
+import { getSession } from '../services/session-store.js';
 
 export const activeSessionsRouter = Router();
 
@@ -17,8 +18,10 @@ activeSessionsRouter.get('/', (_req, res) => {
 
   const enriched = sessions.map(s => {
     const exec = executionManager.getActiveExecution(s.sessionId);
+    const session = getSession(s.sessionId);
     return {
       ...s,
+      waveId: session?.waveId ?? null,
       messageStatus: exec?.status ?? null,
       roleName: exec?.roleId ?? s.roleId,
       alive: s.pid ? isAlive(s.pid) : null,

@@ -212,10 +212,8 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
   const attachments = body.attachments as ImageAttachment[] | undefined;
 
   if (type === 'wave') {
-    if (!directive) {
-      jsonResponse(res, 400, { error: 'directive is required for wave jobs' });
-      return;
-    }
+    // directive가 없으면 idle 상태로 시작 (empty wave)
+    const actualDirective = directive || '';
 
     const targetRoles = body.targetRoles as string[] | undefined;
     const continuous = body.continuous === true;
@@ -224,7 +222,7 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
     {
       const state = supervisorHeartbeat.start(
         `wave-${Date.now()}`,
-        directive,
+        actualDirective,
         targetRoles && targetRoles.length > 0 ? targetRoles : undefined,
         continuous,
       );
@@ -238,7 +236,7 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
         waveId: state.waveId,
         supervisorSessionId: state.supervisorSessionId,
         mode: 'supervisor',
-        directive,
+        directive: actualDirective,
       });
       return;
     }

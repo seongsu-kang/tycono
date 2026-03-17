@@ -1,9 +1,13 @@
 /**
- * useCommand — input handler for TUI v2
+ * useCommand — input handler for TUI v2 (Multi-Wave)
  *
- * Default: natural language → wave dispatch or directive (if wave active)
+ * Default: natural language → sendDirective to focused wave
  * Commands (/ prefix):
- *   /stop                — abort all active executions
+ *   /waves               — list all waves
+ *   /focus <n>           — switch to nth wave
+ *   /new [text]          — create new wave (optionally with directive)
+ *   /agents              — show wave→agent tree with resources
+ *   /ports               — show port allocations
  *   /status              — show current wave + session status
  *   /assign <role> <task> — assign task to specific role
  *   /roles               — show org tree (Panel Mode)
@@ -14,26 +18,16 @@
 import { useCallback } from 'react';
 import { dispatchWave, sendDirective, fetchJson } from '../api';
 
-export interface CommandResult {
-  type: 'success' | 'error' | 'info' | 'wave_started' | 'directive_sent' | 'stopped' | 'quit' | 'help' | 'panel';
-  message: string;
-  waveId?: string;
+export interface WaveInfo {
+  waveId: string;
+  directive: string;
+  startedAt: number;
 }
 
-async function postAbortAll(): Promise<void> {
-  try {
-    const status = await fetchJson<{
-      statuses: Record<string, string>;
-      activeExecutions: Array<{ id: string }>;
-    }>('/api/exec/status');
-
-    const abortPromises = (status.activeExecutions || []).map((exec) =>
-      fetchJson(`/api/jobs/${exec.id}/abort`, { method: 'POST' }).catch(() => {})
-    );
-    await Promise.all(abortPromises);
-  } catch {
-    // If we can't get status, silently fail
-  }
+export interface CommandResult {
+  type: 'success' | 'error' | 'info' | 'wave_started' | 'directive_sent' | 'stopped' | 'quit' | 'help' | 'panel' | 'waves_list' | 'focus_changed' | 'agents' | 'ports';
+  message: string;
+  waveId?: string;
 }
 
 async function postAssign(roleId: string, task: string): Promise<{ waveId?: string }> {
@@ -48,36 +42,62 @@ async function postAssign(roleId: string, task: string): Promise<{ waveId?: stri
 }
 
 export interface UseCommandOptions {
-  activeWaveId: string | null;
-  onWaveStarted: (waveId: string) => void;
-  onStopped: () => void;
+  focusedWaveId: string | null;
+  waves: WaveInfo[];
+  onWaveCreated: (waveId: string, directive: string) => void;
+  onFocusWave: (waveId: string) => void;
   onQuit: () => void;
   onShowPanel: () => void;
 }
 
 export function useCommand(options: UseCommandOptions) {
-  const { activeWaveId, onWaveStarted, onStopped, onQuit, onShowPanel } = options;
+  const { focusedWaveId, waves, onWaveCreated, onFocusWave, onQuit, onShowPanel } = options;
 
   const execute = useCallback(async (input: string): Promise<CommandResult> => {
     const trimmed = input.trim();
     if (!trimmed) return { type: 'info', message: '' };
 
-    // Slash commands: /stop, /status, /help, /quit, /roles, /assign
+    // Slash commands
     if (trimmed.startsWith('/')) {
       const parts = trimmed.slice(1).split(/\s+/);
       const cmd = parts[0].toLowerCase();
       const args = parts.slice(1).join(' ');
 
       switch (cmd) {
-        case 'stop': {
+        case 'waves': {
+          return { type: 'waves_list', message: '__waves__' };
+        }
+
+        case 'focus': {
+          const idx = parseInt(args, 10);
+          if (isNaN(idx) || idx < 1 || idx > waves.length) {
+            return { type: 'error', message: `Usage: /focus <1-${waves.length}>` };
+          }
+          const target = waves[idx - 1];
+          onFocusWave(target.waveId);
+          return { type: 'focus_changed', message: `Focused on Wave ${idx}`, waveId: target.waveId };
+        }
+
+        case 'new': {
+          const directive = args || undefined;
           try {
-            await postAbortAll();
-            onStopped();
-            return { type: 'stopped', message: 'All active executions stopped.' };
+            const result = await dispatchWave(directive);
+            onWaveCreated(result.waveId, directive ?? '');
+            return {
+              type: 'wave_started',
+              message: `Wave created`,
+              waveId: result.waveId,
+            };
           } catch (err) {
-            return { type: 'error', message: `Stop failed: ${err instanceof Error ? err.message : 'unknown'}` };
+            return { type: 'error', message: `New wave failed: ${err instanceof Error ? err.message : 'unknown'}` };
           }
         }
+
+        case 'agents':
+          return { type: 'agents', message: '__agents__' };
+
+        case 'ports':
+          return { type: 'ports', message: '__ports__' };
 
         case 'status':
           return { type: 'info', message: '__status__' };
@@ -91,9 +111,6 @@ export function useCommand(options: UseCommandOptions) {
           const task = args.slice(spaceIdx + 1);
           try {
             const result = await postAssign(roleId, task);
-            if (result.waveId) {
-              onWaveStarted(result.waveId);
-            }
             return { type: 'success', message: `Task assigned to ${roleId}`, waveId: result.waveId };
           } catch (err) {
             return { type: 'error', message: `Assign failed: ${err instanceof Error ? err.message : 'unknown'}` };
@@ -117,28 +134,29 @@ export function useCommand(options: UseCommandOptions) {
       }
     }
 
-    // Default: natural language → directive (if wave active) or new wave
-    if (activeWaveId) {
+    // Default: natural language → directive to focused wave
+    if (focusedWaveId) {
       try {
-        await sendDirective(activeWaveId, trimmed);
+        await sendDirective(focusedWaveId, trimmed);
         return { type: 'directive_sent', message: `Directive sent` };
       } catch (err) {
         return { type: 'error', message: `Failed: ${err instanceof Error ? err.message : 'unknown'}` };
       }
     } else {
+      // No focused wave — create one with the directive
       try {
         const result = await dispatchWave(trimmed);
-        onWaveStarted(result.waveId);
+        onWaveCreated(result.waveId, trimmed);
         return {
           type: 'wave_started',
-          message: `Wave ${result.waveId.replace('wave-', '#')} started`,
+          message: `Wave created`,
           waveId: result.waveId,
         };
       } catch (err) {
         return { type: 'error', message: `Wave failed: ${err instanceof Error ? err.message : 'unknown'}` };
       }
     }
-  }, [activeWaveId, onWaveStarted, onStopped, onQuit, onShowPanel]);
+  }, [focusedWaveId, waves, onWaveCreated, onFocusWave, onQuit, onShowPanel]);
 
   return { execute };
 }

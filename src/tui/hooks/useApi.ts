@@ -8,18 +8,29 @@ import {
   fetchSessions,
   fetchExecStatus,
   fetchActiveWaves,
+  fetchActiveSessions,
   type CompanyInfo,
   type SessionInfo,
   type ExecStatus,
+  type ActiveSessionInfo,
 } from '../api';
 
 const POLL_INTERVAL = 3000; // 3 seconds
+
+export interface ActiveWaveInfo {
+  waveId: string;
+  sessionIds: string[];
+  directive?: string;
+  startedAt?: number;
+}
 
 export interface ApiState {
   company: CompanyInfo | null;
   sessions: SessionInfo[];
   execStatus: ExecStatus | null;
-  activeWaveId: string | null;
+  activeWaves: ActiveWaveInfo[];
+  activeSessions: ActiveSessionInfo[];
+  portSummary: { active: number; totalPorts: number };
   error: string | null;
   loaded: boolean;
   refresh(): void;
@@ -29,18 +40,21 @@ export function useApi(): ApiState {
   const [company, setCompany] = useState<CompanyInfo | null>(null);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [execStatus, setExecStatus] = useState<ExecStatus | null>(null);
-  const [activeWaveId, setActiveWaveId] = useState<string | null>(null);
+  const [activeWaves, setActiveWaves] = useState<ActiveWaveInfo[]>([]);
+  const [activeSessions, setActiveSessions] = useState<ActiveSessionInfo[]>([]);
+  const [portSummary, setPortSummary] = useState<{ active: number; totalPorts: number }>({ active: 0, totalPorts: 0 });
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const mountedRef = useRef(true);
 
   const refresh = useCallback(async () => {
     try {
-      const [comp, sess, exec, waves] = await Promise.all([
+      const [comp, sess, exec, waves, activeSess] = await Promise.all([
         fetchCompany().catch(() => null),
         fetchSessions().catch(() => []),
         fetchExecStatus().catch(() => null),
         fetchActiveWaves().catch(() => ({ waves: [] })),
+        fetchActiveSessions().catch(() => ({ sessions: [], summary: { active: 0, totalPorts: 0 } })),
       ]);
 
       if (!mountedRef.current) return;
@@ -49,10 +63,17 @@ export function useApi(): ApiState {
       setSessions(Array.isArray(sess) ? sess : []);
       if (exec) setExecStatus(exec);
 
-      // Find active wave
+      // Store full active waves array
       if (waves.waves && waves.waves.length > 0) {
-        setActiveWaveId(waves.waves[0].waveId);
+        setActiveWaves(waves.waves.map((w: { waveId: string; sessionIds: string[] }) => ({
+          waveId: w.waveId,
+          sessionIds: w.sessionIds ?? [],
+        })));
       }
+
+      // Active sessions (port/resource visibility)
+      setActiveSessions(activeSess.sessions ?? []);
+      setPortSummary(activeSess.summary ?? { active: 0, totalPorts: 0 });
 
       setError(null);
       setLoaded(true);
@@ -73,5 +94,5 @@ export function useApi(): ApiState {
     };
   }, [refresh]);
 
-  return { company, sessions, execStatus, activeWaveId, error, loaded, refresh };
+  return { company, sessions, execStatus, activeWaves, activeSessions, portSummary, error, loaded, refresh };
 }

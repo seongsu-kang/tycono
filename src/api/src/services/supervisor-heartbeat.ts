@@ -88,6 +88,14 @@ class SupervisorHeartbeat {
     };
 
     this.supervisors.set(waveId, state);
+
+    // Empty directive → idle wave (don't spawn supervisor yet)
+    if (!directive) {
+      state.status = 'stopped';
+      console.log(`[Supervisor] Idle wave created: ${waveId} (no directive)`);
+      return state;
+    }
+
     this.spawnSupervisor(state);
     return state;
   }
@@ -133,6 +141,17 @@ class SupervisorHeartbeat {
 
     state.pendingDirectives.push(directive);
     console.log(`[Supervisor] Directive queued for wave ${waveId}: ${text.slice(0, 80)}`);
+
+    // If supervisor is stopped (agent finished or idle wave), wake it up
+    if (state.status === 'stopped') {
+      // Update the wave's directive if it was empty (idle wave first message)
+      if (!state.directive) {
+        state.directive = text;
+      }
+      state.crashCount = 0;
+      this.scheduleRestart(state, 0);
+    }
+
     return directive;
   }
 
