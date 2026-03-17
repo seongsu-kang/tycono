@@ -39,7 +39,12 @@ async function fetchJson<T>(path: string, options?: { method?: string; body?: un
         res.on('data', (chunk) => { data += chunk; });
         res.on('end', () => {
           try {
-            resolve(JSON.parse(data) as T);
+            const parsed = JSON.parse(data);
+            if (res.statusCode && res.statusCode >= 400) {
+              reject(new Error(parsed.error ?? `HTTP ${res.statusCode} from ${path}`));
+              return;
+            }
+            resolve(parsed as T);
           } catch {
             reject(new Error(`Invalid JSON from ${path}: ${data.slice(0, 200)}`));
           }
