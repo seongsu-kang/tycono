@@ -1,6 +1,6 @@
 {
   "name": "tycono",
-  "version": "0.1.96-beta.0",
+  "version": "0.1.96-beta.1",
   "description": "Build an AI company. Watch them work.",
   "type": "module",
   "bin": {
@@ -11,6 +11,7 @@
     "src/api/src/",
     "src/api/package.json",
     "src/shared/",
+    "src/tui/",
     "src/web/dist/",
     "templates/"
   ],
