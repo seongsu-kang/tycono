@@ -169,6 +169,7 @@ export function summarizeEvent(event: SSEEvent, allRoleIds: string[]): StreamLin
     }
 
     case 'msg:error': {
+      if (isSupervisor) return null; // Supervisor errors handled by system messages
       const error = ((event.data.error as string) ?? '').slice(0, 60);
       return {
         id: ++lineCounter,
@@ -176,7 +177,7 @@ export function summarizeEvent(event: SSEEvent, allRoleIds: string[]): StreamLin
         prefixColor: roleColor,
         text: `✗ ${error}`,
         color: 'red',
-        indent: !isSupervisor,
+        indent: true,
       };
     }
 

@@ -119,6 +119,7 @@ export const App: React.FC = () => {
       api.refresh();
     },
     onStopped: () => {
+      setWaveId(null);
       setWaveStatus('idle');
       api.refresh();
     },
