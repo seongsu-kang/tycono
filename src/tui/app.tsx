@@ -57,12 +57,12 @@ export const App: React.FC = () => {
   // System messages (command feedback displayed in stream area)
   const [systemMessages, setSystemMessages] = useState<StreamLine[]>([]);
 
-  // Terminal full height with resize tracking
-  const [termHeight, setTermHeight] = useState(process.stdout.rows || 30);
+  // Terminal full height with resize tracking (minus 1 for wide-char overflow safety)
+  const [termHeight, setTermHeight] = useState((process.stdout.rows || 30) - 1);
 
   useEffect(() => {
     const onResize = () => {
-      setTermHeight(process.stdout.rows || 30);
+      setTermHeight((process.stdout.rows || 30) - 1);
     };
     process.stdout.on('resize', onResize);
     return () => {
