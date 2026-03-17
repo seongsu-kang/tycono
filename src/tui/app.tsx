@@ -57,6 +57,19 @@ export const App: React.FC = () => {
   // System messages (command feedback displayed in stream area)
   const [systemMessages, setSystemMessages] = useState<StreamLine[]>([]);
 
+  // Terminal full height with resize tracking
+  const [termHeight, setTermHeight] = useState(process.stdout.rows || 30);
+
+  useEffect(() => {
+    const onResize = () => {
+      setTermHeight(process.stdout.rows || 30);
+    };
+    process.stdout.on('resize', onResize);
+    return () => {
+      process.stdout.off('resize', onResize);
+    };
+  }, []);
+
   const addSystemMessage = useCallback((text: string, color: string = 'yellow') => {
     setSystemMessages(prev => {
       const next = [...prev, { id: ++sysLineId, text, color }];
@@ -215,19 +228,6 @@ export const App: React.FC = () => {
       </Box>
     );
   }
-
-  // Terminal full height with resize tracking
-  const [termHeight, setTermHeight] = useState(process.stdout.rows || 30);
-
-  useEffect(() => {
-    const onResize = () => {
-      setTermHeight(process.stdout.rows || 30);
-    };
-    process.stdout.on('resize', onResize);
-    return () => {
-      process.stdout.off('resize', onResize);
-    };
-  }, []);
 
   return (
     <Box flexDirection="column" height={termHeight}>
