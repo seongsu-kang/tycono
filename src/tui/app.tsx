@@ -134,10 +134,10 @@ export const App: React.FC = () => {
 
     switch (result.type) {
       case 'wave_started':
-        addSystemMessage(`\u26A1 ${result.message}`, 'yellow');
+        // Don't show wave ID noise — supervisor handles it
         break;
       case 'directive_sent':
-        addSystemMessage(`\u26A1 ${result.message}`, 'yellow');
+        // Silently sent — supervisor will respond
         break;
       case 'stopped':
         addSystemMessage(`\u26A1 ${result.message}`, 'red');

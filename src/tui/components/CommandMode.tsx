@@ -1,13 +1,10 @@
 /**
- * CommandMode — default mode: stream summary flowing above, command input below
+ * CommandMode — chat-first mode
  *
- * SSE events are compressed into one-line summaries:
- *   dispatch:start → "CEO -> CTO Su (supervising...)"
- *   text           → "FE: Canvas game loop implementation..."
- *   tool:start     → "FE: -> edit index.html +87 lines"
- *   msg:done       → "QA: done (12 turns)"
- *   msg:error      → "FE: TypeError at line 42"
- *   thinking, heartbeat, trace → hidden
+ * User = CEO. Supervisor (ceo role) = user's AI proxy.
+ * - Supervisor responses: shown directly (no prefix), like a conversation
+ * - Team activity: indented with roleId, concise
+ * - System prompts, internal noise: filtered out
  */
 
 import React, { useState, useCallback } from 'react';
@@ -16,7 +13,8 @@ import TextInput from 'ink-text-input';
 import type { SSEEvent } from '../api';
 import { getRoleColor } from '../theme';
 
-const MAX_STREAM_LINES = 20;
+const MAX_STREAM_LINES = 30;
+const SUPERVISOR_ROLE = 'ceo';
 
 export interface StreamLine {
   id: number;
@@ -24,6 +22,7 @@ export interface StreamLine {
   color: string;
   prefix?: string;
   prefixColor?: string;
+  indent?: boolean;
 }
 
 interface CommandModeProps {
@@ -35,21 +34,70 @@ interface CommandModeProps {
 
 let lineCounter = 0;
 
-/** Convert SSE event to a one-line summary. Returns null if event should be hidden. */
+/** Filter out system prompt noise from text */
+function isSystemNoise(text: string): boolean {
+  const t = text.trim();
+  if (!t) return true;
+  // System prompt fragments
+  if (t.startsWith('## Your Role')) return true;
+  if (t.startsWith('You are')) return true;
+  if (t.startsWith('[CEO Supervisor]')) return true;
+  if (t.startsWith('[Question from')) return true;
+  if (t.includes('⛔ AKB Rule')) return true;
+  if (t.includes('⛔  Read the')) return true;
+  if (t.startsWith('⛔')) return true;
+  return false;
+}
+
+/** Convert SSE event to stream lines */
 export function summarizeEvent(event: SSEEvent, allRoleIds: string[]): StreamLine | null {
+  const isSupervisor = event.roleId === SUPERVISOR_ROLE;
   const roleColor = getRoleColor(event.roleId, allRoleIds);
-  const roleName = event.roleId;
 
   switch (event.type) {
+    case 'text': {
+      const text = ((event.data.text as string) ?? '');
+      if (isSystemNoise(text)) return null;
+
+      if (isSupervisor) {
+        // Supervisor text → direct response (no prefix, generous length)
+        return {
+          id: ++lineCounter,
+          text: text.slice(0, 200),
+          color: 'white',
+        };
+      } else {
+        // Team text → indented with role prefix, concise
+        return {
+          id: ++lineCounter,
+          prefix: event.roleId,
+          prefixColor: roleColor,
+          text: text.slice(0, 80),
+          color: 'white',
+          indent: true,
+        };
+      }
+    }
+
     case 'dispatch:start': {
       const target = (event.data.targetRole as string) ?? '';
-      const task = ((event.data.task as string) ?? '').slice(0, 50);
+      const task = ((event.data.task as string) ?? '');
+      // Filter out system prompt from task display
+      const cleanTask = task.replace(/⛔[^⛔]*⛔[^"]*/g, '').trim().slice(0, 50);
+      if (isSupervisor) {
+        return {
+          id: ++lineCounter,
+          text: `→ ${target} 배정${cleanTask ? ': ' + cleanTask : ''}`,
+          color: 'yellow',
+        };
+      }
       return {
         id: ++lineCounter,
-        prefix: roleName,
+        prefix: event.roleId,
         prefixColor: roleColor,
-        text: `\u2192 ${target} (${task || 'dispatching...'})`,
+        text: `→ ${target} 배정`,
         color: 'yellow',
+        indent: true,
       };
     }
 
@@ -57,22 +105,11 @@ export function summarizeEvent(event: SSEEvent, allRoleIds: string[]): StreamLin
       const target = (event.data.targetRole as string) ?? '';
       return {
         id: ++lineCounter,
-        prefix: roleName,
+        prefix: event.roleId,
         prefixColor: roleColor,
-        text: `\u2190 ${target} completed`,
+        text: `← ${target} 완료`,
         color: 'yellow',
-      };
-    }
-
-    case 'text': {
-      const text = ((event.data.text as string) ?? '').slice(0, 60);
-      if (!text.trim()) return null;
-      return {
-        id: ++lineCounter,
-        prefix: roleName,
-        prefixColor: roleColor,
-        text,
-        color: 'white',
+        indent: !isSupervisor,
       };
     }
 
@@ -85,35 +122,49 @@ export function summarizeEvent(event: SSEEvent, allRoleIds: string[]): StreamLin
         if (inp.file_path) detail = ` ${String(inp.file_path).split('/').pop()}`;
         else if (inp.command) detail = ` ${String(inp.command).slice(0, 40)}`;
       }
+
+      if (isSupervisor) {
+        // Supervisor tool use → subtle
+        return {
+          id: ++lineCounter,
+          text: `  → ${toolName}${detail}`,
+          color: 'gray',
+        };
+      }
       return {
         id: ++lineCounter,
-        prefix: roleName,
+        prefix: event.roleId,
         prefixColor: roleColor,
-        text: `\u2192 ${toolName}${detail}`,
+        text: `→ ${toolName}${detail}`,
         color: 'gray',
+        indent: true,
       };
     }
 
     case 'msg:start': {
-      const task = ((event.data.task as string) ?? '').slice(0, 50);
+      if (isSupervisor) return null; // Hide supervisor start (noise)
+      const task = ((event.data.task as string) ?? '');
+      const cleanTask = task.replace(/⛔[^⛔]*⛔[^"]*/g, '').trim().slice(0, 40);
       return {
         id: ++lineCounter,
-        prefix: roleName,
+        prefix: event.roleId,
         prefixColor: roleColor,
-        text: `\u25B6 ${task || 'started'}`,
+        text: `▶ ${cleanTask || 'started'}`,
         color: 'green',
+        indent: true,
       };
     }
 
     case 'msg:done': {
       const turns = event.data.turns as number | undefined;
-      const turnLabel = turns ? ` (${turns} turns)` : '';
+      if (isSupervisor) return null; // Hide supervisor done
       return {
         id: ++lineCounter,
-        prefix: roleName,
+        prefix: event.roleId,
         prefixColor: roleColor,
-        text: `\u2713 done${turnLabel}`,
+        text: `✓ done${turns ? ` (${turns} turns)` : ''}`,
         color: 'green',
+        indent: true,
       };
     }
 
@@ -121,24 +172,22 @@ export function summarizeEvent(event: SSEEvent, allRoleIds: string[]): StreamLin
       const error = ((event.data.error as string) ?? '').slice(0, 60);
       return {
         id: ++lineCounter,
-        prefix: roleName,
+        prefix: event.roleId,
         prefixColor: roleColor,
-        text: `\u2717 ${error}`,
+        text: `✗ ${error}`,
         color: 'red',
+        indent: !isSupervisor,
       };
     }
 
-    case 'msg:awaiting_input': {
+    case 'msg:awaiting_input':
       return {
         id: ++lineCounter,
-        prefix: roleName,
-        prefixColor: roleColor,
-        text: '? Awaiting input...',
+        text: isSupervisor ? '...' : `  ${event.roleId}: waiting`,
         color: 'yellow',
       };
-    }
 
-    // Hidden events
+    // Hidden
     case 'thinking':
     case 'heartbeat:tick':
     case 'heartbeat:skip':
@@ -191,12 +240,11 @@ export const CommandMode: React.FC<CommandModeProps> = ({
         )}
         {allLines.map((line) => (
           <Box key={line.id}>
+            {line.indent && <Text>  </Text>}
             {line.prefix && (
-              <>
-                <Text color={line.prefixColor} bold>
-                  {(line.prefix + ':').padEnd(14)}
-                </Text>
-              </>
+              <Text color={line.prefixColor} bold>
+                {(line.prefix).padEnd(12)}
+              </Text>
             )}
             <Text color={line.color}>{line.text}</Text>
           </Box>
@@ -208,7 +256,7 @@ export const CommandMode: React.FC<CommandModeProps> = ({
         <Text color="gray">{'─'.repeat(process.stdout.columns || 70)}</Text>
       </Box>
 
-      {/* Command input */}
+      {/* Input */}
       <Box paddingX={1} justifyContent="space-between">
         <Box>
           <Text color="yellow" bold>&gt; </Text>
