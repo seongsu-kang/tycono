@@ -194,14 +194,14 @@ export const App: React.FC = () => {
   const addSystemMessage = useCallback((text: string, color: string = 'yellow') => {
     setSystemMessages(prev => {
       const next = [...prev, { id: ++sysLineId, text, color }];
-      return next.length > 50 ? next.slice(-50) : next;
+      return next.length > 30 ? next.slice(-30) : next;
     });
   }, []);
 
   const addSystemLines = useCallback((lines: StreamLine[]) => {
     setSystemMessages(prev => {
       const next = [...prev, ...lines];
-      return next.length > 80 ? next.slice(-80) : next;
+      return next.length > 40 ? next.slice(-40) : next;
     });
   }, []);
 

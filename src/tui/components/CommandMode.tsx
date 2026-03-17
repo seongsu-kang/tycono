@@ -261,8 +261,8 @@ export const CommandMode: React.FC<CommandModeProps> = ({
     if (line) eventLines.push(line);
   }
 
-  // Merge system messages and event lines
-  const allLines = [...systemMessages, ...eventLines];
+  // Merge system messages and event lines (cap total to prevent memory bloat)
+  const allLines = [...systemMessages, ...eventLines].slice(-200);
 
   // Split into committed (scrollback) and live (re-rendered)
   const newCommitted = allLines.slice(committedRef.current);
@@ -271,7 +271,9 @@ export const CommandMode: React.FC<CommandModeProps> = ({
     committedRef.current += toCommit.length;
   }
 
-  const committedLines = allLines.slice(0, committedRef.current);
+  // Cap committed to prevent Static from holding too many items
+  const rawCommitted = allLines.slice(0, committedRef.current);
+  const committedLines = rawCommitted.length > 100 ? rawCommitted.slice(-100) : rawCommitted;
   const liveLines = allLines.slice(committedRef.current);
 
   const handleSubmit = useCallback((value: string) => {
