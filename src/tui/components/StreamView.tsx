@@ -1,7 +1,7 @@
 /**
  * StreamView — detailed stream panel for Panel Mode (right side)
  * Shows full event details with timestamps for a selected role.
- * Reuses the rendering logic from StreamPanel v1 but with the v2 layout.
+ * No aggressive truncation — shows tools, thinking, dispatch like Claude Code.
  */
 
 import React from 'react';
@@ -26,11 +26,11 @@ function formatTime(ts: string): string {
   }
 }
 
-function renderEvent(event: SSEEvent, allRoleIds: string[]): { content: string; contentColor: string } | null {
+function renderEvent(event: SSEEvent): { content: string; contentColor: string } | null {
   switch (event.type) {
     case 'msg:start':
       return {
-        content: `\u25B6 Started: ${(event.data.task as string)?.slice(0, 60) ?? ''}`,
+        content: `\u25B6 Started: ${(event.data.task as string)?.replace(/\u26D4[^\u26D4]*\u26D4[^"]*/g, '').trim().slice(0, 80) ?? ''}`,
         contentColor: 'green',
       };
 
@@ -44,14 +44,21 @@ function renderEvent(event: SSEEvent, allRoleIds: string[]): { content: string; 
 
     case 'msg:error':
       return {
-        content: `\u2717 Error: ${(event.data.error as string)?.slice(0, 60) ?? ''}`,
+        content: `\u2717 Error: ${(event.data.error as string ?? event.data.message as string ?? '').slice(0, 120)}`,
         contentColor: 'red',
       };
 
     case 'text': {
-      const text = ((event.data.text as string) ?? '').slice(0, 120);
+      const text = ((event.data.text as string) ?? '');
       if (!text.trim()) return null;
+      // Don't truncate — let terminal wrap
       return { content: text, contentColor: 'white' };
+    }
+
+    case 'thinking': {
+      const text = ((event.data.text as string) ?? '').slice(0, 150);
+      if (!text.trim()) return null;
+      return { content: `\uD83D\uDCAD ${text}`, contentColor: 'gray' };
     }
 
     case 'tool:start': {
@@ -61,8 +68,9 @@ function renderEvent(event: SSEEvent, allRoleIds: string[]): { content: string; 
       if (input && typeof input === 'object') {
         const inp = input as Record<string, unknown>;
         if (inp.file_path) detail = ` ${String(inp.file_path)}`;
-        else if (inp.command) detail = ` ${String(inp.command).slice(0, 60)}`;
-        else detail = ` ${JSON.stringify(input).slice(0, 60)}`;
+        else if (inp.command) detail = ` ${String(inp.command).slice(0, 80)}`;
+        else if (inp.pattern) detail = ` ${String(inp.pattern)}`;
+        else detail = ` ${JSON.stringify(input).slice(0, 80)}`;
       }
       return {
         content: `\u2192 ${name}${detail}`,
@@ -78,7 +86,7 @@ function renderEvent(event: SSEEvent, allRoleIds: string[]): { content: string; 
 
     case 'dispatch:start':
       return {
-        content: `\u21D2 dispatch ${event.data.targetRole as string ?? ''}: ${(event.data.task as string)?.slice(0, 50) ?? ''}`,
+        content: `\u21D2 dispatch ${event.data.targetRole as string ?? ''}: ${(event.data.task as string)?.replace(/\u26D4[^\u26D4]*\u26D4[^"]*/g, '').trim().slice(0, 80) ?? ''}`,
         contentColor: 'yellow',
       };
 
@@ -88,14 +96,15 @@ function renderEvent(event: SSEEvent, allRoleIds: string[]): { content: string; 
         contentColor: 'yellow',
       };
 
-    case 'msg:awaiting_input':
+    case 'msg:awaiting_input': {
+      const question = (event.data.question as string) ?? '';
       return {
-        content: '? Awaiting input...',
+        content: question ? `? ${question.slice(0, 120)}` : '? Awaiting input...',
         contentColor: 'yellow',
       };
+    }
 
-    // Hidden events
-    case 'thinking':
+    // Hidden (truly internal only)
     case 'heartbeat:tick':
     case 'heartbeat:skip':
     case 'prompt:assembled':
@@ -114,7 +123,7 @@ export const StreamView: React.FC<StreamViewProps> = ({
   waveId,
   roleLabel,
 }) => {
-  const maxVisible = 20;
+  const maxVisible = 30;
   const visibleEvents = events.slice(-maxVisible);
 
   const turnCount = events.filter(e => e.type === 'text' || e.type === 'tool:start').length;
@@ -146,14 +155,14 @@ export const StreamView: React.FC<StreamViewProps> = ({
       )}
 
       {visibleEvents.map((event, i) => {
-        const rendered = renderEvent(event, allRoleIds);
+        const rendered = renderEvent(event);
         if (!rendered) return null;
         const roleColor = getRoleColor(event.roleId, allRoleIds);
         return (
           <Box key={`${event.seq}-${i}`}>
             <Text color="gray" dimColor>{formatTime(event.ts)} </Text>
             <Text color={roleColor} bold>{event.roleId.padEnd(12)}</Text>
-            <Text color={rendered.contentColor}>{rendered.content}</Text>
+            <Text color={rendered.contentColor} wrap="wrap">{rendered.content}</Text>
           </Box>
         );
       })}
