@@ -111,7 +111,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
       paddingY={1}
       width={56}
     >
-      <Text bold color="cyan">{'\u2500\u2500\u2500'} TYCONO Setup {'\u2500\u2500\u2500'}</Text>
+      <Text bold color="cyan">{'───'} TYCONO Setup {'───'}</Text>
 
       <Box marginTop={1}>
         <Text color="gray">No company found. Let's set one up.</Text>

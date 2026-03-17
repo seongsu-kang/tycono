@@ -8,7 +8,7 @@
  * Tab toggles between modes, Esc returns to Command Mode.
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
 import { StatusBar } from './components/StatusBar';
 import { CommandMode, type StreamLine } from './components/CommandMode';
@@ -63,6 +63,13 @@ export const App: React.FC = () => {
       return next.length > 50 ? next.slice(-50) : next;
     });
   }, []);
+
+  // Auto-sync: when waveId is null (e.g. --attach), pick up api.activeWaveId
+  useEffect(() => {
+    if (waveId === null && api.activeWaveId) {
+      setWaveId(api.activeWaveId);
+    }
+  }, [waveId, api.activeWaveId]);
 
   // Derive effective wave ID (from manual set or API polling)
   const effectiveWaveId = waveId ?? api.activeWaveId;
@@ -209,8 +216,18 @@ export const App: React.FC = () => {
     );
   }
 
-  // Terminal full height
-  const termHeight = process.stdout.rows || 30;
+  // Terminal full height with resize tracking
+  const [termHeight, setTermHeight] = useState(process.stdout.rows || 30);
+
+  useEffect(() => {
+    const onResize = () => {
+      setTermHeight(process.stdout.rows || 30);
+    };
+    process.stdout.on('resize', onResize);
+    return () => {
+      process.stdout.off('resize', onResize);
+    };
+  }, []);
 
   return (
     <Box flexDirection="column" height={termHeight}>

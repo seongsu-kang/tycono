@@ -138,7 +138,9 @@ export const StreamView: React.FC<StreamViewProps> = ({
       {visibleEvents.length === 0 && (
         <Box marginTop={1}>
           <Text color="gray" dimColor>
-            {waveId ? 'Waiting for events...' : 'No active stream.'}
+            {waveId
+              ? `Streaming... waiting for ${roleLabel !== 'All' ? roleLabel + ' ' : ''}events`
+              : 'No active stream. Dispatch a wave to start.'}
           </Text>
         </Box>
       )}

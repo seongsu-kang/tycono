@@ -47,10 +47,10 @@ function flattenTree(nodes: OrgNode[], prefix: string = '', isLast: boolean[] = 
 
     let linePrefix = '';
     for (let j = 0; j < isLast.length; j++) {
-      linePrefix += isLast[j] ? '   ' : '\u2502  ';
+      linePrefix += isLast[j] ? '   ' : '│  ';
     }
     linePrefix += isLast.length > 0 || i > 0 || nodes.length > 1
-      ? (last ? '\u2514\u2500 ' : '\u251C\u2500 ')
+      ? (last ? '└─ ' : '├─ ')
       : '';
 
     result.push({

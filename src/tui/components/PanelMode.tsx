@@ -7,7 +7,7 @@
  *   Esc               — return to Command Mode
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { OrgTree } from './OrgTree';
 import { StreamView } from './StreamView';
@@ -39,6 +39,14 @@ export const PanelMode: React.FC<PanelModeProps> = ({
   onSelect,
   onEscape,
 }) => {
+  // Track terminal height for vertical separator
+  const [termHeight, setTermHeight] = useState(process.stdout.rows || 30);
+  useEffect(() => {
+    const onResize = () => setTermHeight(process.stdout.rows || 30);
+    process.stdout.on('resize', onResize);
+    return () => { process.stdout.off('resize', onResize); };
+  }, []);
+
   useInput((input, key) => {
     if (key.escape) {
       onEscape();
@@ -81,19 +89,21 @@ export const PanelMode: React.FC<PanelModeProps> = ({
           />
         </Box>
 
-        {/* Vertical separator */}
+        {/* Vertical separator — fill available height */}
         <Box flexDirection="column" marginX={0}>
-          <Text color="gray">{'\u2502\n'.repeat(15)}</Text>
+          <Text color="gray">{'│\n'.repeat(Math.max(5, termHeight - 6))}</Text>
         </Box>
 
         {/* Right: Stream for selected role */}
-        <StreamView
-          events={roleEvents}
-          allRoleIds={flatRoles}
-          streamStatus={streamStatus}
-          waveId={waveId}
-          roleLabel={roleLabel}
-        />
+        <Box flexGrow={1} flexDirection="column" overflow="hidden">
+          <StreamView
+            events={roleEvents}
+            allRoleIds={flatRoles}
+            streamStatus={streamStatus}
+            waveId={waveId}
+            roleLabel={roleLabel}
+          />
+        </Box>
       </Box>
 
       {/* Separator */}

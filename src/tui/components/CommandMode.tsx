@@ -181,7 +181,7 @@ export const CommandMode: React.FC<CommandModeProps> = ({
   return (
     <Box flexDirection="column" flexGrow={1}>
       {/* Stream area */}
-      <Box flexDirection="column" flexGrow={1} paddingX={1}>
+      <Box flexDirection="column" flexGrow={1} paddingX={1} overflow="hidden">
         {allLines.length === 0 && (
           <Box marginTop={1}>
             <Text color="gray" dimColor>
