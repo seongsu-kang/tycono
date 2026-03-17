@@ -5,8 +5,8 @@
 <h1 align="center">tycono</h1>
 
 <p align="center">
-  <strong>Build an AI company. Watch them work.</strong><br>
-  <sub>Infrastructure-as-Code defined servers. Company-as-Code defines organizations.</sub>
+  <strong>Cursor gives you one AI developer. Tycono gives you an AI team.</strong><br>
+  <sub>Give one order. Watch your AI team plan, build, and learn together.</sub>
 </p>
 
 <p align="center">
@@ -25,9 +25,11 @@
 
 ---
 
-**tycono** is an open-source platform that lets you define and run an AI-powered organization. Roles, authority, knowledge, and workflows — all defined in files, executed by AI agents, visualized in real time.
+Cursor, Lovable, Bolt — they all give you **one AI agent**. It helps, but you still drive everything.
 
-One command. Your AI company is running.
+**tycono** gives you an **AI team**. A CTO reviews architecture. Engineers write code. A PM breaks down tasks. QA catches bugs. You just give the order and watch them work.
+
+One command. Your AI team is running.
 
 ```bash
 npx tycono
@@ -83,16 +85,16 @@ Session 50 is dramatically smarter than session 1. Your company learns.
 
 ## Why Tycono?
 
-Coding agents simulate **one developer**. Tycono simulates **the entire company**.
+Same goal as Cursor, Lovable, Bolt — **get AI to do your work**. Different method.
 
-| | Single AI Agent | Tycono |
+| | Cursor / Lovable / Bolt | Tycono |
 |---|---|---|
-| **What it runs** | One agent, one context | Multiple roles with org hierarchy |
-| **Knowledge** | Resets every session | Compounds forever (AKB Pre-K/Post-K) |
-| **Authority** | Can do anything (or nothing) | Scoped — each role has clear boundaries |
-| **Delegation** | Manual prompt chaining | CEO dispatches, org chart routes automatically |
-| **Scale** | 1 agent | 7 → 700 agents |
-| **Visibility** | Terminal output | Real-time org tree + activity stream |
+| **Agents** | 1 AI helps you | **AI team works for you** |
+| **Your role** | Keep directing | **Give one order, watch** |
+| **Knowledge** | Resets every session | **Compounds forever** |
+| **Quality** | You review everything | **QA agent catches bugs** |
+| **Scale** | 1 task at a time | **Parallel across roles** |
+| **Visibility** | Editor / chat | **Real-time org tree** |
 
 ## Company-as-Code
 
@@ -258,9 +260,9 @@ npx tycono --version    # Show version
 - [x] CEO Wave dispatch with org-tree targeting
 - [x] AKB — Pre-K / Post-K knowledge loop
 - [x] Port Registry for multi-agent isolation
-- [ ] **TUI mode** — terminal-native multi-panel interface
+- [ ] **TUI mode** — terminal-native multi-panel interface *(in progress)*
 - [ ] Git worktree isolation per agent session
-- [ ] Desktop app (.dmg / .exe) — background execution, system notifications
+- [ ] **Desktop app** (.dmg / .exe) — background execution, notifications, no API key setup needed
 - [ ] Multi-LLM support (OpenAI, local models)
 
 ## Built with Tycono
