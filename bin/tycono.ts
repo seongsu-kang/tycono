@@ -213,16 +213,7 @@ async function startServerForTui(): Promise<void> {
   const port = process.env.PORT ? Number(process.env.PORT) : await findFreePort();
   process.env.PORT = String(port);
 
-  const { createHttpServer } = await import('../src/api/src/create-server.js');
-  const server = createHttpServer();
-
-  const host = process.env.HOST || '0.0.0.0';
-
-  await new Promise<void>((resolve) => {
-    server.listen(port, host, () => resolve());
-  });
-
-  // Suppress API server logs in TUI mode — redirect to file
+  // Suppress ALL server logs BEFORE creating server — redirect to file
   const logFile = path.resolve(process.env.COMPANY_ROOT || process.cwd(), '.tycono', 'server.log');
   try { fs.mkdirSync(path.dirname(logFile), { recursive: true }); } catch {}
   const logStream = fs.createWriteStream(logFile, { flags: 'a' });
@@ -232,6 +223,15 @@ async function startServerForTui(): Promise<void> {
   console.log = (...args: unknown[]) => logStream.write(args.join(' ') + '\n');
   console.error = (...args: unknown[]) => logStream.write('[ERROR] ' + args.join(' ') + '\n');
   console.warn = (...args: unknown[]) => logStream.write('[WARN] ' + args.join(' ') + '\n');
+
+  const { createHttpServer } = await import('../src/api/src/create-server.js');
+  const server = createHttpServer();
+
+  const host = process.env.HOST || '0.0.0.0';
+
+  await new Promise<void>((resolve) => {
+    server.listen(port, host, () => resolve());
+  });
 
   origLog(`  API server started on port ${port}`);
   origLog(`  Logs: ${logFile}`);
