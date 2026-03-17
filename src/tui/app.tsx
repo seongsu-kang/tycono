@@ -23,6 +23,7 @@ import { StreamPanel } from './components/StreamPanel';
 import { CommandInput } from './components/CommandInput';
 import { WaveDialog } from './components/WaveDialog';
 import { HelpOverlay } from './components/HelpOverlay';
+import { SetupWizard } from './components/SetupWizard';
 import { useApi } from './hooks/useApi';
 import { useSSE } from './hooks/useSSE';
 import { useKeyboard } from './hooks/useKeyboard';
@@ -31,12 +32,28 @@ import { dispatchWave } from './api';
 
 type Panel = 'org' | 'sessions' | 'stream' | 'command';
 type Dialog = 'none' | 'wave' | 'help';
+type View = 'loading' | 'setup' | 'dashboard';
 
 const PANELS: Panel[] = ['org', 'sessions', 'stream', 'command'];
 
 export const App: React.FC = () => {
   const { exit } = useApp();
   const api = useApi();
+
+  // Determine view: loading → setup (no company) → dashboard
+  const [view, setView] = useState<View>('loading');
+
+  React.useEffect(() => {
+    if (!api.loaded) return;
+    if (view === 'loading') {
+      setView(api.company ? 'dashboard' : 'setup');
+    }
+  }, [api.loaded, api.company, view]);
+
+  const handleSetupComplete = useCallback(() => {
+    api.refresh();
+    setView('dashboard');
+  }, [api]);
 
   const [activePanel, setActivePanel] = useState<Panel>('org');
   const [dialog, setDialog] = useState<Dialog>('none');
@@ -116,6 +133,25 @@ export const App: React.FC = () => {
       }
     },
   }, keyboardEnabled);
+
+  // Loading state
+  if (view === 'loading') {
+    return (
+      <Box flexDirection="column" paddingX={1}>
+        <Text color="cyan" bold>TYCONO TUI</Text>
+        <Text color="gray">Connecting to API server...</Text>
+      </Box>
+    );
+  }
+
+  // Setup wizard — no company found
+  if (view === 'setup') {
+    return (
+      <Box flexDirection="column" paddingX={1}>
+        <SetupWizard onComplete={handleSetupComplete} />
+      </Box>
+    );
+  }
 
   // Error display
   if (api.error) {

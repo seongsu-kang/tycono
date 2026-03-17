@@ -21,6 +21,7 @@ export interface ApiState {
   execStatus: ExecStatus | null;
   activeWaveId: string | null;
   error: string | null;
+  loaded: boolean;
   refresh(): void;
 }
 
@@ -30,6 +31,7 @@ export function useApi(): ApiState {
   const [execStatus, setExecStatus] = useState<ExecStatus | null>(null);
   const [activeWaveId, setActiveWaveId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const mountedRef = useRef(true);
 
   const refresh = useCallback(async () => {
@@ -53,6 +55,7 @@ export function useApi(): ApiState {
       }
 
       setError(null);
+      setLoaded(true);
     } catch (err) {
       if (mountedRef.current) {
         setError(err instanceof Error ? err.message : 'API error');
@@ -70,5 +73,5 @@ export function useApi(): ApiState {
     };
   }, [refresh]);
 
-  return { company, sessions, execStatus, activeWaveId, error, refresh };
+  return { company, sessions, execStatus, activeWaveId, error, loaded, refresh };
 }

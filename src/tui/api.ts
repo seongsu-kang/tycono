@@ -150,6 +150,38 @@ export async function fetchActiveWaves(): Promise<{ waves: Array<{ waveId: strin
   return fetchJson('/api/waves/active');
 }
 
+/* ─── Setup API calls ─── */
+
+export interface TeamTemplate {
+  id: string;
+  name: string;
+  description: string;
+  roles: string[];
+}
+
+export interface ScaffoldResult {
+  path: string;
+  rolesCreated: number;
+}
+
+export async function fetchSetupTeams(): Promise<TeamTemplate[]> {
+  return fetchJson<TeamTemplate[]>('/api/setup/teams');
+}
+
+export async function postSetupScaffold(companyName: string, teamId: string): Promise<ScaffoldResult> {
+  return fetchJson<ScaffoldResult>('/api/setup/scaffold', {
+    method: 'POST',
+    body: { companyName, teamId },
+  });
+}
+
+export async function postSetupCodeRoot(codeRoot: string): Promise<{ ok: boolean }> {
+  return fetchJson<{ ok: boolean }>('/api/setup/code-root', {
+    method: 'POST',
+    body: { codeRoot },
+  });
+}
+
 /* ─── SSE stream ─── */
 
 export interface SSEConnection {
