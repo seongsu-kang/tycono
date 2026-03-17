@@ -222,7 +222,19 @@ async function startServerForTui(): Promise<void> {
     server.listen(port, host, () => resolve());
   });
 
-  console.log(`  API server started on port ${port}`);
+  // Suppress API server logs in TUI mode — redirect to file
+  const logFile = path.resolve(process.env.COMPANY_ROOT || process.cwd(), '.tycono', 'server.log');
+  try { fs.mkdirSync(path.dirname(logFile), { recursive: true }); } catch {}
+  const logStream = fs.createWriteStream(logFile, { flags: 'a' });
+  const origLog = console.log;
+  const origErr = console.error;
+  const origWarn = console.warn;
+  console.log = (...args: unknown[]) => logStream.write(args.join(' ') + '\n');
+  console.error = (...args: unknown[]) => logStream.write('[ERROR] ' + args.join(' ') + '\n');
+  console.warn = (...args: unknown[]) => logStream.write('[WARN] ' + args.join(' ') + '\n');
+
+  origLog(`  API server started on port ${port}`);
+  origLog(`  Logs: ${logFile}`);
 
   // Graceful shutdown
   const shutdown = () => {

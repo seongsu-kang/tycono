@@ -76,11 +76,18 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
   };
 
   const handleCodeDirSubmit = async (value: string) => {
-    const dir = value.trim() || './code';
+    const path = await import('node:path');
+    const fs = await import('node:fs');
+    const dir = path.resolve(value.trim() || './code');
     setCodeDir(dir);
     setStep('creating');
 
     try {
+      // Ensure code directory exists
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+
       const result = await postSetupScaffold(companyName, selectedTeam?.id ?? 'minimal');
       setResultPath(result.path ?? '');
       setResultRoles(result.rolesCreated ?? 0);
@@ -137,7 +144,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
             {teams.length > 0 ? (
               <SelectInput
                 items={teams.map((t) => ({
-                  label: `${t.id}  ${t.description || t.roles.join(', ')}`,
+                  label: `${t.id}  ${t.roles.map(r => typeof r === 'string' ? r : r.name || r.id).join(', ')}`,
                   value: t.id,
                 }))}
                 onSelect={handleTeamSelect}

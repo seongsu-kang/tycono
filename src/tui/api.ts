@@ -161,7 +161,7 @@ export interface TeamTemplate {
   id: string;
   name: string;
   description: string;
-  roles: string[];
+  roles: Array<string | { id: string; name: string; level?: string }>;
 }
 
 export interface ScaffoldResult {
