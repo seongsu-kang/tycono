@@ -232,9 +232,12 @@ export function subscribeToWaveStream(
             }
           }
 
-          if (eventType === 'activity' && data) {
+          if ((eventType === 'activity' || eventType === 'wave:event') && data) {
             try {
-              onEvent(JSON.parse(data) as SSEEvent);
+              const parsed = JSON.parse(data);
+              // wave:event wraps the actual event in .event field
+              const evt = parsed.event ?? parsed;
+              onEvent(evt as SSEEvent);
             } catch { /* ignore parse errors */ }
           } else if (eventType === 'stream:end' && data) {
             try {
