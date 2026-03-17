@@ -12,7 +12,7 @@
  *   Esc               — return to Command Mode
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { OrgTree } from './OrgTree';
 import { StreamView } from './StreamView';
@@ -76,6 +76,9 @@ export const PanelMode: React.FC<PanelModeProps> = ({
     process.stdout.on('resize', onResize);
     return () => { process.stdout.off('resize', onResize); };
   }, []);
+
+  // Memoize expensive strings
+  const separatorStr = useMemo(() => '\u2502\n'.repeat(Math.max(5, termHeight - 6)), [termHeight]);
 
   useInput((input, key) => {
     if (key.escape) {
@@ -169,9 +172,9 @@ export const PanelMode: React.FC<PanelModeProps> = ({
           </Box>
         </Box>
 
-        {/* Vertical separator — fill available height */}
+        {/* Vertical separator — memoized to avoid regenerating on every render */}
         <Box flexDirection="column" marginX={0}>
-          <Text color="gray">{'\u2502\n'.repeat(Math.max(5, termHeight - 6))}</Text>
+          <Text color="gray">{separatorStr}</Text>
         </Box>
 
         {/* Right: Agent Detail + Stream */}

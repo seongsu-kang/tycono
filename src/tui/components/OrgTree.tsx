@@ -67,7 +67,7 @@ function flattenTree(nodes: OrgNode[], prefix: string = '', isLast: boolean[] = 
   return result;
 }
 
-export const OrgTree: React.FC<OrgTreeProps> = ({ tree, focused, selectedIndex, flatRoles }) => {
+export const OrgTree: React.FC<OrgTreeProps> = React.memo(({ tree, focused, selectedIndex, flatRoles }) => {
   const entries = flattenTree(tree);
 
   return (
@@ -103,4 +103,4 @@ export const OrgTree: React.FC<OrgTreeProps> = ({ tree, focused, selectedIndex, 
       })}
     </Box>
   );
-};
+});

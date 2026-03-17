@@ -15,7 +15,7 @@ import {
   type ActiveSessionInfo,
 } from '../api';
 
-const POLL_INTERVAL = 3000; // 3 seconds
+const POLL_INTERVAL = 5000; // 5 seconds (reduce re-renders)
 
 export interface ActiveWaveInfo {
   waveId: string;

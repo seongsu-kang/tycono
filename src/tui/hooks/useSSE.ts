@@ -1,10 +1,8 @@
 /**
  * useSSE — subscribe to wave SSE stream with auto-reconnect
  *
- * Events are stored with trimmed data to prevent OOM:
- * - text/thinking: keep only displayable portion
- * - msg:start task: truncate long supervisor prompts
- * - tool inputs: summarize
+ * Performance: batches events and updates React state max once per 300ms
+ * to prevent fullscreen Panel Mode from re-rendering on every text chunk.
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -13,12 +11,12 @@ import { subscribeToWaveStream, type SSEEvent, type SSEConnection } from '../api
 const MAX_EVENTS = 150;
 const RECONNECT_DELAY_MS = 3000;
 const MAX_RECONNECT_DELAY_MS = 15000;
+const BATCH_INTERVAL_MS = 300; // Throttle: update React state max ~3x/sec
 
 /** Trim event data to prevent memory bloat */
 function trimEvent(event: SSEEvent): SSEEvent {
   const data = { ...event.data };
 
-  // Truncate large text fields
   if (typeof data.text === 'string' && data.text.length > 500) {
     data.text = data.text.slice(0, 500);
   }
@@ -31,16 +29,11 @@ function trimEvent(event: SSEEvent): SSEEvent {
   if (typeof data.message === 'string' && data.message.length > 300) {
     data.message = data.message.slice(0, 300);
   }
-  // Summarize tool inputs
   if (data.input && typeof data.input === 'object') {
     const inp = data.input as Record<string, unknown>;
     const summary: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(inp)) {
-      if (typeof v === 'string' && v.length > 200) {
-        summary[k] = v.slice(0, 200);
-      } else {
-        summary[k] = v;
-      }
+      summary[k] = typeof v === 'string' && v.length > 200 ? v.slice(0, 200) : v;
     }
     data.input = summary;
   }
@@ -63,7 +56,24 @@ export function useSSE(waveId: string | null): SSEState {
   const reconnectAttemptRef = useRef(0);
   const maxSeqRef = useRef(0);
 
+  // Batch buffer — accumulate events, flush to React state periodically
+  const batchRef = useRef<SSEEvent[]>([]);
+  const batchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flushBatch = useCallback(() => {
+    batchTimerRef.current = null;
+    const batch = batchRef.current;
+    if (batch.length === 0) return;
+    batchRef.current = [];
+
+    setEvents((prev) => {
+      const next = [...prev, ...batch];
+      return next.length > MAX_EVENTS ? next.slice(-MAX_EVENTS) : next;
+    });
+  }, []);
+
   const clearEvents = useCallback(() => {
+    batchRef.current = [];
     setEvents([]);
     maxSeqRef.current = 0;
   }, []);
@@ -74,9 +84,14 @@ export function useSSE(waveId: string | null): SSEState {
       connRef.current = null;
       waveIdRef.current = waveId;
       reconnectAttemptRef.current = 0;
+      batchRef.current = [];
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current);
         reconnectTimerRef.current = null;
+      }
+      if (batchTimerRef.current) {
+        clearTimeout(batchTimerRef.current);
+        batchTimerRef.current = null;
       }
     }
 
@@ -90,6 +105,7 @@ export function useSSE(waveId: string | null): SSEState {
 
       if (fromSeq === 0) {
         setEvents([]);
+        batchRef.current = [];
         maxSeqRef.current = 0;
       }
 
@@ -101,13 +117,18 @@ export function useSSE(waveId: string | null): SSEState {
           }
           reconnectAttemptRef.current = 0;
 
-          const trimmed = trimEvent(event);
-          setEvents((prev) => {
-            const next = [...prev, trimmed];
-            return next.length > MAX_EVENTS ? next.slice(-MAX_EVENTS) : next;
-          });
+          // Add to batch buffer (don't trigger React re-render yet)
+          batchRef.current.push(trimEvent(event));
+
+          // Schedule flush if not already scheduled
+          if (!batchTimerRef.current) {
+            batchTimerRef.current = setTimeout(flushBatch, BATCH_INTERVAL_MS);
+          }
         },
         (reason) => {
+          // Flush remaining events before status change
+          flushBatch();
+
           if (reason === 'done') {
             setStreamStatus('done');
           } else {
@@ -140,8 +161,12 @@ export function useSSE(waveId: string | null): SSEState {
         clearTimeout(reconnectTimerRef.current);
         reconnectTimerRef.current = null;
       }
+      if (batchTimerRef.current) {
+        clearTimeout(batchTimerRef.current);
+        batchTimerRef.current = null;
+      }
     };
-  }, [waveId]);
+  }, [waveId, flushBatch]);
 
   return { events, streamStatus, clearEvents };
 }
