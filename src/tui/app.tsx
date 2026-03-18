@@ -404,17 +404,14 @@ export const App: React.FC = () => {
         addSystemMessage('  /new [text]          Create new wave', 'white');
         addSystemMessage('  /waves               List all waves', 'white');
         addSystemMessage('  /focus <n>           Switch to wave n', 'white');
-        addSystemMessage('  /agents              Agent tree + resources', 'white');
-        addSystemMessage('  /ports               Port allocations', 'white');
-        addSystemMessage('  /sessions            All sessions (kill/cleanup)', 'white');
+        addSystemMessage('  /agents              Wave \u2192 Role \u2192 Session tree', 'white');
+        addSystemMessage('  /sessions            Sessions + ports (kill/cleanup)', 'white');
         addSystemMessage('  /kill <id>           Kill a session', 'white');
         addSystemMessage('  /cleanup             Remove dead sessions', 'white');
-        addSystemMessage('  /status              Show current status', 'white');
-        addSystemMessage('  /assign <role> <task> Assign task to role', 'white');
-        addSystemMessage('  /roles               Org tree (Panel Mode)', 'white');
-        addSystemMessage('  /help                Show this help', 'white');
-        addSystemMessage('  /quit                Exit TUI', 'white');
-        addSystemMessage('Keys: [Tab] panel  [Esc] back  [Ctrl+C] quit', 'gray');
+        addSystemMessage('  /status              Current status', 'white');
+        addSystemMessage('  /help                This help', 'white');
+        addSystemMessage('  /quit                Exit', 'white');
+        addSystemMessage('Keys: [Tab] team panel  [1-9] wave  [Esc] back  [Ctrl+C] quit', 'gray');
         break;
       case 'info':
         if (result.message === '__status__') {
@@ -493,9 +490,9 @@ export const App: React.FC = () => {
             streamStatus={sse.streamStatus}
             waveId={focusedWaveId}
             activeSessions={api.activeSessions}
+            allSessions={api.sessions}
             waves={waves}
             focusedWaveId={focusedWaveId}
-            portSummary={api.portSummary}
             onMove={(dir) => {
               const nextIdx = dir === 'up'
                 ? Math.max(0, selectedRoleIndex - 1)
@@ -508,6 +505,10 @@ export const App: React.FC = () => {
               setSelectedRoleId(roleId === selectedRoleId ? null : roleId);
             }}
             onEscape={() => setMode('command')}
+            onFocusWave={(newWaveId) => {
+              setFocusedWaveId(newWaveId);
+              sse.clearEvents();
+            }}
           />
         </Box>
         <StatusBar
