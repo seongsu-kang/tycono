@@ -10,6 +10,7 @@ import { Box, Text, Static } from 'ink';
 import TextInput from 'ink-text-input';
 import type { SSEEvent } from '../api';
 import { getRoleColor } from '../theme';
+import { renderMarkdownLine } from '../utils/markdown';
 
 const SUPERVISOR_ROLE = 'ceo';
 
@@ -20,6 +21,7 @@ export interface StreamLine {
   prefix?: string;
   prefixColor?: string;
   indent?: boolean;
+  markdown?: boolean;  // render text as markdown
 }
 
 interface CommandModeProps {
@@ -56,6 +58,7 @@ export function summarizeEvent(event: SSEEvent, allRoleIds: string[]): StreamLin
           id: ++lineCounter,
           text,
           color: 'white',
+          markdown: true,
         };
       } else {
         return {
@@ -65,6 +68,7 @@ export function summarizeEvent(event: SSEEvent, allRoleIds: string[]): StreamLin
           text,
           color: 'white',
           indent: true,
+          markdown: true,
         };
       }
     }
@@ -232,6 +236,43 @@ export function summarizeEvent(event: SSEEvent, allRoleIds: string[]): StreamLin
 
 /** Render a single StreamLine */
 function StreamLineRow({ line }: { line: StreamLine }) {
+  // Multi-line markdown: split and render each line
+  if (line.markdown && line.text.includes('\n')) {
+    const lines = line.text.split('\n');
+    return (
+      <Box flexDirection="column">
+        {lines.map((l, i) => (
+          <Box key={i}>
+            {line.indent && <Text>  </Text>}
+            {line.prefix && i === 0 && (
+              <Text color={line.prefixColor} bold>
+                {(line.prefix).padEnd(12)}
+              </Text>
+            )}
+            {line.prefix && i > 0 && <Text>{' '.repeat(12)}</Text>}
+            {renderMarkdownLine(l, `${line.id}-${i}`)}
+          </Box>
+        ))}
+      </Box>
+    );
+  }
+
+  // Single line with markdown
+  if (line.markdown) {
+    return (
+      <Box>
+        {line.indent && <Text>  </Text>}
+        {line.prefix && (
+          <Text color={line.prefixColor} bold>
+            {(line.prefix).padEnd(12)}
+          </Text>
+        )}
+        {renderMarkdownLine(line.text, line.id)}
+      </Box>
+    );
+  }
+
+  // Plain text (tools, system messages)
   return (
     <Box>
       {line.indent && <Text>  </Text>}
