@@ -19,18 +19,17 @@ function printHelp(): void {
   Build an AI company. Watch them work.
 
   Usage:
-    tycono [path]       Start the server (optionally point to a company directory)
-    tycono tui          Start API server + TUI mode
-    tycono tui --attach Connect TUI to existing API server
+    tycono [path]       Start TUI (default, optionally point to a company directory)
+    tycono --classic    Start pixel office web UI
+    tycono --attach     Connect TUI to existing API server
     tycono --help       Show this help message
     tycono --version    Show version
 
   Examples:
-    tycono                      Start in current directory
-    tycono ./my-company         Start with existing company folder
-    tycono /path/to/akb         Start with absolute path
-    tycono tui                  Start with terminal UI
-    PORT=3000 tycono tui --attach  Attach TUI to running server
+    tycono                      Start TUI in current directory
+    tycono ./my-company         Start TUI with existing company folder
+    tycono --classic            Start pixel office web UI
+    PORT=3000 tycono --attach   Attach TUI to running server
 
   AI Engine (auto-detected):
     1. Claude Code CLI       Install from https://claude.ai/download (recommended)
@@ -273,24 +272,37 @@ export async function main(args: string[]): Promise<void> {
     return;
   }
 
-  // tui subcommand: start API server + TUI mode
+  // --classic: legacy pixel office web UI
+  if (command === '--classic' || args.includes('--classic')) {
+    if (command === '--classic' && args[1] && !args[1].startsWith('-')) {
+      process.env.COMPANY_ROOT = path.resolve(args[1]);
+    }
+    await startServer();
+    return;
+  }
+
+  // --attach: connect TUI to existing API server
+  if (command === '--attach' || args.includes('--attach')) {
+    const port = process.env.PORT ? Number(process.env.PORT) : 3000;
+    const { startTui } = await import('../src/tui/index.tsx');
+    await startTui({ port });
+    return;
+  }
+
+  // Legacy: `tui` subcommand still works
   if (command === 'tui') {
-    const attachMode = args.includes('--attach');
-    // If --attach, skip server start — just connect to existing API
-    if (attachMode) {
+    if (args.includes('--attach')) {
       const port = process.env.PORT ? Number(process.env.PORT) : 3000;
       const { startTui } = await import('../src/tui/index.tsx');
       await startTui({ port });
       return;
     }
-
-    // Start API server, then TUI
     await startServerForTui();
     return;
   }
 
+  // Path argument: treat as company directory
   if (command && !command.startsWith('-')) {
-    // Treat as path to company directory
     const resolved = path.resolve(command);
     if (!fs.existsSync(resolved)) {
       console.error(`  Path not found: ${resolved}`);
@@ -299,5 +311,27 @@ export async function main(args: string[]): Promise<void> {
     process.env.COMPANY_ROOT = resolved;
   }
 
-  await startServer();
+  // Show first-run notice (once only)
+  const prefsPath = path.resolve(process.env.COMPANY_ROOT || process.cwd(), '.tycono', 'preferences.json');
+  let prefs: Record<string, unknown> = {};
+  try { prefs = JSON.parse(fs.readFileSync(prefsPath, 'utf-8')); } catch {}
+  if (!prefs.tuiNoticeShown) {
+    console.log('');
+    console.log('  Tycono v' + VERSION + ' — AI Company OS');
+    console.log('');
+    console.log('  New: Terminal mode is now the default.');
+    console.log('  Faster, scriptable, built for work.');
+    console.log('');
+    console.log('  Looking for the pixel office?');
+    console.log('  → npx tycono --classic');
+    console.log('');
+    prefs.tuiNoticeShown = true;
+    try {
+      fs.mkdirSync(path.dirname(prefsPath), { recursive: true });
+      fs.writeFileSync(prefsPath, JSON.stringify(prefs, null, 2));
+    } catch {}
+  }
+
+  // Default: TUI mode
+  await startServerForTui();
 }
