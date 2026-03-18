@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { readFile, listFiles, fileExists, COMPANY_ROOT } from '../services/file-reader.js';
 import { extractBoldKeyValues } from '../services/markdown-parser.js';
 import { ActivityStream } from '../services/activity-stream.js';
+import { findPreset, listPresets } from '../services/preset-loader.js';
 import path from 'node:path';
 import fs from 'node:fs';
 import { type MessageStatus, isMessageActive } from '../../../shared/types.js';
@@ -303,6 +304,67 @@ operationsRouter.get('/traces', (req: Request, res: Response, next: NextFunction
       .slice(0, limit);
 
     res.json(sorted);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// --- Presets (Wave-scoped Company Preset) ---
+
+/**
+ * GET /api/ops/presets — List all available presets
+ */
+operationsRouter.get('/presets', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const searchDirs = [
+      path.resolve(COMPANY_ROOT, 'company', 'presets'),
+      path.resolve(COMPANY_ROOT, '.tycono', 'presets'),
+    ];
+    const presets = listPresets(searchDirs);
+    res.json(presets);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/ops/presets/activate
+ * Body: { presetId: string }
+ *
+ * Wave 시작 시 프리셋을 활성화한다.
+ * 프리셋의 roles를 roles/ 디렉토리에 복사하거나 심볼릭 링크를 생성한다.
+ */
+operationsRouter.post('/presets/activate', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { presetId } = req.body ?? {};
+    if (!presetId || typeof presetId !== 'string') {
+      res.status(400).json({ error: 'presetId (string) is required' });
+      return;
+    }
+
+    const searchDirs = [
+      path.resolve(COMPANY_ROOT, 'company', 'presets'),
+      path.resolve(COMPANY_ROOT, '.tycono', 'presets'),
+    ];
+
+    const preset = findPreset(presetId, searchDirs);
+    if (!preset) {
+      res.status(404).json({ error: `Preset not found: ${presetId}` });
+      return;
+    }
+
+    // TODO: 실제 활성화 로직 (roles 복사/링크, skills 복사, knowledge 복사)
+    // Phase 1에서는 프리셋 검색만 구현하고, 활성화는 추후 구현
+    res.json({
+      success: true,
+      preset: {
+        id: preset.id,
+        name: preset.name,
+        version: preset.version,
+      },
+      activatedRoles: preset.roles,
+      message: 'Preset activation logic pending (Phase 1 MVP)',
+    });
   } catch (err) {
     next(err);
   }

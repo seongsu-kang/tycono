@@ -22,6 +22,7 @@ function printHelp(): void {
     tycono [path]       Start TUI (default, optionally point to a company directory)
     tycono --classic    Start pixel office web UI
     tycono --attach     Connect TUI to existing API server
+    tycono --preset <id>  Activate a company preset
     tycono --help       Show this help message
     tycono --version    Show version
 
@@ -29,6 +30,7 @@ function printHelp(): void {
     tycono                      Start TUI in current directory
     tycono ./my-company         Start TUI with existing company folder
     tycono --classic            Start pixel office web UI
+    tycono --preset saas-plg-growth  Activate preset and start
     PORT=3000 tycono --attach   Attach TUI to running server
 
   AI Engine (auto-detected):
@@ -286,6 +288,21 @@ export async function main(args: string[]): Promise<void> {
     const port = process.env.PORT ? Number(process.env.PORT) : 3000;
     const { startTui } = await import('../src/tui/index.tsx');
     await startTui({ port });
+    return;
+  }
+
+  // --preset: activate a company preset
+  if (command === '--preset' || args.includes('--preset')) {
+    const presetIdIndex = args.indexOf('--preset');
+    if (presetIdIndex === -1 || !args[presetIdIndex + 1]) {
+      console.error('  Error: --preset requires a preset ID');
+      console.error('  Example: npx tycono --preset saas-plg-growth');
+      process.exit(1);
+    }
+    const presetId = args[presetIdIndex + 1];
+    process.env.TYCONO_PRESET = presetId;
+    console.log(`  Activating preset: ${presetId}`);
+    await startServerForTui();
     return;
   }
 
