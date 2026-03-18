@@ -19,7 +19,8 @@ import { execSync } from 'node:child_process';
 import { OrgTree } from './OrgTree';
 import { StreamView } from './StreamView';
 import type { OrgNode } from '../store';
-import type { SSEEvent, ActiveSessionInfo, SessionInfo, KnowledgeDoc } from '../api';
+import path from 'node:path';
+import type { SSEEvent, ActiveSessionInfo, SessionInfo } from '../api';
 import type { WaveInfo } from '../hooks/useCommand';
 
 type RightTab = 'stream' | 'docs' | 'info';
@@ -35,7 +36,7 @@ interface PanelModeProps {
   waveId: string | null;
   activeSessions: ActiveSessionInfo[];
   allSessions: SessionInfo[];
-  knowledgeDocs: KnowledgeDoc[];
+  companyRoot: string;
   waves: WaveInfo[];
   focusedWaveId: string | null;
   onMove: (direction: 'up' | 'down') => void;
@@ -78,6 +79,31 @@ function elapsed(startedAt: string): string {
   return `${Math.floor(ms / 3600_000)}h`;
 }
 
+/** Scan COMPANY_ROOT for .md files (cached) */
+let mdFileCache: { root: string; files: string[] } | null = null;
+function scanMdFiles(companyRoot: string): string[] {
+  if (mdFileCache && mdFileCache.root === companyRoot) return mdFileCache.files;
+  const results: string[] = [];
+  const skip = new Set(['.git', 'node_modules', '.tycono', '.worktrees', 'dist', '.claude']);
+  function walk(dir: string, depth: number) {
+    if (depth > 3) return; // Don't go too deep
+    try {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (skip.has(entry.name)) continue;
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full, depth + 1);
+        } else if (entry.name.endsWith('.md')) {
+          results.push(full);
+        }
+      }
+    } catch { /* permission error etc */ }
+  }
+  walk(companyRoot, 0);
+  mdFileCache = { root: companyRoot, files: results };
+  return results;
+}
+
 /** Extract files created/modified in this wave from SSE events */
 function extractWaveFiles(events: SSEEvent[]): string[] {
   const files = new Set<string>();
@@ -115,7 +141,7 @@ function readFilePreview(filePath: string, maxLines: number): string[] {
 
 export const PanelMode: React.FC<PanelModeProps> = ({
   tree, flatRoles, events, selectedRoleIndex, selectedRoleId,
-  streamStatus, waveId, activeSessions, allSessions, knowledgeDocs, waves,
+  streamStatus, waveId, activeSessions, allSessions, companyRoot, waves,
   focusedWaveId, onMove, onSelect, onEscape, onFocusWave,
 }) => {
   const [termHeight, setTermHeight] = useState(process.stdout.rows || 30);
@@ -154,27 +180,30 @@ export const PanelMode: React.FC<PanelModeProps> = ({
     return new Set(extractWaveFiles(events));
   }, [rightTab === 'docs' || rightTab === 'info' ? events.length : 0, rightTab]);
 
-  // Build docs list based on filter
+  // Build docs list from filesystem scan + wave files
   const docsList = useMemo(() => {
     if (rightTab !== 'docs') return [];
 
     interface DocEntry { path: string; title: string; isWave: boolean; }
     const entries: DocEntry[] = [];
 
-    // KB docs from API
-    for (const doc of knowledgeDocs) {
-      const isWave = waveFileSet.has(doc.path);
-      const isKb = doc.id.startsWith('knowledge/');
-      const isProject = doc.id.startsWith('projects/');
+    // Scan all .md files from COMPANY_ROOT
+    const allMdFiles = companyRoot ? scanMdFiles(companyRoot) : [];
+
+    for (const filePath of allMdFiles) {
+      const rel = filePath.replace(companyRoot + '/', '');
+      const isWave = waveFileSet.has(filePath);
+      const isKb = rel.startsWith('knowledge/');
+      const isProject = rel.startsWith('projects/');
 
       if (docsFilter === 'wave' && !isWave) continue;
       if (docsFilter === 'kb' && !isKb) continue;
       if (docsFilter === 'projects' && !isProject) continue;
 
-      entries.push({ path: doc.path, title: doc.title || doc.id.split('/').pop() || '', isWave });
+      entries.push({ path: filePath, title: rel, isWave });
     }
 
-    // Wave-only files not in KB (e.g. code files)
+    // Wave-only files not already in list (e.g. code files written by agents)
     for (const f of waveFileSet) {
       if (!entries.some(e => e.path === f)) {
         if (docsFilter === 'kb' || docsFilter === 'projects') continue;
@@ -190,7 +219,7 @@ export const PanelMode: React.FC<PanelModeProps> = ({
     });
 
     return entries;
-  }, [rightTab, docsFilter, knowledgeDocs, waveFileSet]);
+  }, [rightTab, docsFilter, companyRoot, waveFileSet]);
 
   const selectedDoc = docsList[docsIndex] ?? null;
   const filePreview = useMemo(() => {

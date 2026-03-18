@@ -208,6 +208,12 @@ export async function fetchKnowledgeDocs(): Promise<KnowledgeDoc[]> {
   return fetchJson<KnowledgeDoc[]>('/api/knowledge');
 }
 
+/** Scan COMPANY_ROOT for all .md files (not API-dependent) */
+export async function fetchCompanyRoot(): Promise<string> {
+  const health = await fetchJson<{ companyRoot: string }>('/api/health');
+  return health.companyRoot;
+}
+
 /* ─── Setup API calls ─── */
 
 export interface TeamTemplate {

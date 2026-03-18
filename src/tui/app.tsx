@@ -563,7 +563,7 @@ export const App: React.FC = () => {
             waveId={focusedWaveId}
             activeSessions={api.activeSessions}
             allSessions={api.sessions}
-            knowledgeDocs={api.knowledgeDocs}
+            companyRoot={process.env.COMPANY_ROOT || process.cwd()}
             waves={waves}
             focusedWaveId={focusedWaveId}
             onMove={(dir) => {
