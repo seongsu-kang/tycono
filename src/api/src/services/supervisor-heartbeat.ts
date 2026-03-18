@@ -264,12 +264,45 @@ class SupervisorHeartbeat {
       ? `\n\n⚠️ [RECOVERY] This is a restart after crash #${state.crashCount}. Check all session states via supervision watch.`
       : '';
 
-    const supervisorTask = `[CEO Supervisor] ${state.directive}
+    // Build conversation context from previous directives
+    const deliveredDirectives = state.pendingDirectives.filter(d => d.delivered);
+    const conversationHistory = deliveredDirectives.length > 0
+      ? `\n## Previous Conversation in This Wave
+${deliveredDirectives.map((d, i) => `${i + 1}. CEO said: "${d.text}"`).join('\n')}
 
+You are continuing this conversation. The CEO's latest message builds on the above context.
+Do NOT re-analyze from scratch — reference your previous findings.\n`
+      : '';
+
+    const supervisorTask = `[CEO Supervisor] ${state.directive}
+${conversationHistory}
 ## Your Role
-You are the CEO Supervisor — the root of the supervision tree.
-Your job: dispatch C-Level roles, watch their progress, relay opinions between them,
-and ensure the CEO's directive is fulfilled.
+You are the CEO Supervisor — the CEO's AI proxy.
+You can answer questions directly OR dispatch C-Level roles for complex work.
+
+## Response Mode Decision (BEFORE dispatching)
+
+⛔ Dispatch is expensive (spawns entire teams). Judge first:
+
+**1. Direct Answer** — Can YOU handle this without dispatching?
+   - Status check, progress report → Read files/docs yourself, answer directly
+   - Simple question → Answer directly
+   - Opinion request → Answer directly
+   - Clarification on previous work → Answer from context
+   → **Do NOT dispatch. Just answer.**
+
+**2. Selective Dispatch** — Only specific C-Level(s) needed?
+   - "코드 수정해" → CTO only
+   - "디자인 개선해" → CBO only
+   - "테스트해봐" → CTO only (who dispatches QA)
+   → **Dispatch only the relevant C-Level(s).**
+
+**3. Full Dispatch** — Multi-team collaboration required?
+   - "새 기능 만들어" → CTO + CBO
+   - "출시 준비해" → All C-Levels
+   → **Dispatch multiple C-Levels with clear tasks.**
+
+**Default: Direct Answer first. Dispatch only when code changes or creative work is needed.**
 
 ## Available C-Level Roles
 ${cLevelList}
@@ -352,13 +385,14 @@ ${state.continuous ? `## Continuous Improvement Mode (ON)
 5. 사용자가 Stop을 누를 때까지 계속한다. 스스로 done 선언하지 마라.
 
 ` : ''}## Instructions
-1. Analyze the directive and decide which C-Level roles to dispatch (not necessarily all)
-2. Dispatch them with clear tasks
-3. Enter supervision watch loop
-4. Monitor, **actively relay results between teams**, course-correct
-5. When subordinates report done → **verify deliverables against requirements (G-09)**
-6. If gaps exist → re-dispatch with specific feedback. Repeat 3-5.
-7. Only when ALL requirements are met → compile results and report`;
+1. **First: Apply Response Mode Decision** — Can you answer directly? If yes, answer and report done.
+2. If dispatch is needed: decide which C-Level roles (not necessarily all)
+3. Dispatch with clear, specific tasks
+4. Enter supervision watch loop
+5. Monitor, **actively relay results between teams**, course-correct
+6. When subordinates report done → **verify deliverables against requirements (G-09)**
+7. If gaps exist → re-dispatch with specific feedback. Repeat 4-6.
+8. Only when ALL requirements are met → compile results and report`;
 
     // BUG-008 fix: Wave:Supervisor:Session = 1:1:1 invariant.
     // Reuse existing session on restart instead of creating a new one.
