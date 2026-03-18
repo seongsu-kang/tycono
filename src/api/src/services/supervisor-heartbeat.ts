@@ -257,19 +257,21 @@ class SupervisorHeartbeat {
     // Short messages with question marks → conversation
     if (t.includes('?') && t.length < 100) return true;
 
+    // Task patterns FIRST — action verbs override question patterns
+    const taskPatterns = [
+      /만들어/, /구현해/, /개발해/, /수정해/, /변경해/, /리팩토링/,
+      /설계해/, /작성해/, /배포해/, /테스트해/, /고쳐/, /해줘/, /해봐/,
+      /진행시켜/, /진행해/, /시작해/, /실행해/, /돌려/,
+      /build/i, /create/i, /implement/i, /develop/i, /fix/i, /deploy/i, /refactor/i,
+      /proceed/i, /start/i, /execute/i, /run/i, /do it/i, /go ahead/i,
+    ];
+    if (taskPatterns.some(p => p.test(t))) return false;
+
     // Korean question patterns
     const questionPatterns = [
       /확인해/, /알려줘/, /보여줘/, /어때/, /뭐야/, /뭐지/, /뭘까/,
-      /상태/, /상황/, /진행/, /현재/, /어디/, /얼마/,
+      /상태/, /상황/, /현재/, /어디/, /얼마/,
       /what/i, /how.*going/i, /status/i, /check/i, /show/i, /tell/i,
-    ];
-    if (questionPatterns.some(p => p.test(t))) return true;
-
-    // Long directives with action verbs → dispatch
-    const taskPatterns = [
-      /만들어/, /구현해/, /개발해/, /수정해/, /변경해/, /리팩토링/,
-      /설계해/, /작성해/, /배포해/, /테스트해/, /고쳐/,
-      /build/i, /create/i, /implement/i, /develop/i, /fix/i, /deploy/i, /refactor/i,
     ];
     if (taskPatterns.some(p => p.test(t))) return false;
 
@@ -341,7 +343,6 @@ Do NOT dispatch anyone. Do NOT create new files. Just answer concisely.`;
         roleId: 'ceo',
         task,
         sourceRole: 'ceo',
-        readOnly: true,   // readOnly = no code changes, conversation only
         sessionId,
       });
 
