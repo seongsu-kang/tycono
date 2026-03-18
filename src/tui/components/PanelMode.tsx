@@ -462,28 +462,26 @@ export const PanelMode: React.FC<PanelModeProps> = ({
                 </Box>
               ) : (
                 <Box flexGrow={1} flexDirection="column">
-                  {/* File list (scrollable region) */}
-                  {!selectedDoc || docsScroll === 0 ? (
+                  {docsScroll === 0 ? (
+                    /* File list — only render visible window (prevent Yoga OOM on 600+ files) */
                     <Box flexDirection="column" marginTop={0}>
-                      {docsList.slice(0, termHeight - 8).map((doc, i) => (
+                      <Text color="gray" dimColor>{docsList.length} files{docsIndex > 0 ? ` (${docsIndex + 1}/${docsList.length})` : ''}</Text>
+                      {docsList.slice(docsIndex, docsIndex + termHeight - 10).map((doc, i) => (
                         <Box key={doc.path}>
                           <Text
-                            color={i === docsIndex ? 'cyan' : doc.isWave ? 'green' : 'white'}
-                            bold={i === docsIndex}
-                            inverse={i === docsIndex}
+                            color={i === 0 ? 'cyan' : doc.isWave ? 'green' : 'white'}
+                            bold={i === 0}
+                            inverse={i === 0}
                           >
-                            {doc.isWave ? '\u2605' : ' '} {doc.title.slice(0, 50)}
+                            {doc.isWave ? '\u2605' : ' '} {doc.title.slice(0, 55)}
                           </Text>
                         </Box>
                       ))}
-                      {docsList.length > termHeight - 8 && (
-                        <Text color="gray">  ... +{docsList.length - (termHeight - 8)} more (Tab to cycle)</Text>
-                      )}
                     </Box>
                   ) : (
-                    /* File preview (when scrolled into file) */
+                    /* File preview */
                     <Box flexDirection="column">
-                      <Text color="cyan" bold>{selectedDoc.isWave ? '\u2605 ' : ''}{selectedDoc.path.split('/').slice(-2).join('/')}</Text>
+                      <Text color="cyan" bold>{selectedDoc?.isWave ? '\u2605 ' : ''}{selectedDoc?.path.split('/').slice(-2).join('/')}</Text>
                       <Text color="gray">{'\u2500'.repeat(50)}</Text>
                       {filePreview.slice(docsScroll - 1, docsScroll - 1 + termHeight - 10).map((line, i) => (
                         <Text key={i} color="white" wrap="wrap">{line}</Text>
@@ -493,7 +491,7 @@ export const PanelMode: React.FC<PanelModeProps> = ({
 
                   <Box marginTop={0}>
                     <Text color="gray" dimColor>
-                      [Enter] {process.env.EDITOR || 'vim'} | [Tab] next | [j/k] {docsScroll > 0 ? 'scroll' : 'select'} | [k] back
+                      [Enter] {process.env.EDITOR || 'vim'} | [j/k] {docsScroll > 0 ? 'scroll' : 'select'}
                     </Text>
                   </Box>
                 </Box>
