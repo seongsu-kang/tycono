@@ -130,6 +130,7 @@ export const PanelMode: React.FC<PanelModeProps> = ({
             focused={true}
             selectedIndex={selectedRoleIndex}
             flatRoles={flatRoles}
+            ceoStatus={activeSessions.some(s => s.roleId === 'ceo' && s.status === 'active') ? 'working' : 'idle'}
           />
         </Box>
 

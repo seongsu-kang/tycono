@@ -1,5 +1,6 @@
 /**
  * OrgTree — left panel showing organization hierarchy with real-time status
+ * CEO is now selectable (index 0 in flatRoles)
  */
 
 import React from 'react';
@@ -12,6 +13,7 @@ interface OrgTreeProps {
   focused: boolean;
   selectedIndex: number;
   flatRoles: string[];
+  ceoStatus?: string;
 }
 
 function statusColor(status: string): string {
@@ -46,10 +48,10 @@ function flattenTree(nodes: OrgNode[], prefix: string = '', isLast: boolean[] = 
 
     let linePrefix = '';
     for (let j = 0; j < isLast.length; j++) {
-      linePrefix += isLast[j] ? '   ' : '│  ';
+      linePrefix += isLast[j] ? '   ' : '\u2502  ';
     }
     linePrefix += isLast.length > 0 || i > 0 || nodes.length > 1
-      ? (last ? '└─ ' : '├─ ')
+      ? (last ? '\u2514\u2500 ' : '\u251C\u2500 ')
       : '';
 
     result.push({
@@ -67,14 +69,24 @@ function flattenTree(nodes: OrgNode[], prefix: string = '', isLast: boolean[] = 
   return result;
 }
 
-export const OrgTree: React.FC<OrgTreeProps> = React.memo(({ tree, focused, selectedIndex, flatRoles }) => {
+export const OrgTree: React.FC<OrgTreeProps> = React.memo(({ tree, focused, selectedIndex, flatRoles, ceoStatus }) => {
   const entries = flattenTree(tree);
+  const isCeoSelected = focused && flatRoles[selectedIndex] === 'ceo';
+  const ceoIcon = statusIcon(ceoStatus ?? 'idle');
+  const ceoColor = statusColor(ceoStatus ?? 'idle');
 
   return (
     <Box flexDirection="column" paddingX={1}>
-      <Text bold color={focused ? 'cyan' : 'gray'}>{'── Org Tree ──'}</Text>
+      <Text bold color={focused ? 'cyan' : 'gray'}>{'\u2500\u2500 Org Tree \u2500\u2500'}</Text>
       <Box marginTop={1}>
-        <Text color="yellow" bold>{'\uD83D\uDC51'} CEO</Text>
+        <Text color={ceoColor} bold={ceoStatus === 'working'}>{ceoIcon} </Text>
+        <Text
+          color={isCeoSelected ? 'cyan' : 'yellow'}
+          bold={isCeoSelected}
+          inverse={isCeoSelected}
+        >
+          CEO
+        </Text>
       </Box>
       {entries.map((entry, i) => {
         const isSelected = focused && flatRoles[selectedIndex] === entry.roleId;

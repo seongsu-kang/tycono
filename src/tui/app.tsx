@@ -244,7 +244,7 @@ export const App: React.FC = () => {
   const roles = api.company?.roles ?? [];
   const statuses = api.execStatus?.statuses ?? {};
   const orgTree = useMemo(() => buildOrgTree(roles, statuses), [roles, statuses]);
-  const flatRoleIds = useMemo(() => flattenOrgRoleIds(orgTree), [orgTree]);
+  const flatRoleIds = useMemo(() => ['ceo', ...flattenOrgRoleIds(orgTree)], [orgTree]);
 
   // Active count
   const activeCount = Object.values(statuses).filter(
@@ -426,11 +426,11 @@ export const App: React.FC = () => {
             focusedWaveId={focusedWaveId}
             portSummary={api.portSummary}
             onMove={(dir) => {
-              if (dir === 'up') {
-                setSelectedRoleIndex(Math.max(0, selectedRoleIndex - 1));
-              } else {
-                setSelectedRoleIndex(Math.min(flatRoleIds.length - 1, selectedRoleIndex + 1));
-              }
+              const nextIdx = dir === 'up'
+                ? Math.max(0, selectedRoleIndex - 1)
+                : Math.min(flatRoleIds.length - 1, selectedRoleIndex + 1);
+              setSelectedRoleIndex(nextIdx);
+              setSelectedRoleId(flatRoleIds[nextIdx] ?? null);
             }}
             onSelect={() => {
               const roleId = flatRoleIds[selectedRoleIndex] ?? null;
