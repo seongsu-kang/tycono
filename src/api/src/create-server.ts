@@ -228,9 +228,10 @@ export function createExpressApp(): express.Application {
 
   app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
     const status = err.name === 'FileNotFoundError' ? 404 : 500;
-    // Log errors to stderr (not stdout — Ink needs stdout clean)
+    // Log server errors via console.error (redirected to log file in TUI mode)
+    // 404 errors are expected (e.g. fresh install, no company.md) — skip
     if (status >= 500) {
-      process.stderr.write(`[ERROR] ${req.method} ${req.url} — ${err.message}\n`);
+      console.error(`[ERROR] ${req.method} ${req.url} — ${err.message}`);
     }
     res.status(status).json({ error: err.message });
   });

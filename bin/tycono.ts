@@ -221,18 +221,14 @@ async function startServerForTui(): Promise<void> {
   const origStdoutWrite = process.stdout.write.bind(process.stdout);
   const origLog = (...args: unknown[]) => origStdoutWrite(args.join(' ') + '\n');
 
-  // Redirect ALL output to log file BEFORE importing server code
-  // Ink needs stdout clean — server must not write to stdout or stderr
+  // Redirect console methods to log file BEFORE importing server code
+  // ⛔ Do NOT redirect process.stdout.write or process.stderr.write
+  //    stdout.write: Ink needs full control for rendering
+  //    stderr.write: Node.js http client uses it internally — redirect breaks HTTP
   console.log = (...a: unknown[]) => { logStream.write(a.join(' ') + '\n'); };
   console.error = (...a: unknown[]) => { logStream.write(a.join(' ') + '\n'); };
   console.warn = (...a: unknown[]) => { logStream.write(a.join(' ') + '\n'); };
   console.info = (...a: unknown[]) => { logStream.write(a.join(' ') + '\n'); };
-  // Also redirect stderr.write — some code uses process.stderr directly
-  const origStderrWrite = process.stderr.write.bind(process.stderr);
-  process.stderr.write = ((chunk: any, ...args: any[]) => {
-    logStream.write(typeof chunk === 'string' ? chunk : chunk.toString());
-    return true;
-  }) as any;
 
   const { createHttpServer } = await import('../src/api/src/create-server.js');
   const server = createHttpServer();
