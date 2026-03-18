@@ -227,8 +227,11 @@ export function createExpressApp(): express.Application {
   }
 
   app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    console.error(`[ERROR] ${req.method} ${req.url} — ${err.message}`);
     const status = err.name === 'FileNotFoundError' ? 404 : 500;
+    // Log errors to stderr (not stdout — Ink needs stdout clean)
+    if (status >= 500) {
+      process.stderr.write(`[ERROR] ${req.method} ${req.url} — ${err.message}\n`);
+    }
     res.status(status).json({ error: err.message });
   });
 
