@@ -172,20 +172,10 @@ export const PanelMode: React.FC<PanelModeProps> = ({
         {/* Left: Wave title + Org Tree + Wave tabs */}
         <Box flexDirection="column" width={leftWidth}>
           {/* Wave title */}
-          <Box paddingX={1} marginBottom={0}>
-            <Text color="green" bold>
-              W{focusedWaveIndex}
-            </Text>
-            <Text color="gray"> </Text>
-            <Text color="white" wrap="truncate">
-              {focusedWave?.directive ? focusedWave.directive.slice(0, leftWidth - 6) : '(idle)'}
-            </Text>
-          </Box>
-
-          {/* Session count */}
-          {waveSessionCount > 0 && (
-            <Box paddingX={1}>
-              <Text color="gray">{waveSessionCount} sessions</Text>
+          {focusedWaveIndex > 0 && (
+            <Box paddingX={1} marginBottom={0}>
+              <Text color="green" bold>Wave {focusedWaveIndex}</Text>
+              {waveSessionCount > 0 && <Text color="gray"> ({waveSessionCount})</Text>}
             </Box>
           )}
 
@@ -198,21 +188,19 @@ export const PanelMode: React.FC<PanelModeProps> = ({
             ceoStatus={waveScopedStatuses['ceo'] ?? 'idle'}
           />
 
-          {/* Wave tabs at bottom */}
+          {/* Wave tabs at bottom — compact inline */}
           {waves.length > 1 && (
             <Box paddingX={1} marginTop={1}>
+              <Text color="gray">W </Text>
               {waves.map((w, i) => {
                 const isFocused = w.waveId === focusedWaveId;
                 return (
-                  <Box key={w.waveId} marginRight={1}>
-                    <Text
-                      color={isFocused ? 'green' : 'gray'}
-                      bold={isFocused}
-                      inverse={isFocused}
-                    >
-                      {` ${i + 1} `}
-                    </Text>
-                  </Box>
+                  <Text key={w.waveId}
+                    color={isFocused ? 'green' : 'gray'}
+                    bold={isFocused}
+                  >
+                    {isFocused ? `[${i + 1}]` : ` ${i + 1} `}
+                  </Text>
                 );
               })}
             </Box>
