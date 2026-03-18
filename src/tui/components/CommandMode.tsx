@@ -281,6 +281,8 @@ export const CommandMode: React.FC<CommandModeProps> = ({
 }) => {
   const [input, setInput] = useState('');
   const committedRef = useRef(0);
+  // Immediately committed user inputs (shown in Static before systemMessages arrive)
+  const [userInputs, setUserInputs] = useState<StreamLine[]>([]);
 
   // Convert events to stream lines
   const eventLines: StreamLine[] = [];
@@ -289,8 +291,8 @@ export const CommandMode: React.FC<CommandModeProps> = ({
     if (line) eventLines.push(line);
   }
 
-  // Merge system messages and event lines (cap total)
-  const allLines = [...systemMessages, ...eventLines].slice(-100);
+  // Merge user inputs + system messages + event lines (cap total)
+  const allLines = [...userInputs, ...systemMessages, ...eventLines].slice(-100);
 
   // Split into committed (scrollback) and live (re-rendered)
   const newCommitted = allLines.slice(committedRef.current);
@@ -307,6 +309,12 @@ export const CommandMode: React.FC<CommandModeProps> = ({
   const handleSubmit = useCallback((value: string) => {
     const trimmed = value.trim();
     if (trimmed) {
+      // Show user input immediately in scrollback (before AI responds)
+      setUserInputs(prev => [...prev.slice(-10), {
+        id: ++lineCounter,
+        text: `> ${trimmed}`,
+        color: 'yellow',
+      }]);
       onSubmit(trimmed);
     }
     setInput('');

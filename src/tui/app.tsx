@@ -343,7 +343,7 @@ export const App: React.FC = () => {
 
   // Handle command submission from CommandMode
   const handleCommandSubmit = useCallback(async (input: string) => {
-    addSystemMessage(`> ${input}`, 'white');
+    // User input is already shown by CommandMode (immediate commit to Static)
 
     const result = await execute(input);
 
