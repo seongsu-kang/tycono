@@ -156,8 +156,13 @@ export class ActivityStream {
 
   /* ─── Static: read from file ───────────── */
 
-  /** Read events from a JSONL file starting at fromSeq */
-  static readFrom(streamId: string, fromSeq = 0): ActivityEvent[] {
+  /**
+   * Read events from a JSONL file starting at fromSeq
+   * @param streamId - Session ID to read
+   * @param fromSeq - Starting sequence number (default: 0)
+   * @param maxEvents - Maximum events to return (default: 500, 0 = unlimited)
+   */
+  static readFrom(streamId: string, fromSeq = 0, maxEvents = 500): ActivityEvent[] {
     const fp = streamPath(streamId);
     if (!fs.existsSync(fp)) return [];
 
@@ -173,12 +178,21 @@ export class ActivityStream {
       } catch { /* skip malformed lines */ }
     }
 
+    // Memory pruning: return only recent N events (0 = unlimited)
+    // File retains full history, but in-memory operations are capped
+    if (maxEvents > 0 && events.length > maxEvents) {
+      return events.slice(-maxEvents);
+    }
+
     return events;
   }
 
-  /** Read all events from a JSONL file */
-  static readAll(streamId: string): ActivityEvent[] {
-    return ActivityStream.readFrom(streamId, 0);
+  /**
+   * Read all events from a JSONL file (subject to default maxEvents limit)
+   * @param maxEvents - Maximum events to return (default: 500, 0 = unlimited)
+   */
+  static readAll(streamId: string, maxEvents = 500): ActivityEvent[] {
+    return ActivityStream.readFrom(streamId, 0, maxEvents);
   }
 
   /** Check if a stream file exists */

@@ -773,11 +773,12 @@ function handleStatus(res: ServerResponse): void {
     );
 
     const recovered: typeof activeExecs = [];
-    // Limit recovery scan to prevent OOM on large session stores
-    const MAX_RECOVERY_SCAN = 20;
-    const recentActive = activeSessions.slice(-MAX_RECOVERY_SCAN);
+    // Meaning-based filtering: activeSessions are already filtered by status='active'
+    // Safety cap: 100 active sessions (normal operation should never reach this)
+    const MAX_SAFETY_CAP = 100;
+    const sessionsToScan = activeSessions.slice(-MAX_SAFETY_CAP);
 
-    for (const ses of recentActive) {
+    for (const ses of sessionsToScan) {
       if (!ActivityStream.exists(ses.id)) continue;
       // Only read last few events to check done/error (not entire stream)
       const events = ActivityStream.readFrom(ses.id, 0);

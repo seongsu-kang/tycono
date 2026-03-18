@@ -95,7 +95,8 @@ class WaveMultiplexer {
 
       const allEvents: { event: ActivityEvent; sessionId: string }[] = [];
       for (const exec of activeSessions) {
-        const events = ActivityStream.readFrom(exec.sessionId, 0);
+        // maxEvents=0 (unlimited) — wave-multiplexer handles its own MAX_SAFETY_CAP
+        const events = ActivityStream.readFrom(exec.sessionId, 0, 0);
         // Only replay events AFTER msg:start (meaningful events only)
         const startIdx = events.findIndex(e => e.type === 'msg:start');
         const meaningfulEvents = startIdx >= 0 ? events.slice(startIdx) : events;
@@ -151,7 +152,8 @@ class WaveMultiplexer {
         parentSessionId: execution.parentSessionId,
       });
 
-      const events = ActivityStream.readFrom(execution.sessionId, 0);
+      // maxEvents=0 (unlimited) — wave-multiplexer handles its own MAX_SAFETY_CAP
+      const events = ActivityStream.readFrom(execution.sessionId, 0, 0);
       // Only replay events AFTER msg:start (meaningful events only)
       const startIdx = events.findIndex(e => e.type === 'msg:start');
       const meaningfulEvents = startIdx >= 0 ? events.slice(startIdx) : events;
