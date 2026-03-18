@@ -395,6 +395,64 @@ export const App: React.FC = () => {
         api.refresh();
         break;
       }
+      case 'docs': {
+        // Extract written/edited files from SSE events in current wave
+        const writtenFiles = new Set<string>();
+        for (const event of sse.events) {
+          if (event.type === 'tool:start') {
+            const name = (event.data.name as string) ?? '';
+            const input = event.data.input as Record<string, unknown> | undefined;
+            if (['Write', 'Edit', 'NotebookEdit'].includes(name) && input?.file_path) {
+              writtenFiles.add(String(input.file_path));
+            }
+          }
+        }
+        if (writtenFiles.size === 0) {
+          addSystemMessage('No files created/modified in this wave.', 'gray');
+        } else {
+          addSystemMessage(`Files in this wave (${writtenFiles.size}):`, 'cyan');
+          for (const f of writtenFiles) {
+            const short = f.split('/').slice(-3).join('/');
+            addSystemMessage(`  ${short}`, 'white');
+          }
+          addSystemMessage('  /read <path> to preview  |  /open <path> to edit', 'gray');
+        }
+        break;
+      }
+      case 'read_file': {
+        const filePath = result.message;
+        try {
+          const content = await import('node:fs').then(fs =>
+            fs.readFileSync(filePath, 'utf-8')
+          );
+          const lines = content.split('\n');
+          const preview = lines.slice(0, 30);
+          addSystemMessage(`\u2500\u2500 ${filePath.split('/').slice(-2).join('/')} \u2500\u2500`, 'cyan');
+          for (const line of preview) {
+            addSystemMessage(line, 'white');
+          }
+          if (lines.length > 30) {
+            addSystemMessage(`  ... +${lines.length - 30} more lines (/open to see full)`, 'gray');
+          }
+          addSystemMessage('\u2500'.repeat(40), 'gray');
+        } catch (err) {
+          addSystemMessage(`Cannot read: ${err instanceof Error ? err.message : 'unknown'}`, 'red');
+        }
+        break;
+      }
+      case 'open_file': {
+        const filePath = result.message;
+        const editor = process.env.EDITOR || process.env.VISUAL || 'less';
+        try {
+          const { execSync } = await import('node:child_process');
+          execSync(`${editor} "${filePath}"`, { stdio: 'inherit' });
+          addSystemMessage(`Opened: ${filePath}`, 'green');
+        } catch {
+          // Fallback to /read
+          addSystemMessage(`Cannot open with ${editor}. Use /read instead.`, 'yellow');
+        }
+        break;
+      }
       case 'error':
         addSystemMessage(result.message, 'red');
         break;
@@ -404,11 +462,13 @@ export const App: React.FC = () => {
         addSystemMessage('  /new [text]          Create new wave', 'white');
         addSystemMessage('  /waves               List all waves', 'white');
         addSystemMessage('  /focus <n>           Switch to wave n', 'white');
+        addSystemMessage('  /docs                Files created in this wave', 'white');
+        addSystemMessage('  /read <path>         Preview file content', 'white');
+        addSystemMessage('  /open <path>         Open in $EDITOR', 'white');
         addSystemMessage('  /agents              Wave \u2192 Role \u2192 Session tree', 'white');
         addSystemMessage('  /sessions            Sessions + ports (kill/cleanup)', 'white');
         addSystemMessage('  /kill <id>           Kill a session', 'white');
         addSystemMessage('  /cleanup             Remove dead sessions', 'white');
-        addSystemMessage('  /status              Current status', 'white');
         addSystemMessage('  /help                This help', 'white');
         addSystemMessage('  /quit                Exit', 'white');
         addSystemMessage('Keys: [Tab] team panel  [1-9] wave  [Esc] back  [Ctrl+C] quit', 'gray');

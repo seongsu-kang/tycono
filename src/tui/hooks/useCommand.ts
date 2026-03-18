@@ -16,7 +16,7 @@
  */
 
 import { useCallback } from 'react';
-import { dispatchWave, sendDirective, fetchJson, killSession, cleanupSessions } from '../api';
+import { dispatchWave, sendDirective, fetchJson, killSession, cleanupSessions, fetchActiveSessions } from '../api';
 
 export interface WaveInfo {
   waveId: string;
@@ -25,7 +25,7 @@ export interface WaveInfo {
 }
 
 export interface CommandResult {
-  type: 'success' | 'error' | 'info' | 'wave_started' | 'directive_sent' | 'stopped' | 'quit' | 'help' | 'panel' | 'waves_list' | 'focus_changed' | 'agents' | 'ports' | 'sessions' | 'cleanup';
+  type: 'success' | 'error' | 'info' | 'wave_started' | 'directive_sent' | 'stopped' | 'quit' | 'help' | 'panel' | 'waves_list' | 'focus_changed' | 'agents' | 'ports' | 'sessions' | 'cleanup' | 'docs' | 'read_file' | 'open_file';
   message: string;
   waveId?: string;
 }
@@ -121,6 +121,19 @@ export function useCommand(options: UseCommandOptions) {
           } catch (err) {
             return { type: 'error', message: `Cleanup failed: ${err instanceof Error ? err.message : 'unknown'}` };
           }
+        }
+
+        case 'docs':
+          return { type: 'docs', message: '__docs__' };
+
+        case 'read': {
+          if (!args) return { type: 'error', message: 'Usage: /read <file_path>' };
+          return { type: 'read_file', message: args.trim() };
+        }
+
+        case 'open': {
+          if (!args) return { type: 'error', message: 'Usage: /open <file_path>' };
+          return { type: 'open_file', message: args.trim() };
         }
 
         case 'status':
