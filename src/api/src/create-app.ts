@@ -60,14 +60,22 @@ export function createApp() {
 
   // Debug: memory stats for leak detection
   app.get('/api/debug/memory', (_req, res) => {
-    const { executionManager } = require('./services/execution-manager.js');
-    const { listSessions } = require('./services/session-store.js');
     const mem = process.memoryUsage();
-    res.json({
-      heap: { used: Math.round(mem.heapUsed / 1024 / 1024), total: Math.round(mem.heapTotal / 1024 / 1024) },
-      rss: Math.round(mem.rss / 1024 / 1024),
-      execManager: executionManager.getMemoryStats(),
-      sessions: listSessions().length,
+    // Import dynamically to avoid circular deps
+    import('./services/execution-manager.js').then(({ executionManager }) => {
+      import('./services/session-store.js').then(({ listSessions }) => {
+        res.json({
+          heap: { used: Math.round(mem.heapUsed / 1024 / 1024), total: Math.round(mem.heapTotal / 1024 / 1024) },
+          rss: Math.round(mem.rss / 1024 / 1024),
+          execManager: executionManager.getMemoryStats(),
+          sessions: listSessions().length,
+        });
+      });
+    }).catch(() => {
+      res.json({
+        heap: { used: Math.round(mem.heapUsed / 1024 / 1024), total: Math.round(mem.heapTotal / 1024 / 1024) },
+        rss: Math.round(mem.rss / 1024 / 1024),
+      });
     });
   });
 
