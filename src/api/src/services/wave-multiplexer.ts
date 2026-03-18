@@ -83,19 +83,30 @@ class WaveMultiplexer {
 
     const sessions = this.waveSessions.get(waveId);
     if (sessions) {
-      // Phase 1: Replay all historical events sorted by timestamp
-      const allEvents: { event: ActivityEvent; sessionId: string }[] = [];
+      // Phase 1: Replay recent historical events (capped to prevent OOM)
+      // Only replay from recent sessions (last 5) to avoid 120-session waves killing memory
+      const MAX_REPLAY_SESSIONS = 5;
+      const MAX_REPLAY_EVENTS = 200;
 
-      for (const [, exec] of sessions) {
+      const sessionList = Array.from(sessions.values());
+      const recentSessions = sessionList.slice(-MAX_REPLAY_SESSIONS);
+
+      const allEvents: { event: ActivityEvent; sessionId: string }[] = [];
+      for (const exec of recentSessions) {
         const events = ActivityStream.readFrom(exec.sessionId, 0);
-        for (const event of events) {
+        // Take last N events per session
+        const recent = events.slice(-50);
+        for (const event of recent) {
           allEvents.push({ event, sessionId: exec.sessionId });
         }
       }
 
       allEvents.sort((a, b) => a.event.ts.localeCompare(b.event.ts));
 
-      for (const item of allEvents) {
+      // Cap total replay events
+      const replayEvents = allEvents.slice(-MAX_REPLAY_EVENTS);
+
+      for (const item of replayEvents) {
         const waveSeq = client.waveSeq++;
         if (waveSeq < fromWaveSeq) continue;
 
@@ -111,8 +122,10 @@ class WaveMultiplexer {
         } as WaveStreamEnvelope);
       }
 
+      console.log(`[WaveMux] Replayed ${replayEvents.length} events (${sessionList.length} total sessions, ${recentSessions.length} replayed)`);
+
       // Phase 2: Subscribe to live events for active sessions
-      for (const [, exec] of sessions) {
+      for (const [, exec] of sessionList) {
         if (exec.status === 'running' || exec.status === 'awaiting_input') {
           this.subscribeSessionToClient(waveId, client, exec, true);
         }
@@ -137,7 +150,8 @@ class WaveMultiplexer {
       });
 
       const events = ActivityStream.readFrom(execution.sessionId, 0);
-      for (const event of events) {
+      const recentEvents = events.slice(-50); // Cap replay per session
+      for (const event of recentEvents) {
         const key = `${event.roleId}:${event.seq}`;
         if (client.sentEvents.has(key)) continue;
         client.sentEvents.add(key);
