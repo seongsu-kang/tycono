@@ -52,6 +52,9 @@ export async function fetchJson<T>(path: string, options?: { method?: string; bo
       },
     );
     req.on('error', reject);
+    req.setTimeout(10_000, () => {
+      req.destroy(new Error(`Timeout: ${path}`));
+    });
     if (bodyStr) req.write(bodyStr);
     req.end();
   });
