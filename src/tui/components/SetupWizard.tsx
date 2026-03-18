@@ -35,14 +35,19 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
   const [resultRoles, setResultRoles] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Load team templates on mount
+  // Load team templates — delay to let Ink's first render complete
+  // Without delay, Ink's synchronous render blocks the event loop
+  // and http response callbacks don't fire → timeout
   useEffect(() => {
-    fetchSetupTeams()
-      .then(setTeams)
-      .catch((err) => {
-        setErrorMsg(`Failed to load team templates: ${err.message}`);
-        setStep('error');
-      });
+    const timer = setTimeout(() => {
+      fetchSetupTeams()
+        .then(setTeams)
+        .catch((err) => {
+          setErrorMsg(`Failed to load team templates: ${err.message}`);
+          setStep('error');
+        });
+    }, 500);
+    return () => clearTimeout(timer);
   }, []);
 
   // Esc to cancel (only during input steps)
