@@ -144,3 +144,35 @@ export function eventTypeToMessageStatus(eventType: ActivityEventType): MessageS
 
 /** TeamStatus — Role별 현재 상태 + 작업 내용 (context-assembler, runner에서 공유) */
 export type TeamStatus = Record<string, { status: RoleStatus; task?: string }>;
+
+/* ═══════════════════════════════════════════════
+ *  Preset — Company template specification
+ * ═══════════════════════════════════════════════ */
+
+export interface PresetSpec {
+  spec: 'preset/v1';
+  id: string;
+  name: string;
+  tagline?: string;
+  version: string;
+  description?: string;
+  author?: {
+    id: string;
+    name: string;
+    verified?: boolean;
+  };
+  category?: 'engineering' | 'business' | 'creative' | 'operations';
+  industry?: string;
+  stage?: 'idea' | 'mvp' | 'growth' | 'scale';
+  roles: string[];
+  knowledge_docs?: number;
+  skills_count?: number;
+  price?: number;
+  license?: string;
+  tags?: string[];
+  languages?: string[];
+}
+
+export interface WaveMetadata {
+  presetId?: string;
+}

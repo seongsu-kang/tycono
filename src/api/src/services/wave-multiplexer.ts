@@ -83,28 +83,32 @@ class WaveMultiplexer {
 
     const sessions = this.waveSessions.get(waveId);
     if (sessions) {
-      // Phase 1: Replay recent historical events (capped to prevent OOM)
-      // Only replay from recent sessions (last 5) to avoid 120-session waves killing memory
-      const MAX_REPLAY_SESSIONS = 5;
-      const MAX_REPLAY_EVENTS = 200;
+      // Phase 1: Replay historical events (meaning-based filtering to prevent OOM)
+      // Only replay from active sessions (running/awaiting_input)
+      // Safety cap: 1000 events (normal operation should never reach this)
+      const MAX_SAFETY_CAP = 1000;
 
       const sessionList = Array.from(sessions.values());
-      const recentSessions = sessionList.slice(-MAX_REPLAY_SESSIONS);
+      const activeSessions = sessionList.filter(
+        exec => exec.status === 'running' || exec.status === 'awaiting_input'
+      );
 
       const allEvents: { event: ActivityEvent; sessionId: string }[] = [];
-      for (const exec of recentSessions) {
+      for (const exec of activeSessions) {
         const events = ActivityStream.readFrom(exec.sessionId, 0);
-        // Take last N events per session
-        const recent = events.slice(-50);
-        for (const event of recent) {
+        // Only replay events AFTER msg:start (meaningful events only)
+        const startIdx = events.findIndex(e => e.type === 'msg:start');
+        const meaningfulEvents = startIdx >= 0 ? events.slice(startIdx) : events;
+
+        for (const event of meaningfulEvents) {
           allEvents.push({ event, sessionId: exec.sessionId });
         }
       }
 
       allEvents.sort((a, b) => a.event.ts.localeCompare(b.event.ts));
 
-      // Cap total replay events
-      const replayEvents = allEvents.slice(-MAX_REPLAY_EVENTS);
+      // Safety cap (should never hit in normal operation)
+      const replayEvents = allEvents.slice(-MAX_SAFETY_CAP);
 
       for (const item of replayEvents) {
         const waveSeq = client.waveSeq++;
@@ -122,13 +126,11 @@ class WaveMultiplexer {
         } as WaveStreamEnvelope);
       }
 
-      console.log(`[WaveMux] Replayed ${replayEvents.length} events (${sessionList.length} total sessions, ${recentSessions.length} replayed)`);
+      console.log(`[WaveMux] Replayed ${replayEvents.length} events (${sessionList.length} total, ${activeSessions.length} active)`);
 
       // Phase 2: Subscribe to live events for active sessions
-      for (const exec of sessionList) {
-        if (exec.status === 'running' || exec.status === 'awaiting_input') {
-          this.subscribeSessionToClient(waveId, client, exec, true);
-        }
+      for (const exec of activeSessions) {
+        this.subscribeSessionToClient(waveId, client, exec, true);
       }
     }
 
@@ -150,8 +152,11 @@ class WaveMultiplexer {
       });
 
       const events = ActivityStream.readFrom(execution.sessionId, 0);
-      const recentEvents = events.slice(-50); // Cap replay per session
-      for (const event of recentEvents) {
+      // Only replay events AFTER msg:start (meaningful events only)
+      const startIdx = events.findIndex(e => e.type === 'msg:start');
+      const meaningfulEvents = startIdx >= 0 ? events.slice(startIdx) : events;
+
+      for (const event of meaningfulEvents) {
         const key = `${event.roleId}:${event.seq}`;
         if (client.sentEvents.has(key)) continue;
         client.sentEvents.add(key);
