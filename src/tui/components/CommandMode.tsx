@@ -33,13 +33,19 @@ interface CommandModeProps {
 
 let lineCounter = 0;
 
-/** Filter out only truly internal system prompt fragments */
+/** Filter out internal system prompt fragments and context leakage */
 function isSystemNoise(text: string): boolean {
   const t = text.trim();
   if (!t) return true;
-  // Only filter the injected supervisor system prompt header
+  // Injected supervisor system prompt header
   if (t.startsWith('[CEO Supervisor]') && t.includes('Your Role')) return true;
   if (t.startsWith('\u26D4 AKB Rule:')) return true;
+  // System prompt fragments
+  if (/^##\s*Your Role/i.test(t)) return true;
+  if (t.includes('무엇을 도와드릴까요')) return true;
+  // Conversation context leakage
+  if (t.startsWith('[Previous execution]')) return true;
+  if (/^Tools used:/i.test(t)) return true;
   return false;
 }
 
@@ -157,13 +163,8 @@ export function summarizeEvent(event: SSEEvent, allRoleIds: string[]): StreamLin
     case 'msg:start': {
       const task = ((event.data.task as string) ?? '');
       const cleanTask = task.replace(/\u26D4[^\u26D4]*\u26D4[^"]*/g, '').trim().slice(0, 60);
-      if (isSupervisor) {
-        return {
-          id: ++lineCounter,
-          text: `\u25B6 Supervisor started${cleanTask ? ': ' + cleanTask : ''}`,
-          color: 'cyan',
-        };
-      }
+      // Hide supervisor started message (internal noise)
+      if (isSupervisor) return null;
       return {
         id: ++lineCounter,
         prefix: event.roleId,
@@ -313,7 +314,7 @@ export const CommandMode: React.FC<CommandModeProps> = ({
       setUserInputs(prev => [...prev.slice(-10), {
         id: ++lineCounter,
         text: `> ${trimmed}`,
-        color: 'yellow',
+        color: 'green',
       }]);
       onSubmit(trimmed);
     }
