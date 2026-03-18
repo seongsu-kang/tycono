@@ -219,13 +219,20 @@ async function startServerForTui(): Promise<void> {
   const logFd = fs.openSync(logFile, 'a');
   const logStream = fs.createWriteStream(logFile, { fd: logFd });
   const origStdoutWrite = process.stdout.write.bind(process.stdout);
-  // Redirect console.log/console.error to log file (server output)
-  // But DO NOT intercept process.stdout.write — Ink needs full control
-  const origConsoleLog = console.log;
-  const origConsoleError = console.error;
+  // Redirect ALL non-Ink output to log file.
+  // Ink uses stdout.write with ANSI sequences. Server uses console.log (which calls stdout.write).
+  // We must intercept stdout.write but ALWAYS pass through to real stdout,
+  // just also copy non-Ink output to log file.
+  // The key insight: DON'T BLOCK anything — just copy server output to log file.
+  // Ink can handle interleaved output by re-rendering.
   console.log = (...args: unknown[]) => { logStream.write(args.join(' ') + '\n'); };
   console.error = (...args: unknown[]) => { logStream.write(args.join(' ') + '\n'); };
   console.warn = (...args: unknown[]) => { logStream.write(args.join(' ') + '\n'); };
+  // Also intercept direct stderr.write (used by our debug logging)
+  process.stderr.write = ((chunk: any, ...args: any[]) => {
+    logStream.write(typeof chunk === 'string' ? chunk : chunk.toString());
+    return true;
+  }) as any;
   const origLog = (...args: unknown[]) => origStdoutWrite(args.join(' ') + '\n');
 
   const { createHttpServer } = await import('../src/api/src/create-server.js');

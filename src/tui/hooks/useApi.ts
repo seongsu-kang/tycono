@@ -90,13 +90,10 @@ export function useApi(): ApiState {
 
       setError(null);
       setLoaded(true);
-      process.stderr.write(`[useApi] loaded=true company=${comp ? 'yes' : 'no'}\n`);
     } catch (err) {
       if (mountedRef.current) {
-        const msg = err instanceof Error ? err.message : 'API error';
-        setError(msg);
+        setError(err instanceof Error ? err.message : 'API error');
         setLoaded(true);
-        process.stderr.write(`[useApi] loaded=true (error: ${msg})\n`);
       }
     }
   }, []);
