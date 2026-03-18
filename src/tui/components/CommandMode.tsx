@@ -299,18 +299,21 @@ export const CommandMode: React.FC<CommandModeProps> = ({
   }
 
   // Merge user inputs + system messages + event lines (cap total)
-  const allLines = [...userInputs, ...systemMessages, ...eventLines].slice(-100);
+  const allLines = [...userInputs, ...systemMessages, ...eventLines].slice(-60);
 
-  // Split into committed (scrollback) and live (re-rendered)
-  const newCommitted = allLines.slice(committedRef.current);
-  if (newCommitted.length > 6) {
-    const toCommit = newCommitted.slice(0, -6);
-    committedRef.current += toCommit.length;
+  // Reset committedRef if it exceeds allLines (prevents unbounded growth)
+  if (committedRef.current > allLines.length) {
+    committedRef.current = Math.max(0, allLines.length - 6);
   }
 
-  // Cap committed to prevent Static from holding too many items
-  const rawCommitted = allLines.slice(0, committedRef.current);
-  const committedLines = rawCommitted.length > 50 ? rawCommitted.slice(-50) : rawCommitted;
+  // Commit older lines to Static scrollback, keep last 6 as live
+  const newCount = allLines.length - committedRef.current;
+  if (newCount > 6) {
+    committedRef.current = allLines.length - 6;
+  }
+
+  // Only send last 20 committed items to Static (prevent Ink memory growth)
+  const committedLines = allLines.slice(Math.max(0, committedRef.current - 20), committedRef.current);
   const liveLines = allLines.slice(committedRef.current);
 
   // Quick bar navigation

@@ -118,7 +118,10 @@ export function useSSE(waveId: string | null): SSEState {
           reconnectAttemptRef.current = 0;
 
           // Add to batch buffer (don't trigger React re-render yet)
-          batchRef.current.push(trimEvent(event));
+          // Cap batch to prevent unbounded growth if flush is delayed
+          if (batchRef.current.length < 50) {
+            batchRef.current.push(trimEvent(event));
+          }
 
           // Schedule flush if not already scheduled
           if (!batchTimerRef.current) {
