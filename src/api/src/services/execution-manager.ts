@@ -607,7 +607,7 @@ class ExecutionManager {
     // Mark session as done in session-store (persisted to file)
     // Skip CEO supervisor sessions — they stay active for wave lifecycle
     if (session.roleId !== 'ceo' || session.source !== 'wave') {
-      updateSession(execution.sessionId, { status: 'done' });
+      updateSession(execution.sessionId, { status: 'closed' });
     }
   }
 

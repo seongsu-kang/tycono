@@ -312,6 +312,7 @@ export function saveCompletedWave(waveId: string, directive: string): { ok: bool
       roles: rolesData,
       waveId,
       sessionIds: allSessionIds,
+      // Note: presetId is added by supervisor-heartbeat if present
     };
     fs.writeFileSync(jsonPath, JSON.stringify(waveJson, null, 2), 'utf-8');
 

@@ -41,6 +41,7 @@ export class ActivityStream {
   private subscribers = new Set<ActivitySubscriber>();
   private filePath: string;
   private closed = false;
+  private lastActivityTs = Date.now();
 
   constructor(sessionId: string, roleId: string, parentSessionId?: string, traceId?: string) {
     this.sessionId = sessionId;
@@ -69,6 +70,8 @@ export class ActivityStream {
 
   /** Append event to JSONL + push to live subscribers */
   emit(type: ActivityEventType, roleId: string, data: Record<string, unknown>): ActivityEvent {
+    this.lastActivityTs = Date.now();
+
     const event: ActivityEvent = {
       seq: this.seq++,
       ts: new Date().toISOString(),
@@ -124,8 +127,24 @@ export class ActivityStream {
   /** Cache of active streams by sessionId */
   private static activeStreams = new Map<string, ActivityStream>();
 
+  /** Prune inactive streams (closed + no activity for 5 minutes) */
+  private static pruneInactiveStreams(): void {
+    const INACTIVE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+    const now = Date.now();
+
+    for (const [sessionId, stream] of ActivityStream.activeStreams.entries()) {
+      if (stream.isClosed && (now - stream.lastActivityTs) > INACTIVE_THRESHOLD_MS) {
+        ActivityStream.activeStreams.delete(sessionId);
+        console.log(`[ActivityStream] Pruned inactive stream: ${sessionId}`);
+      }
+    }
+  }
+
   /** Get or create an ActivityStream for a session. Reuses existing stream for continuations. */
   static getOrCreate(sessionId: string, roleId: string, parentSessionId?: string, traceId?: string): ActivityStream {
+    // Prune inactive streams before creating new ones
+    ActivityStream.pruneInactiveStreams();
+
     const existing = ActivityStream.activeStreams.get(sessionId);
     if (existing && !existing.isClosed) {
       return existing;

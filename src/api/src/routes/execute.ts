@@ -21,6 +21,7 @@ import { earnCoinsInternal } from './coins.js';
 import { appendFollowUpToWave } from '../services/wave-tracker.js';
 import { waveMultiplexer } from '../services/wave-multiplexer.js';
 import { supervisorHeartbeat } from '../services/supervisor-heartbeat.js';
+import { loadPreset, getPresetKnowledge } from '../services/preset-loader.js';
 
 /* ─── Auto-attach child executions to wave multiplexer ── */
 executionManager.onExecutionCreated((exec) => {
@@ -206,6 +207,7 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
   const parentSessionId = body.parentSessionId as string | undefined;
   const waveId = body.waveId as string | undefined;
   const attachments = body.attachments as ImageAttachment[] | undefined;
+  const presetId = body.presetId as string | undefined;
 
   if (type === 'wave') {
     // directive가 없으면 idle 상태로 시작 (empty wave)
@@ -213,6 +215,18 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
 
     const targetRoles = body.targetRoles as string[] | undefined;
     const continuous = body.continuous === true;
+
+    // Load preset if specified
+    let presetKnowledge: string[] | undefined;
+    if (presetId) {
+      const preset = loadPreset(presetId);
+      if (preset) {
+        presetKnowledge = getPresetKnowledge(presetId);
+        console.log(`[StartJob] Wave with preset: ${preset.name} (${presetKnowledge.length} knowledge docs)`);
+      } else {
+        console.warn(`[StartJob] Preset ${presetId} not found, continuing without preset`);
+      }
+    }
 
     // Always use supervisor mode — CEO supervises C-Levels who supervise members
     {
@@ -228,11 +242,13 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
         return;
       }
 
+      // TODO: Store presetId in wave metadata for future use
       jsonResponse(res, 200, {
         waveId: state.waveId,
         supervisorSessionId: state.supervisorSessionId,
         mode: 'supervisor',
         directive: actualDirective,
+        ...(presetId && { presetId }),
       });
       return;
     }

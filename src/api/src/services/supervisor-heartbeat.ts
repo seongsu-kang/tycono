@@ -34,12 +34,14 @@ interface SupervisorState {
   pendingDirectives: PendingDirective[];
   pendingQuestions: PendingQuestion[];
   createdAt: string;
+  presetId?: string;
 }
 
 export interface PendingDirective {
   id: string;
   text: string;
   createdAt: string;
+  presetId?: string;
   delivered: boolean;
 }
 
@@ -49,6 +51,7 @@ export interface PendingQuestion {
   fromRole: string;
   context: string;
   createdAt: string;
+  presetId?: string;
   answer?: string;
   answeredAt?: string;
 }
@@ -63,7 +66,7 @@ class SupervisorHeartbeat {
    * This creates a supervisor session and starts an execution.
    * If the execution dies, it auto-restarts (heartbeat).
    */
-  start(waveId: string, directive: string, targetRoles?: string[], continuous = false): SupervisorState {
+  start(waveId: string, directive: string, targetRoles?: string[], continuous = false, presetId?: string): SupervisorState {
     // Check if supervisor already running for this wave
     const existing = this.supervisors.get(waveId);
     if (existing && (existing.status === 'running' || existing.status === 'starting')) {
@@ -85,6 +88,7 @@ class SupervisorHeartbeat {
       pendingDirectives: [],
       pendingQuestions: [],
       createdAt: new Date().toISOString(),
+      presetId,
     };
 
     this.supervisors.set(waveId, state);

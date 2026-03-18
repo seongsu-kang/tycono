@@ -22,12 +22,12 @@ console.log(`[STARTUP] Engine: ${config.engine}, API key: ${config.apiKey ? 'set
       const tail = events.slice(-5);
       const isDone = tail.some(e => e.type === 'msg:done' || e.type === 'msg:error');
       if (isDone) {
-        updateSession(ses.id, { status: 'done' });
+        updateSession(ses.id, { status: 'closed' });
         orphaned++;
         continue;
       }
     }
-    updateSession(ses.id, { status: 'interrupted' as any });
+    updateSession(ses.id, { status: 'closed' });
     orphaned++;
   }
   if (orphaned > 0) {
