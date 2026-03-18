@@ -51,25 +51,21 @@ export function handleExecRequest(req: IncomingMessage, res: ServerResponse): vo
   // ── /api/waves/active — restore active waves after refresh ──
   if (method === 'GET' && url === '/api/waves/active') {
     // Recovery: rebuild wave→session mapping from session-store if lost
+    // Only recover ACTIVE sessions to prevent OOM on large datasets (140+ sessions)
     const waves = waveMultiplexer.getActiveWaves();
     if (waves.length === 0) {
       const allSessions = listSessions();
-      const waveGroups = new Map<string, string[]>();
+      let recovered = 0;
       for (const ses of allSessions) {
-        if (ses.waveId) {
-          if (!waveGroups.has(ses.waveId)) waveGroups.set(ses.waveId, []);
-          waveGroups.get(ses.waveId)!.push(ses.id);
+        if (!ses.waveId || ses.status !== 'active') continue;
+        const exec = executionManager.getActiveExecution(ses.id);
+        if (exec) {
+          waveMultiplexer.registerSession(ses.waveId, exec);
+          recovered++;
         }
       }
-      // BUG-W03 fix: register ALL wave sessions (including completed) for tree display
-      for (const [wid, sids] of waveGroups) {
-        for (const sid of sids) {
-          // getActiveExecution falls back to stream recovery for completed sessions
-          const exec = executionManager.getActiveExecution(sid);
-          if (exec) {
-            waveMultiplexer.registerSession(wid, exec);
-          }
-        }
+      if (recovered > 0) {
+        console.log(`[WaveRecovery] Recovered ${recovered} active sessions`);
       }
     }
     jsonResponse(res, 200, { waves: waveMultiplexer.getActiveWaves() });
@@ -480,13 +476,11 @@ function handleWaveStream(waveId: string, url: string, res: ServerResponse, req:
 
   let sessionIds = waveMultiplexer.getWaveSessionIds(waveId);
 
-  // Recovery: if wave→session mapping was lost (e.g. server restart),
-  // rebuild from session-store (sessions have waveId) + executionManager
+  // Recovery: only recover ACTIVE sessions for this wave (not all 140)
   if (sessionIds.length === 0) {
     const allSessions = listSessions();
-    const waveSessions = allSessions.filter(s => s.waveId === waveId);
+    const waveSessions = allSessions.filter(s => s.waveId === waveId && s.status === 'active');
     for (const ses of waveSessions) {
-      // getActiveExecution recovers from stream files for completed sessions too
       const exec = executionManager.getActiveExecution(ses.id);
       if (exec) {
         waveMultiplexer.registerSession(waveId, exec);
@@ -763,25 +757,26 @@ function handleStatus(res: ServerResponse): void {
     );
 
     const recovered: typeof activeExecs = [];
-    for (const ses of activeSessions) {
-      // Check activity-stream for actual running state
+    // Limit recovery scan to prevent OOM on large session stores
+    const MAX_RECOVERY_SCAN = 20;
+    const recentActive = activeSessions.slice(-MAX_RECOVERY_SCAN);
+
+    for (const ses of recentActive) {
       if (!ActivityStream.exists(ses.id)) continue;
+      // Only read last few events to check done/error (not entire stream)
       const events = ActivityStream.readFrom(ses.id, 0);
       if (events.length === 0) continue;
 
+      // Check last 5 events for done/error (optimization: don't scan entire file)
+      const tail = events.slice(-5);
+      const isDone = tail.some(e => e.type === 'msg:done' || e.type === 'msg:error');
+      if (isDone) continue;
+
       const startEvent = events.find(e => e.type === 'msg:start');
-      if (!startEvent) continue;
-
-      const doneEvent = events.find(e => e.type === 'msg:done');
-      const errorEvent = events.find(e => e.type === 'msg:error');
-
-      // Only include sessions that haven't finished yet
-      if (doneEvent || errorEvent) continue;
-
-      const task = (startEvent.data?.task as string) ?? ses.title ?? '';
+      const task = (startEvent?.data?.task as string) ?? ses.title ?? '';
       recovered.push({
         id: `recovered-${ses.id}`,
-        type: (startEvent.data?.type as string ?? 'assign') as 'assign' | 'wave' | 'consult',
+        type: (startEvent?.data?.type as string ?? 'assign') as 'assign' | 'wave' | 'consult',
         roleId: ses.roleId,
         task,
         status: 'running',
