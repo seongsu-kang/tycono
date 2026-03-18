@@ -275,7 +275,7 @@ function StreamLineRow({ line }: { line: StreamLine }) {
   );
 }
 
-const QUICK_ACTIONS = ['waves', 'agents', 'sessions', 'docs'] as const;
+const QUICK_ACTIONS = ['waves', 'agents', 'sessions', 'ports', 'docs'] as const;
 type QuickAction = typeof QUICK_ACTIONS[number];
 
 export const CommandMode: React.FC<CommandModeProps> = ({
