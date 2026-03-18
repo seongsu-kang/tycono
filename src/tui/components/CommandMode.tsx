@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useCallback, useRef } from 'react';
-import { Box, Text, Static } from 'ink';
+import { Box, Text, Static, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import type { SSEEvent } from '../api';
 import { getRoleColor } from '../theme';
@@ -29,6 +29,7 @@ interface CommandModeProps {
   allRoleIds: string[];
   systemMessages: StreamLine[];
   onSubmit: (input: string) => void;
+  onQuickAction?: (action: string) => void;
 }
 
 let lineCounter = 0;
@@ -274,16 +275,21 @@ function StreamLineRow({ line }: { line: StreamLine }) {
   );
 }
 
+const QUICK_ACTIONS = ['waves', 'agents', 'sessions', 'docs'] as const;
+type QuickAction = typeof QUICK_ACTIONS[number];
+
 export const CommandMode: React.FC<CommandModeProps> = ({
   events,
   allRoleIds,
   systemMessages,
   onSubmit,
+  onQuickAction,
 }) => {
   const [input, setInput] = useState('');
   const committedRef = useRef(0);
-  // Immediately committed user inputs (shown in Static before systemMessages arrive)
   const [userInputs, setUserInputs] = useState<StreamLine[]>([]);
+  const [quickBarActive, setQuickBarActive] = useState(false);
+  const [quickBarIndex, setQuickBarIndex] = useState(0);
 
   // Convert events to stream lines
   const eventLines: StreamLine[] = [];
@@ -306,6 +312,36 @@ export const CommandMode: React.FC<CommandModeProps> = ({
   const rawCommitted = allLines.slice(0, committedRef.current);
   const committedLines = rawCommitted.length > 50 ? rawCommitted.slice(-50) : rawCommitted;
   const liveLines = allLines.slice(committedRef.current);
+
+  // Quick bar navigation
+  useInput((ch, key) => {
+    if (quickBarActive) {
+      if (key.upArrow || key.escape) {
+        setQuickBarActive(false);
+        return;
+      }
+      if (key.leftArrow) {
+        setQuickBarIndex(i => Math.max(0, i - 1));
+        return;
+      }
+      if (key.rightArrow) {
+        setQuickBarIndex(i => Math.min(QUICK_ACTIONS.length - 1, i + 1));
+        return;
+      }
+      if (key.return) {
+        const action = QUICK_ACTIONS[quickBarIndex];
+        setQuickBarActive(false);
+        onQuickAction?.(action);
+        return;
+      }
+    } else {
+      // Arrow down with empty input → activate quick bar
+      if (key.downArrow && !input) {
+        setQuickBarActive(true);
+        setQuickBarIndex(0);
+      }
+    }
+  });
 
   const handleSubmit = useCallback((value: string) => {
     const trimmed = value.trim();
@@ -344,14 +380,33 @@ export const CommandMode: React.FC<CommandModeProps> = ({
 
       {/* Input */}
       <Box paddingX={0} marginTop={0}>
-        <Text color="yellow" bold>&gt; </Text>
+        <Text color={quickBarActive ? 'gray' : 'yellow'} bold>&gt; </Text>
         <TextInput
           value={input}
           onChange={setInput}
           onSubmit={handleSubmit}
           placeholder=""
+          focus={!quickBarActive}
         />
       </Box>
+
+      {/* Quick action bar — shown when arrow down from input */}
+      {quickBarActive && (
+        <Box paddingX={0} marginTop={0}>
+          {QUICK_ACTIONS.map((action, i) => (
+            <Box key={action} marginRight={1}>
+              <Text
+                color={i === quickBarIndex ? 'cyan' : 'gray'}
+                bold={i === quickBarIndex}
+                inverse={i === quickBarIndex}
+              >
+                {` ${action} `}
+              </Text>
+            </Box>
+          ))}
+          <Text color="gray" dimColor> \u2190\u2192 select  Enter open  \u2191 back</Text>
+        </Box>
+      )}
     </Box>
   );
 };

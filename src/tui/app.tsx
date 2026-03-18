@@ -605,6 +605,9 @@ export const App: React.FC = () => {
         allRoleIds={flatRoleIds}
         systemMessages={systemMessages}
         onSubmit={handleCommandSubmit}
+        onQuickAction={(action) => {
+          handleCommandSubmit(`/${action}`);
+        }}
       />
       <StatusBar
         companyName={api.company?.name ?? 'Loading...'}
