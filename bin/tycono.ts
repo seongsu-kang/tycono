@@ -219,43 +219,67 @@ async function startServerForTui(): Promise<void> {
   const logFd = fs.openSync(logFile, 'a');
   const logStream = fs.createWriteStream(logFile, { fd: logFd });
   const origStdoutWrite = process.stdout.write.bind(process.stdout);
-  // Redirect ALL non-Ink output to log file.
-  // Ink uses stdout.write with ANSI sequences. Server uses console.log (which calls stdout.write).
-  // We must intercept stdout.write but ALWAYS pass through to real stdout,
-  // just also copy non-Ink output to log file.
-  // The key insight: DON'T BLOCK anything — just copy server output to log file.
-  // Ink can handle interleaved output by re-rendering.
-  console.log = (...args: unknown[]) => { logStream.write(args.join(' ') + '\n'); };
-  console.error = (...args: unknown[]) => { logStream.write(args.join(' ') + '\n'); };
-  console.warn = (...args: unknown[]) => { logStream.write(args.join(' ') + '\n'); };
-  // Also intercept direct stderr.write (used by our debug logging)
-  process.stderr.write = ((chunk: any, ...args: any[]) => {
-    logStream.write(typeof chunk === 'string' ? chunk : chunk.toString());
-    return true;
-  }) as any;
   const origLog = (...args: unknown[]) => origStdoutWrite(args.join(' ') + '\n');
 
-  const { createHttpServer } = await import('../src/api/src/create-server.js');
-  const server = createHttpServer();
+  // Start API server as a CHILD PROCESS to isolate stdout completely
+  // This prevents server console.log from corrupting Ink's frame buffer
+  const { fork } = await import('node:child_process');
+  const serverScript = path.resolve(__dirname, '..', 'src', 'api', 'src', 'server.ts');
 
-  const host = process.env.HOST || '0.0.0.0';
-
-  await new Promise<void>((resolve) => {
-    server.listen(port, host, () => resolve());
+  const child = fork(serverScript, [], {
+    execArgv: ['--import', 'tsx'],
+    env: {
+      ...process.env,
+      PORT: String(port),
+      COMPANY_ROOT: process.env.COMPANY_ROOT,
+    },
+    stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
   });
+
+  // Redirect child stdout/stderr to log file
+  child.stdout?.on('data', (data: Buffer) => { logStream.write(data); });
+  child.stderr?.on('data', (data: Buffer) => { logStream.write(data); });
+
+  // Wait for server to be ready (poll health endpoint)
+  const waitForServer = async () => {
+    const http = await import('node:http');
+    for (let i = 0; i < 30; i++) {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const req = http.get(`http://localhost:${port}/api/health`, (res) => {
+            res.resume();
+            resolve();
+          });
+          req.on('error', reject);
+          req.setTimeout(1000, () => { req.destroy(); reject(new Error('timeout')); });
+        });
+        return true;
+      } catch {
+        await new Promise(r => setTimeout(r, 500));
+      }
+    }
+    return false;
+  };
+
+  const serverReady = await waitForServer();
+  if (!serverReady) {
+    origLog('  Failed to start API server. Check logs:', logFile);
+    process.exit(1);
+  }
 
   origLog(`  API server started on port ${port}`);
   origLog(`  Logs: ${logFile}`);
 
-  // Graceful shutdown
+  // Graceful shutdown — kill child server
   const shutdown = () => {
-    server.close(() => process.exit(0));
-    setTimeout(() => process.exit(1), 5000);
+    child.kill();
+    process.exit(0);
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+  child.on('exit', () => { process.exit(0); });
 
-  // Start TUI
+  // Start TUI — clean stdout, no server interference
   const { startTui } = await import('../src/tui/index.tsx');
   await startTui({ port });
 }
