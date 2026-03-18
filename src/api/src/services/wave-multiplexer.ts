@@ -125,7 +125,7 @@ class WaveMultiplexer {
       console.log(`[WaveMux] Replayed ${replayEvents.length} events (${sessionList.length} total sessions, ${recentSessions.length} replayed)`);
 
       // Phase 2: Subscribe to live events for active sessions
-      for (const [, exec] of sessionList) {
+      for (const exec of sessionList) {
         if (exec.status === 'running' || exec.status === 'awaiting_input') {
           this.subscribeSessionToClient(waveId, client, exec, true);
         }
