@@ -16,7 +16,7 @@
  */
 
 import { useCallback } from 'react';
-import { dispatchWave, sendDirective, fetchJson } from '../api';
+import { dispatchWave, sendDirective, fetchJson, killSession, cleanupSessions } from '../api';
 
 export interface WaveInfo {
   waveId: string;
@@ -25,7 +25,7 @@ export interface WaveInfo {
 }
 
 export interface CommandResult {
-  type: 'success' | 'error' | 'info' | 'wave_started' | 'directive_sent' | 'stopped' | 'quit' | 'help' | 'panel' | 'waves_list' | 'focus_changed' | 'agents' | 'ports';
+  type: 'success' | 'error' | 'info' | 'wave_started' | 'directive_sent' | 'stopped' | 'quit' | 'help' | 'panel' | 'waves_list' | 'focus_changed' | 'agents' | 'ports' | 'sessions' | 'cleanup';
   message: string;
   waveId?: string;
 }
@@ -98,6 +98,30 @@ export function useCommand(options: UseCommandOptions) {
 
         case 'ports':
           return { type: 'ports', message: '__ports__' };
+
+        case 'sessions':
+          return { type: 'sessions', message: '__sessions__' };
+
+        case 'kill': {
+          if (!args) {
+            return { type: 'error', message: 'Usage: /kill <sessionId>' };
+          }
+          try {
+            await killSession(args);
+            return { type: 'success', message: `Session ${args} killed` };
+          } catch (err) {
+            return { type: 'error', message: `Kill failed: ${err instanceof Error ? err.message : 'unknown'}` };
+          }
+        }
+
+        case 'cleanup': {
+          try {
+            const result = await cleanupSessions();
+            return { type: 'cleanup', message: `Cleaned ${result.cleaned} dead sessions. ${result.remaining} remaining.` };
+          } catch (err) {
+            return { type: 'error', message: `Cleanup failed: ${err instanceof Error ? err.message : 'unknown'}` };
+          }
+        }
 
         case 'status':
           return { type: 'info', message: '__status__' };

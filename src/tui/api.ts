@@ -180,6 +180,14 @@ export async function fetchActiveSessions(): Promise<ActiveSessionsResponse> {
   return fetchJson<ActiveSessionsResponse>('/api/active-sessions');
 }
 
+export async function killSession(sessionId: string): Promise<{ ok: boolean }> {
+  return fetchJson<{ ok: boolean }>(`/api/active-sessions/${sessionId}`, { method: 'DELETE' });
+}
+
+export async function cleanupSessions(): Promise<{ cleaned: number; remaining: number }> {
+  return fetchJson<{ cleaned: number; remaining: number }>('/api/active-sessions/cleanup', { method: 'POST' });
+}
+
 /* ─── Setup API calls ─── */
 
 export interface TeamTemplate {

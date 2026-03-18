@@ -326,6 +326,28 @@ export const App: React.FC = () => {
         addSystemLines(lines);
         break;
       }
+      case 'sessions': {
+        if (api.activeSessions.length === 0) {
+          addSystemMessage('No active sessions.', 'gray');
+        } else {
+          addSystemMessage(`Sessions (${api.activeSessions.length}):`, 'cyan');
+          for (const s of api.activeSessions) {
+            const alive = s.alive === false ? ' DEAD' : s.pid ? ` PID:${s.pid}` : '';
+            const wave = s.waveId ? ` wave=${String(s.waveId).replace('wave-', 'W')}` : '';
+            addSystemMessage(
+              `  ${s.sessionId.slice(0, 25).padEnd(26)} ${s.roleId.padEnd(12)} API:${s.ports.api} ${s.status}${alive}${wave}`,
+              s.alive === false ? 'red' : s.status === 'active' ? 'green' : 'gray'
+            );
+          }
+          addSystemMessage('  /kill <sessionId> to stop  |  /cleanup to remove dead', 'gray');
+        }
+        break;
+      }
+      case 'cleanup': {
+        addSystemMessage(result.message, 'yellow');
+        api.refresh();
+        break;
+      }
       case 'error':
         addSystemMessage(result.message, 'red');
         break;
@@ -337,6 +359,9 @@ export const App: React.FC = () => {
         addSystemMessage('  /focus <n>           Switch to wave n', 'white');
         addSystemMessage('  /agents              Agent tree + resources', 'white');
         addSystemMessage('  /ports               Port allocations', 'white');
+        addSystemMessage('  /sessions            All sessions (kill/cleanup)', 'white');
+        addSystemMessage('  /kill <id>           Kill a session', 'white');
+        addSystemMessage('  /cleanup             Remove dead sessions', 'white');
         addSystemMessage('  /status              Show current status', 'white');
         addSystemMessage('  /assign <role> <task> Assign task to role', 'white');
         addSystemMessage('  /roles               Org tree (Panel Mode)', 'white');
