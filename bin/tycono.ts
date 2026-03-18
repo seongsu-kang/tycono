@@ -219,19 +219,13 @@ async function startServerForTui(): Promise<void> {
   const logFd = fs.openSync(logFile, 'a');
   const logStream = fs.createWriteStream(logFile, { fd: logFd });
   const origStdoutWrite = process.stdout.write.bind(process.stdout);
-  const origStderrWrite = process.stderr.write.bind(process.stderr);
-  // Intercept all stdout/stderr — only allow Ink's output (ANSI escape sequences)
-  const isInkOutput = (s: string) => s.includes('\x1b[') || s.includes('\x1b(');
-  process.stdout.write = ((chunk: any, ...args: any[]) => {
-    const str = typeof chunk === 'string' ? chunk : chunk.toString();
-    if (isInkOutput(str)) return origStdoutWrite(chunk, ...args);
-    logStream.write(str);
-    return true;
-  }) as any;
-  process.stderr.write = ((chunk: any, ...args: any[]) => {
-    logStream.write(typeof chunk === 'string' ? chunk : chunk.toString());
-    return true;
-  }) as any;
+  // Redirect console.log/console.error to log file (server output)
+  // But DO NOT intercept process.stdout.write — Ink needs full control
+  const origConsoleLog = console.log;
+  const origConsoleError = console.error;
+  console.log = (...args: unknown[]) => { logStream.write(args.join(' ') + '\n'); };
+  console.error = (...args: unknown[]) => { logStream.write(args.join(' ') + '\n'); };
+  console.warn = (...args: unknown[]) => { logStream.write(args.join(' ') + '\n'); };
   const origLog = (...args: unknown[]) => origStdoutWrite(args.join(' ') + '\n');
 
   const { createHttpServer } = await import('../src/api/src/create-server.js');
