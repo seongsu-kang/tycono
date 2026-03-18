@@ -93,6 +93,7 @@ export function useApi(): ApiState {
     } catch (err) {
       if (mountedRef.current) {
         setError(err instanceof Error ? err.message : 'API error');
+        setLoaded(true); // Mark loaded even on error — let app show setup/error
       }
     }
   }, []);
