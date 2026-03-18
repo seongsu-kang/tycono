@@ -237,6 +237,30 @@ async function startServerForTui(): Promise<void> {
   }) as any;
 
   const { createHttpServer } = await import('../src/api/src/create-server.js');
+
+  // Startup orphan scan — mark stale 'active' sessions as interrupted
+  // (server.ts does this for standalone mode, but TUI mode uses create-server directly)
+  try {
+    const { listSessions, updateSession } = await import('../src/api/src/services/session-store.js');
+    const { ActivityStream } = await import('../src/api/src/services/activity-stream.js');
+    let orphaned = 0;
+    for (const ses of listSessions()) {
+      if (ses.status !== 'active') continue;
+      if (ActivityStream.exists(ses.id)) {
+        const events = ActivityStream.readFrom(ses.id, 0);
+        const tail = events.slice(-5);
+        if (tail.some((e: any) => e.type === 'msg:done' || e.type === 'msg:error')) {
+          updateSession(ses.id, { status: 'done' });
+          orphaned++;
+          continue;
+        }
+      }
+      updateSession(ses.id, { status: 'interrupted' as any });
+      orphaned++;
+    }
+    if (orphaned > 0) logStream.write(`[STARTUP] Cleaned ${orphaned} orphaned sessions\n`);
+  } catch { /* ignore if session-store not ready */ }
+
   const server = createHttpServer();
 
   await new Promise<void>((resolve) => {
@@ -246,8 +270,15 @@ async function startServerForTui(): Promise<void> {
   origLog(`  API server started on port ${port}`);
   origLog(`  Logs: ${logFile}`);
 
-  // Graceful shutdown
+  // Graceful shutdown — mark active sessions as interrupted
   const shutdown = () => {
+    try {
+      import('../src/api/src/services/session-store.js').then(({ listSessions, updateSession }) => {
+        for (const ses of listSessions()) {
+          if (ses.status === 'active') updateSession(ses.id, { status: 'interrupted' as any });
+        }
+      }).catch(() => {});
+    } catch {}
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(1), 5000);
   };
