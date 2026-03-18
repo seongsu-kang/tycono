@@ -252,12 +252,6 @@ export function updateSession(id: string, updates: Partial<Pick<Session, 'title'
   session.updatedAt = new Date().toISOString();
   writeImmediate(session);
 
-  // Memory: evict done/interrupted sessions from cache after write
-  // They're persisted to disk and can be re-loaded on demand
-  if (session.status === 'done' || session.status === 'interrupted') {
-    setTimeout(() => { cache.delete(id); }, 30_000);
-  }
-
   return session;
 }
 

@@ -4,9 +4,10 @@ import type { ActiveSession, ActiveSessionsResponse } from '../../types';
 
 interface SessionPanelProps {
   onClose: () => void;
+  onOpenSession?: (roleId: string, sessionId: string) => void;
 }
 
-export default function SessionPanel({ onClose }: SessionPanelProps) {
+export default function SessionPanel({ onClose, onOpenSession }: SessionPanelProps) {
   const [data, setData] = useState<ActiveSessionsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -143,6 +144,7 @@ export default function SessionPanel({ onClose }: SessionPanelProps) {
               removing={removing === s.sessionId}
               onRemove={() => handleRemove(s.sessionId)}
               statusColor="#4FC3F7"
+              onOpen={onOpenSession}
             />
           ))}
         </>
@@ -159,6 +161,7 @@ export default function SessionPanel({ onClose }: SessionPanelProps) {
               removing={removing === s.sessionId}
               onRemove={() => handleRemove(s.sessionId)}
               statusColor="#FFB74D"
+              onOpen={onOpenSession}
             />
           ))}
         </>
@@ -175,6 +178,7 @@ export default function SessionPanel({ onClose }: SessionPanelProps) {
               removing={removing === s.sessionId}
               onRemove={() => handleRemove(s.sessionId)}
               statusColor="#ff6b6b"
+              onOpen={onOpenSession}
             />
           ))}
         </>
@@ -217,9 +221,10 @@ interface SessionRowProps {
   removing: boolean;
   onRemove: () => void;
   statusColor: string;
+  onOpen?: (roleId: string, sessionId: string) => void;
 }
 
-function SessionRow({ session, removing, onRemove, statusColor }: SessionRowProps) {
+function SessionRow({ session, removing, onRemove, statusColor, onOpen }: SessionRowProps) {
   const { ports } = session;
 
   return (
@@ -273,20 +278,18 @@ function SessionRow({ session, removing, onRemove, statusColor }: SessionRowProp
         </div>
 
         <div style={{ display: 'flex', gap: 6, flexShrink: 0, marginLeft: 8 }}>
-          {ports.vite && (
-            <button
-              onClick={() => window.open(`http://localhost:${ports.vite}`, '_blank')}
-              style={{
-                background: 'rgba(100,200,255,0.15)', border: '1px solid rgba(100,200,255,0.2)',
-                color: '#64B5F6', borderRadius: 4, padding: '3px 8px', fontSize: 10,
-                cursor: 'pointer',
-                fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5,
-              }}
-              title={`Open http://localhost:${ports.vite}`}
-            >
-              OPEN
-            </button>
-          )}
+          <button
+            onClick={() => onOpen?.(session.roleId, session.sessionId)}
+            style={{
+              background: 'rgba(100,200,255,0.15)', border: '1px solid rgba(100,200,255,0.2)',
+              color: '#64B5F6', borderRadius: 4, padding: '3px 8px', fontSize: 10,
+              cursor: 'pointer',
+              fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5,
+            }}
+            title="Open session chat"
+          >
+            OPEN
+          </button>
           <button
             onClick={onRemove}
             disabled={removing}

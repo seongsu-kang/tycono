@@ -267,6 +267,39 @@ body {
   animation: wave-pulse 3s ease-in-out infinite;
 }
 
+/* React Flow — dark theme overrides */
+.org-rf-container .react-flow__background {
+  background: transparent !important;
+}
+.org-rf-container .react-flow__pane {
+  cursor: default !important;
+}
+.org-rf-container .react-flow__node {
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+.org-rf-container .react-flow__edges {
+  pointer-events: none;
+}
+.org-rf-node {
+  transition: border-color 0.2s, box-shadow 0.2s, opacity 0.2s;
+}
+.org-rf-node:hover {
+  border-color: rgba(255,255,255,0.25) !important;
+  box-shadow: 0 0 12px rgba(255,255,255,0.06) !important;
+}
+@keyframes org-rf-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+@keyframes org-rf-glow {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.9; }
+}
+
 /* Wave edge flow animation (SVG dash offset) */
 @keyframes wave-edge-flow {
   0% { stroke-dashoffset: 20; }

@@ -2050,9 +2050,10 @@ interface Props {
   terminalWidth?: number;
   initialDocId?: string;
   onMaximize?: () => void;
+  hideHeader?: boolean;
 }
 
-export default function KnowledgePanel({ docs, onClose, onRefresh: _onRefresh, terminalWidth = 0, initialDocId: _initialDocId, onMaximize }: Props) {
+export default function KnowledgePanel({ docs, onClose, onRefresh: _onRefresh, terminalWidth = 0, initialDocId: _initialDocId, onMaximize, hideHeader }: Props) {
   // Load view mode from localStorage, default to 'graph'
   const [view, setView] = useState<'graph' | 'tree' | 'list' | 'health'>(() => {
     const saved = localStorage.getItem('kb-view-mode');
@@ -2231,35 +2232,38 @@ export default function KnowledgePanel({ docs, onClose, onRefresh: _onRefresh, t
           onMouseDown={handleResizeStart}
         />
 
-        {/* Header */}
-        <div className="p-5 text-white relative" style={{ background: '#16a34a' }}>
-          <div className="absolute top-3 right-3 flex items-center gap-1">
-            {/* Quick Win: Keyboard shortcuts tooltip */}
-            <button
-              className="w-7 h-7 rounded-full bg-white/20 text-white flex items-center justify-center text-sm hover:bg-white/30 cursor-help"
-              title={'Keyboard Shortcuts:\n• Esc — Close panel\n• Mouse Wheel — Zoom in/out\n• Mouse Drag — Pan view\n• Click Cluster Label — Filter to domain\n• Hover Edge — Highlight connected nodes'}
-            >
-              ?
-            </button>
-            {onMaximize && (
+        {/* Header — hidden in Pro mode (parent already shows title) */}
+        {!hideHeader && (
+          <div className="px-4 py-2.5 text-white relative flex items-center gap-3" style={{ background: '#16a34a' }}>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-bold">{'\u{1F4DA}'} Knowledge Base</div>
+              <div className="text-[10px] opacity-80">{docs.length} documents</div>
+            </div>
+            <div className="flex items-center gap-1">
               <button
-                onClick={onMaximize}
-                className="w-7 h-7 rounded-full bg-white/20 text-white flex items-center justify-center text-sm hover:bg-white/30 cursor-pointer"
-                title="Maximize (Pro View)"
+                className="w-6 h-6 rounded-full bg-white/20 text-white flex items-center justify-center text-xs hover:bg-white/30 cursor-help"
+                title={'Keyboard Shortcuts:\n• Esc — Close panel\n• Mouse Wheel — Zoom in/out\n• Mouse Drag — Pan view\n• Click Cluster Label — Filter to domain\n• Hover Edge — Highlight connected nodes'}
               >
-                {'\u2922'}
+                ?
               </button>
-            )}
-            <button
-              onClick={onClose}
-              className="w-7 h-7 rounded-full bg-white/20 text-white flex items-center justify-center text-lg hover:bg-white/30 cursor-pointer"
-            >
-              {'\u00d7'}
-            </button>
+              {onMaximize && (
+                <button
+                  onClick={onMaximize}
+                  className="w-6 h-6 rounded-full bg-white/20 text-white flex items-center justify-center text-xs hover:bg-white/30 cursor-pointer"
+                  title="Maximize (Pro View)"
+                >
+                  {'\u2922'}
+                </button>
+              )}
+              <button
+                onClick={onClose}
+                className="w-6 h-6 rounded-full bg-white/20 text-white flex items-center justify-center text-sm hover:bg-white/30 cursor-pointer"
+              >
+                {'\u00d7'}
+              </button>
+            </div>
           </div>
-          <div className="text-lg font-bold">{'\u{1F4DA}'} Knowledge Base</div>
-          <div className="text-xs opacity-80 mt-0.5">{docs.length} documents</div>
-        </div>
+        )}
 
         {/* View mode toggle */}
         <div className="flex gap-1 p-2" style={{ borderBottom: '1px solid var(--terminal-border)' }}>

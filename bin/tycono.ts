@@ -270,6 +270,12 @@ async function startServerForTui(): Promise<void> {
   origLog(`  API server started on port ${port}`);
   origLog(`  Logs: ${logFile}`);
 
+  // Memory monitor — log heap usage every 30s to detect leaks
+  setInterval(() => {
+    const mem = process.memoryUsage();
+    logStream.write(`[MEM] heap=${Math.round(mem.heapUsed / 1024 / 1024)}MB/${Math.round(mem.heapTotal / 1024 / 1024)}MB rss=${Math.round(mem.rss / 1024 / 1024)}MB\n`);
+  }, 30_000).unref();
+
   // Graceful shutdown — mark active sessions as interrupted
   const shutdown = () => {
     try {

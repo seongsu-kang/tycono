@@ -1,33 +1,58 @@
+import { useMemo, useCallback, useEffect } from 'react';
+import { ReactFlow, type Node, type Edge } from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 import type { WaveNode } from '../../hooks/useWaveTree';
+import type { OrgNode } from '../../types';
 import { isWaveNodeActive } from '../../types';
+import OrgRoleNode, { DIMS, type OrgRoleData, type OrgRoleLevel } from './OrgRoleNode';
+import OrgStatusEdge from './OrgStatusEdge';
 
-const ROLE_COLORS: Record<string, string> = {
-  cto: '#1565C0', cbo: '#E65100', pm: '#2E7D32',
-  engineer: '#4A148C', designer: '#AD1457', qa: '#00695C',
-  'data-analyst': '#0277BD',
-};
+const X_GAP = 24;
+const Y_GAP = 56;
 
-const NODE_W = 130;
-const NODE_H = 44;
-const Y_GAP = 80;
+const nodeTypes = { orgRole: OrgRoleNode } as const;
+const edgeTypes = { orgEdge: OrgStatusEdge } as const;
 
-interface LayoutNode {
+interface Props {
+  nodes: Map<string, WaveNode>;
+  rootId: string;
+  selectedRoleId: string | null;
+  onSelectNode: (roleId: string) => void;
+  /** Checked roles for dispatch targeting */
+  checkedRoles?: Set<string>;
+  onToggleCheck?: (roleId: string) => void;
+  /** Roles eligible for checkbox interaction (subtree of selected node) */
+  eligibleRoles?: Set<string>;
+  /** Org node metadata for level info */
+  orgNodes?: Record<string, OrgNode>;
+}
+
+interface LayoutItem {
   roleId: string;
   x: number;
   y: number;
   parentId: string | null;
+  level: OrgRoleLevel;
+}
+
+function getRoleLevel(roleId: string, rootId: string, orgNodes?: Record<string, OrgNode>): OrgRoleLevel {
+  if (roleId === rootId) return 'ceo';
+  if (orgNodes?.[roleId]?.level === 'c-level') return 'c-level';
+  // Fallback: if parent is root, it's c-level
+  if (orgNodes?.[roleId]?.reportsTo === rootId) return 'c-level';
+  return 'member';
 }
 
 function buildLayout(
   nodes: Map<string, WaveNode>,
   rootId: string,
-): { layout: LayoutNode[]; width: number; height: number } {
+  orgNodes?: Record<string, OrgNode>,
+): LayoutItem[] {
   const root = nodes.get(rootId);
-  if (!root) return { layout: [], width: 300, height: 200 };
+  if (!root) return [];
 
-  const layout: LayoutNode[] = [];
+  const layout: LayoutItem[] = [];
   const levels: string[][] = [];
-
   const queue: Array<{ id: string; depth: number; parentId: string | null }> = [
     { id: rootId, depth: 0, parentId: null },
   ];
@@ -40,7 +65,8 @@ function buildLayout(
 
     while (levels.length <= depth) levels.push([]);
     levels[depth].push(id);
-    layout.push({ roleId: id, x: 0, y: depth * Y_GAP + 20, parentId });
+    const rl = getRoleLevel(id, rootId, orgNodes);
+    layout.push({ roleId: id, x: 0, y: 0, parentId, level: rl });
 
     const node = nodes.get(id);
     if (node) {
@@ -52,221 +78,152 @@ function buildLayout(
     }
   }
 
-  const maxWidth = Math.max(...levels.map(l => l.length)) * (NODE_W + 16);
-  const totalWidth = Math.max(maxWidth, 280);
-
-  for (const level of levels) {
-    const levelWidth = level.length * (NODE_W + 16) - 16;
-    const startX = (totalWidth - levelWidth) / 2;
-    level.forEach((id, i) => {
+  // Calculate Y positions using cumulative level heights
+  let yOffset = 0;
+  for (let d = 0; d < levels.length; d++) {
+    const levelRoleIds = levels[d];
+    // Get max height in this level
+    const maxH = Math.max(...levelRoleIds.map(id => {
       const item = layout.find(l => l.roleId === id);
-      if (item) item.x = startX + i * (NODE_W + 16);
-    });
+      return item ? DIMS[item.level].h : 44;
+    }));
+
+    // Get widths for this level
+    const totalWidth = levelRoleIds.reduce((sum, id) => {
+      const item = layout.find(l => l.roleId === id);
+      return sum + (item ? DIMS[item.level].w : 130) + X_GAP;
+    }, -X_GAP);
+
+    let xPos = -totalWidth / 2;
+    for (const id of levelRoleIds) {
+      const item = layout.find(l => l.roleId === id);
+      if (!item) continue;
+      const dim = DIMS[item.level];
+      item.x = xPos + dim.w / 2; // center-aligned
+      item.y = yOffset + (maxH - dim.h) / 2; // vertically center within level
+      xPos += dim.w + X_GAP;
+    }
+
+    yOffset += maxH + Y_GAP;
   }
 
-  const height = levels.length * Y_GAP + 40;
-  return { layout, width: totalWidth, height };
+  // Shift so positions are relative to center (React Flow fitView handles the rest)
+  // We already use center-based positioning, just offset x to be node left edge
+  for (const item of layout) {
+    const dim = DIMS[item.level];
+    item.x -= dim.w / 2;
+  }
+
+  return layout;
 }
 
-interface Props {
-  nodes: Map<string, WaveNode>;
-  rootId: string;
-  selectedRoleId: string | null;
-  onSelectNode: (roleId: string) => void;
-  /** Checked roles for dispatch targeting */
-  checkedRoles?: Set<string>;
-  onToggleCheck?: (roleId: string) => void;
-  /** Roles eligible for checkbox interaction (subtree of selected node) */
-  eligibleRoles?: Set<string>;
-}
-
-export default function OrgTreeLive({ nodes, rootId, selectedRoleId, onSelectNode, checkedRoles, onToggleCheck, eligibleRoles }: Props) {
-  const { layout, width, height } = buildLayout(nodes, rootId);
+export default function OrgTreeLive({
+  nodes,
+  rootId,
+  selectedRoleId,
+  onSelectNode,
+  checkedRoles,
+  onToggleCheck,
+  eligibleRoles,
+  orgNodes,
+}: Props) {
   const showCheckboxes = !!onToggleCheck;
 
-  const getNodeCenter = (roleId: string) => {
-    const item = layout.find(l => l.roleId === roleId);
-    if (!item) return { cx: 0, cy: 0 };
-    return { cx: item.x + NODE_W / 2, cy: item.y + NODE_H / 2 };
-  };
+  const { rfNodes, rfEdges } = useMemo(() => {
+    const layout = buildLayout(nodes, rootId, orgNodes);
 
-  const statusColor = (node: WaveNode) => {
-    switch (node.status) {
-      case 'streaming': return ROLE_COLORS[node.roleId] ?? '#FBBF24';
-      case 'awaiting_input': return '#F59E0B';
-      case 'done': return '#2E7D32';
-      case 'error': return '#C62828';
-      case 'not-dispatched': return '#666';
-      default: return '#888';
-    }
-  };
+    const rfNodes: Node[] = layout.map((item) => {
+      const node = nodes.get(item.roleId);
+      if (!node) return null;
+
+      const hasActiveChildren = node.children.some(cid => {
+        const child = nodes.get(cid);
+        return child && isWaveNodeActive(child.status);
+      });
+
+      const data: OrgRoleData = {
+        node,
+        roleLevel: item.level,
+        isSelected: selectedRoleId === item.roleId,
+        isChecked: checkedRoles?.has(item.roleId) ?? false,
+        showCheckbox: showCheckboxes,
+        isEligible: !eligibleRoles || eligibleRoles.has(item.roleId),
+        hasActiveChildren,
+      };
+
+      const dim = DIMS[item.level];
+
+      return {
+        id: item.roleId,
+        type: 'orgRole',
+        position: { x: item.x, y: item.y },
+        data: data as unknown as Record<string, unknown>,
+        draggable: false,
+        selectable: false,
+        width: dim.w,
+        height: dim.h,
+      };
+    }).filter(Boolean) as Node[];
+
+    const rfEdges: Edge[] = layout
+      .filter(item => item.parentId)
+      .map((item) => {
+        const childNode = nodes.get(item.roleId);
+        const parentNode = nodes.get(item.parentId!);
+        return {
+          id: `${item.parentId}-${item.roleId}`,
+          source: item.parentId!,
+          target: item.roleId,
+          type: 'orgEdge',
+          data: {
+            childStatus: childNode?.status,
+            parentStatus: parentNode?.status,
+            childRoleId: item.roleId,
+          },
+          selectable: false,
+        };
+      });
+
+    return { rfNodes, rfEdges };
+  }, [nodes, rootId, selectedRoleId, checkedRoles, eligibleRoles, showCheckboxes, orgNodes]);
+
+  const handleNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
+    onSelectNode(node.id);
+  }, [onSelectNode]);
+
+  // Listen for checkbox toggle from custom event (avoids stale closure in memoized nodes)
+  useEffect(() => {
+    if (!onToggleCheck) return;
+    const handler = (e: Event) => {
+      const roleId = (e as CustomEvent).detail?.roleId;
+      if (roleId) onToggleCheck(roleId);
+    };
+    window.addEventListener('org-toggle-check', handler);
+    return () => window.removeEventListener('org-toggle-check', handler);
+  }, [onToggleCheck]);
 
   return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      width={Math.max(width, 280)}
-      height={height}
-      className="block"
-      style={{ minWidth: width }}
-    >
-      <defs>
-        <filter id="glow">
-          <feGaussianBlur stdDeviation="2" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-      </defs>
-
-      {/* Edges */}
-      {layout.filter(l => l.parentId).map((item) => {
-        const parent = getNodeCenter(item.parentId!);
-        const child = getNodeCenter(item.roleId);
-        const node = nodes.get(item.roleId);
-        const parentNode = nodes.get(item.parentId!);
-
-        let stroke = 'rgba(180,200,240,0.15)';
-        let dashArray = '4 4';
-        let className = '';
-
-        if (node?.status === 'done' || parentNode?.status === 'done') {
-          stroke = '#2E7D3266';
-          dashArray = '';
-        } else if (node?.status === 'awaiting_input') {
-          stroke = '#F59E0B';
-          dashArray = '6 4';
-          className = 'wave-edge-flow';
-        } else if (node?.status === 'streaming') {
-          stroke = ROLE_COLORS[item.roleId] ?? '#FBBF24';
-          dashArray = '6 4';
-          className = 'wave-edge-flow';
-        }
-
-        return (
-          <line
-            key={`${item.parentId}-${item.roleId}`}
-            x1={parent.cx} y1={parent.cy + NODE_H / 2 - 4}
-            x2={child.cx} y2={child.cy - NODE_H / 2 + 4}
-            stroke={stroke}
-            strokeWidth={1.5}
-            strokeDasharray={dashArray}
-            className={className}
-          />
-        );
-      })}
-
-      {/* Nodes */}
-      {layout.map((item) => {
-        const node = nodes.get(item.roleId);
-        if (!node) return null;
-
-        const color = statusColor(node);
-        const isSelected = selectedRoleId === item.roleId;
-        const isCeo = item.roleId === rootId;
-        const isChecked = checkedRoles?.has(item.roleId) ?? false;
-        const opacity = isCeo ? (isSelected ? 0.7 : 0.5) : node.status === 'not-dispatched' && !isChecked ? 0.35 : 1;
-
-        return (
-          <g
-            key={item.roleId}
-            transform={`translate(${item.x}, ${item.y})`}
-            style={{ cursor: 'pointer', opacity }}
-            onClick={() => onSelectNode(item.roleId)}
-          >
-            {/* Node rect */}
-            <rect
-              x={0} y={0}
-              width={NODE_W} height={NODE_H}
-              rx={8} ry={8}
-              fill="var(--terminal-bg-deeper, #181825)"
-              stroke={isSelected ? '#fff' : isChecked ? '#EF5350' : color}
-              strokeWidth={isSelected ? 2 : isChecked ? 2 : 1.5}
-              strokeDasharray={node.status === 'not-dispatched' && !isChecked ? '4 3' : ''}
-            />
-
-            {/* Status dot */}
-            <circle
-              cx={14} cy={NODE_H / 2}
-              r={4}
-              fill={color}
-              filter={isWaveNodeActive(node.status) ? 'url(#glow)' : undefined}
-            >
-              {isWaveNodeActive(node.status) && (
-                <animate attributeName="opacity" values="1;0.4;1" dur="1.5s" repeatCount="indefinite" />
-              )}
-            </circle>
-
-            {/* Role ID */}
-            <text
-              x={26} y={NODE_H / 2 - 4}
-              fill="var(--terminal-text, #fff)"
-              fontSize={10}
-              fontWeight={700}
-              fontFamily="var(--pixel-font)"
-            >
-              {node.roleId.toUpperCase()}
-            </text>
-
-            {/* Status text */}
-            <text
-              x={26} y={NODE_H / 2 + 10}
-              fill="var(--terminal-text-muted, #888)"
-              fontSize={8}
-              fontFamily="var(--pixel-font)"
-            >
-              {node.status === 'streaming' ? 'Working...' :
-               node.status === 'awaiting_input' ? 'Awaiting Reply' :
-               node.status === 'done' ? (
-                 node.children.some(cid => {
-                   const child = nodes.get(cid);
-                   return child && isWaveNodeActive(child.status);
-                 }) ? 'Supervising...' : 'Complete'
-               ) :
-               node.status === 'error' ? 'Error' :
-               node.status === 'waiting' ? 'Waiting' : ''}
-            </text>
-
-            {/* Done checkmark */}
-            {node.status === 'done' && !showCheckboxes && (
-              <text x={NODE_W - 18} y={NODE_H / 2 + 4} fontSize={14} fill="#2E7D32">&#x2713;</text>
-            )}
-            {/* Error X */}
-            {node.status === 'error' && !showCheckboxes && (
-              <text x={NODE_W - 18} y={NODE_H / 2 + 4} fontSize={14} fill="#C62828">&#x2717;</text>
-            )}
-
-            {/* Checkbox for dispatch targeting */}
-            {showCheckboxes && !isCeo && (() => {
-              const isEligible = !eligibleRoles || eligibleRoles.has(item.roleId);
-              return (
-                <g
-                  onClick={(e) => { e.stopPropagation(); if (isEligible) onToggleCheck?.(item.roleId); }}
-                  style={{ cursor: isEligible ? 'pointer' : 'default', opacity: isEligible ? 1 : 0.2 }}
-                >
-                  {/* Hit area */}
-                  <rect x={NODE_W - 24} y={NODE_H / 2 - 10} width={20} height={20} fill="transparent" />
-                  {/* Checkbox */}
-                  <rect
-                    x={NODE_W - 20} y={NODE_H / 2 - 6}
-                    width={12} height={12}
-                    rx={2} ry={2}
-                    fill={isChecked ? '#EF5350' : 'transparent'}
-                    stroke={isChecked ? '#EF5350' : '#666'}
-                    strokeWidth={1.5}
-                  />
-                  {isChecked && (
-                    <text
-                      x={NODE_W - 18} y={NODE_H / 2 + 4}
-                      fontSize={10} fontWeight={700} fill="#fff"
-                    >&#x2713;</text>
-                  )}
-                </g>
-              );
-            })()}
-          </g>
-        );
-      })}
-    </svg>
+    <div className="org-rf-container" style={{ width: '100%', height: '100%', minHeight: 220 }}>
+      <ReactFlow
+        nodes={rfNodes}
+        edges={rfEdges}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        onNodeClick={handleNodeClick}
+        fitView
+        fitViewOptions={{ padding: 0.12, minZoom: 0.5, maxZoom: 1 }}
+        zoomOnScroll={false}
+        zoomOnPinch={false}
+        panOnDrag={false}
+        panOnScroll={false}
+        nodesDraggable={false}
+        nodesConnectable={false}
+        elementsSelectable={false}
+        preventScrolling={false}
+        proOptions={{ hideAttribution: true }}
+        minZoom={0.3}
+        maxZoom={2}
+      />
+    </div>
   );
 }

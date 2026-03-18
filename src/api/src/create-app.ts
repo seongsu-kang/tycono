@@ -58,6 +58,19 @@ export function createApp() {
     res.json({ status: 'ok', companyRoot: COMPANY_ROOT });
   });
 
+  // Debug: memory stats for leak detection
+  app.get('/api/debug/memory', (_req, res) => {
+    const { executionManager } = require('./services/execution-manager.js');
+    const { listSessions } = require('./services/session-store.js');
+    const mem = process.memoryUsage();
+    res.json({
+      heap: { used: Math.round(mem.heapUsed / 1024 / 1024), total: Math.round(mem.heapTotal / 1024 / 1024) },
+      rss: Math.round(mem.rss / 1024 / 1024),
+      execManager: executionManager.getMemoryStats(),
+      sessions: listSessions().length,
+    });
+  });
+
   app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     const status = err.name === 'FileNotFoundError' ? 404 : 500;
     res.status(status).json({ error: err.message });

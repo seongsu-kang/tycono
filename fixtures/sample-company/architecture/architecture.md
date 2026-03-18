@@ -14,3 +14,7 @@ Technical architecture for Acme Corp.
 1. Monorepo with Turborepo
 2. tRPC for type-safe API
 3. Drizzle ORM over Prisma (faster, lighter)
+
+## Project Architectures
+
+- [Pokemon RPG Technical Roadmap](pokemon-rpg-technical-roadmap.md) - Browser-based RPG game architecture using TyconoForge

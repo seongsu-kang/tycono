@@ -540,20 +540,28 @@ class ExecutionManager {
           }
         }
 
-        // Memory cleanup: remove completed execution after 60s
-        // Keep briefly for status queries, then GC
-        setTimeout(() => {
-          this.executions.delete(execution.id);
-          // Clean up any leaked sessionMsgContent
-          if (execution.sessionId) {
-            for (const key of this.sessionMsgContent.keys()) {
-              if (key.startsWith(execution.sessionId + ':')) {
-                this.sessionMsgContent.delete(key);
-              }
+        // Clean up sessionMsgContent immediately (no longer needed after finalize)
+        if (execution.sessionId) {
+          for (const key of this.sessionMsgContent.keys()) {
+            if (key.startsWith(execution.sessionId + ':')) {
+              this.sessionMsgContent.delete(key);
             }
           }
-        }, 60_000);
+        }
       });
+  }
+
+  /** Debug: return memory stats for monitoring */
+  getMemoryStats(): { executions: number; msgContentKeys: number; msgContentSize: number } {
+    let msgContentSize = 0;
+    for (const v of this.sessionMsgContent.values()) {
+      msgContentSize += v.length;
+    }
+    return {
+      executions: this.executions.size,
+      msgContentKeys: this.sessionMsgContent.size,
+      msgContentSize,
+    };
   }
 
   /* ─── Session ↔ Execution bridge ───────── */
