@@ -10,7 +10,7 @@ import { estimateCost } from './pricing.js';
 import { readConfig, getConversationLimits, resolveCodeRoot } from './company-config.js';
 import { postKnowledgingCheck, type KnowledgeDebtItem } from '../engine/knowledge-gate.js';
 import { earnCoinsInternal } from '../routes/coins.js';
-import { getSession, createSession, addMessage, updateMessage as updateSessionMessage, appendMessageEvent, type Message, type ImageAttachment } from './session-store.js';
+import { getSession, createSession, addMessage, updateMessage as updateSessionMessage, updateSession, appendMessageEvent, type Message, type ImageAttachment } from './session-store.js';
 import { portRegistry, type PortAllocation } from './port-registry.js';
 import { type MessageStatus, isMessageActive, canTransition, messageStatusToRoleStatus } from '../../../shared/types.js';
 
@@ -603,6 +603,12 @@ class ExecutionManager {
         knowledgeDebt: execution.knowledgeDebt.map(d => ({ type: d.type, file: d.file, message: d.message })),
       }),
     });
+
+    // Mark session as done in session-store (persisted to file)
+    // Skip CEO supervisor sessions — they stay active for wave lifecycle
+    if (session.roleId !== 'ceo' || session.source !== 'wave') {
+      updateSession(execution.sessionId, { status: 'done' });
+    }
   }
 
   private cleanupOrphanedChildren(parentSessionId: string): void {
