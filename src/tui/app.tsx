@@ -192,12 +192,24 @@ export const App: React.FC = () => {
   // View state: loading -> setup (no company) -> dashboard
   const [view, setView] = useState<View>('loading');
 
+  // Loading → setup/dashboard transition
   React.useEffect(() => {
     if (!api.loaded) return;
     if (view === 'loading') {
       setView(api.company ? 'dashboard' : 'setup');
     }
   }, [api.loaded, api.company, view]);
+
+  // Fallback: if loading for more than 8 seconds, force to setup
+  React.useEffect(() => {
+    if (view !== 'loading') return;
+    const timer = setTimeout(() => {
+      if (view === 'loading') {
+        setView('setup');
+      }
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, [view]);
 
   const handleSetupComplete = useCallback(() => {
     api.refresh();
