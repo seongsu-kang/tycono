@@ -1,13 +1,9 @@
 <p align="center">
-  <img src=".github/assets/wave-org-propagation.png" alt="Tycono — CEO dispatches through org hierarchy in real time" width="720" />
-</p>
-
-<h1 align="center">tycono</h1>
-
-<p align="center">
   <strong>Cursor gives you one AI developer. Tycono gives you an AI team.</strong><br>
   <sub>Give one order. Watch your AI team plan, build, and learn together.</sub>
 </p>
+
+<h1 align="center">tycono</h1>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/tycono"><img src="https://img.shields.io/npm/v/tycono.svg" alt="npm version" /></a>
@@ -29,10 +25,26 @@ Cursor, Lovable, Bolt — they all give you **one AI agent**. It helps, but you 
 
 **tycono** gives you an **AI team**. A CTO reviews architecture. Engineers write code. A PM breaks down tasks. QA catches bugs. You just give the order and watch them work.
 
-One command. Your AI team is running.
-
 ```bash
 npx tycono
+```
+
+```
+> Make a landing page for our product
+
+▶ Supervisor started
+💭 Analyzing the directive. I'll dispatch CTO for implementation and CBO for copy...
+→ cto 배정: Landing page structure + implementation
+→ cbo 배정: Product messaging + copywriting
+  → Read architecture/deployment.md
+  → dispatch fe-engineer: Build responsive landing page
+  cto         ▶ Reviewing architecture for landing page...
+  fe-engineer → Write src/landing/index.html
+  📄 Write src/landing/styles.css
+  cbo         ✓ done (5 turns)
+  fe-engineer ✓ done (12 turns)
+✓ Supervisor done (8 turns)
+>
 ```
 
 ## Core Pillars
@@ -41,39 +53,47 @@ npx tycono
 
 You give one order. The system dispatches through a real hierarchy.
 
+CEO delegates to C-levels, C-levels dispatch to their teams. Authority is enforced — engineers can't make CEO decisions, PMs can't merge code.
+
+**Dual Mode**: Simple questions get answered directly (no team dispatch). Work tasks activate the full team. The system judges automatically.
+
+### 2. Multi-Wave — Parallel workspaces
+
+Multiple persistent conversations, each with its own team context.
+
 ```
-dispatch → watch → relay → quality gate → re-dispatch (if needed)
+/new Build the API        → Wave 1 (CTO + Engineers working)
+/new Write documentation  → Wave 2 (CBO + Writer working)
+/focus 1                  → Switch to Wave 1
 ```
 
-CEO delegates to C-levels, C-levels dispatch to their teams. Authority is enforced — engineers can't make CEO decisions, PMs can't merge code. The org chart isn't decoration, it's the execution engine.
+Tab → Panel Mode: wave-scoped org tree, real-time stream, docs browser.
 
-<p align="center">
-  <img src=".github/assets/wave-org-propagation.png" alt="Wave Center — org propagation with real-time status" width="640" />
-</p>
+### 3. Observability — See everything
 
-### 2. Observability — See everything, intervene anytime
+```
+Tab → Panel Mode
 
-Your AI team isn't a black box. Watch every agent work in real time, inject directives mid-execution, and drill down to any level.
+┌── W1 Build the API ──────┬── Stream  Docs  Info ──────────────┐
+│  3 sessions               │  cto     → dispatch engineer       │
+│  ── Org Tree ──           │  engineer → Write src/api/routes.ts│
+│  ● CEO                    │  engineer 📄 Write src/api/types.ts │
+│  ├─ ● CTO                │  qa       ▶ Running test suite...   │
+│  │  ├─ ● engineer         │                                     │
+│  │  └─ ● qa               │                                     │
+│  └─ ○ CBO                │                                     │
+│  [1] [2*]                 │                                     │
+└───────────────────────────┴─────────────────────────────────────┘
+```
 
-- **Wave Center** — Org-tree dispatch with real-time streaming
-- **Activity Stream** — Every event logged (dispatches, tool calls, decisions)
-- **CEO Directive** — Change direction while agents are running
-- **Cost Tracking** — Per-role, per-model token breakdown
+- **Wave-scoped** — org tree shows only this wave's active agents
+- **Docs tab** — browse all .md files, ★ marks wave artifacts, Enter → vim
+- **Info tab** — wave metadata, sessions, ports
+- **Commands** — `/agents` `/sessions` `/kill` `/docs` `/read`
 
-### 3. Isolation Infrastructure — Agents don't collide
+### 4. AKB — Knowledge that compounds
 
-Multiple agents working simultaneously without stepping on each other.
-
-| Resource | Isolation | Status |
-|----------|-----------|--------|
-| **Code** | Git worktree per session | Designed |
-| **Ports** | Dynamic port registry | ✅ Live |
-| **Browser** | Separate daemon per session | ✅ Live |
-| **Knowledge** | Shared reads, scoped writes | ✅ Live |
-
-### 4. AKB (Pre-K / Post-K) — Knowledge that compounds
-
-Every AI tool today: `Plan → Execute → Done`. Knowledge resets. Tycono adds what the industry doesn't have:
+Every AI tool: `Plan → Execute → Done`. Knowledge resets. Tycono adds:
 
 ```
 Pre-K:  Read existing knowledge → Plan grounded in what the company knows
@@ -81,20 +101,60 @@ Execute: Do the work
 Post-K: Extract insights → Cross-link → Register in knowledge graph
 ```
 
-Session 50 is dramatically smarter than session 1. Your company learns.
+Session 50 is dramatically smarter than session 1.
 
-## Why Tycono?
+## Quick Start
 
-Same goal as Cursor, Lovable, Bolt — **get AI to do your work**. Different method.
+```bash
+mkdir my-company && cd my-company
+npx tycono
+```
 
-| | Cursor / Lovable / Bolt | Tycono |
-|---|---|---|
-| **Agents** | 1 AI helps you | **AI team works for you** |
-| **Your role** | Keep directing | **Give one order, watch** |
-| **Knowledge** | Resets every session | **Compounds forever** |
-| **Quality** | You review everything | **QA agent catches bugs** |
-| **Scale** | 1 task at a time | **Parallel across roles** |
-| **Visibility** | Editor / chat | **Real-time org tree** |
+A setup wizard guides you through:
+
+1. **Name your company** — set mission and domain
+2. **Choose a team template** — Startup, Research, Agency, or Custom
+3. **Start working** — type naturally, your AI team responds
+
+### Requirements
+
+- Node.js >= 18
+- [Claude Code CLI](https://claude.ai/download) (recommended) or Anthropic API key
+
+## CLI
+
+```bash
+npx tycono                # Start TUI (default)
+npx tycono ./my-company   # Start with specific directory
+npx tycono --classic      # Pixel office web UI
+npx tycono --attach       # Connect to running API server
+npx tycono --help         # Show help
+```
+
+## TUI Commands
+
+```
+Type naturally to talk to your AI team.
+
+/new [text]       Create new wave
+/waves            List all waves
+/focus <n>        Switch to wave n
+/agents           Wave → Role → Session tree
+/sessions         Sessions + ports
+/kill <id>        Kill a session
+/cleanup          Remove dead sessions
+/docs             Files created in this wave
+/read <path>      Preview file content
+/open <path>      Open in $EDITOR (vim)
+/help             Show help
+/quit             Exit
+
+Tab               Panel Mode (org tree + stream + docs)
+1-9               Switch wave (in Panel Mode)
+h/l               Switch tab (Stream/Docs/Info)
+j/k               Navigate
+Ctrl+C            Quit
+```
 
 ## Company-as-Code
 
@@ -110,109 +170,6 @@ state file  → infra state    knowledge/  → org memory
 ```
 
 Your company is **versionable**, **reproducible**, and **forkable** — just like code.
-
-## Quick Start
-
-```bash
-mkdir my-company && cd my-company
-npx tycono
-```
-
-A setup wizard guides you through:
-
-1. **Pick an AI engine** — Claude API, Claude Max, or auto-detect
-2. **Name your company** — set mission and domain
-3. **Choose a team template** — or build from scratch
-4. **Watch them work** — your browser opens to a live dashboard
-
-### Requirements
-
-- Node.js >= 18
-- [Anthropic API key](https://console.anthropic.com/) or Claude Max subscription
-
-## Interfaces
-
-### Web Dashboard — Visual management
-
-A browser-based dashboard for visual management. Org tree, Wave dispatch, Knowledge graph, Activity stream.
-
-<p align="center">
-  <img src=".github/assets/hero-office.png" alt="Web Dashboard" width="640" />
-</p>
-
-- **Wave Center** — selective org-tree dispatch with target checkboxes
-- **Chats** — 1:1 conversations with any role, persistent sessions
-- **Knowledge Base** — graph/tree/list views, cross-linked documents
-- **Decisions** — CEO strategic decision log with full context
-
-### TUI — Terminal-native operations *(coming soon)*
-
-For developers who live in the terminal. A k9s/lazygit-style multi-panel TUI built with [Ink](https://github.com/vadimdemedes/ink).
-
-```
-┌──────────────────────────────────────────────────┐
-│ TYCONO v0.2  │ Wave #37 running │ 3 active │$2.1│
-├──────────────┬───────────────────────────────────┤
-│ [Org Tree]   │ [Real-time Stream]                │
-│  CEO         │  CTO: "Reviewing architecture..." │
-│  ├ CTO ●     │    → dispatch → Engineer          │
-│  │ ├ ENG ○   │  CBO: "Market analysis done" ✓    │
-│  │ └ QA  ○   │                                   │
-│  └ CBO ●     │                                   │
-├──────────────┴───────────────────────────────────┤
-│ > wave "Write the Q1 strategy report"            │
-└──────────────────────────────────────────────────┘
-```
-
-```bash
-npx tycono --tui     # Terminal mode (coming soon)
-npx tycono           # Web dashboard (current)
-```
-
-Same API server, same engine — just a different frontend. Use what fits your workflow.
-
-## Key Features
-
-### CEO Wave — One order moves the company
-
-Write a directive. Select target roles on the org tree. Hit dispatch. Every selected agent receives their piece of the work, filtered through the hierarchy.
-
-<p align="center">
-  <img src=".github/assets/wave-center.png" alt="Wave Center — selective org-tree dispatch" width="640" />
-</p>
-
-### Living Knowledge (AKB)
-
-Every task produces knowledge. Cross-linked Markdown documents that grow with every session. Search, navigate, never lose context. Session 50 is dramatically smarter than session 1.
-
-<p align="center">
-  <img src=".github/assets/knowledge-graph.png" alt="Knowledge Base — graph view with 194+ cross-linked documents" width="640" />
-</p>
-
-### Role-Based Authority
-
-Each role has scoped authority defined in `role.yaml`. Engineers can't make CEO decisions. PMs can't merge code. The org chart isn't decoration — it's enforcement.
-
-### Local-First, BYOK
-
-Everything runs on your machine. Your data never leaves. Bring your own Anthropic API key — no middleman, no telemetry, no tracking.
-
-## How It Works
-
-```
-You (CEO)
-  └── Give a directive via Wave or direct chat
-        └── Context Engine routes to the right Role
-              └── Role reads its knowledge + skills, executes within authority
-                    └── Knowledge updates, results flow back up
-                          └── Your company gets smarter
-```
-
-Every role has:
-- `role.yaml` — Identity, authority, knowledge scope, reporting structure
-- `SKILL.md` — Tools, commands, and capability guides
-- `profile.md` — Public-facing description and persona
-- `journal/` — Work history and learnings
 
 ## Your Company Structure
 
@@ -232,19 +189,37 @@ your-company/
 
 | Template | Roles | Best For |
 |----------|-------|----------|
-| **Startup** | CTO + PM + Engineer + Designer | Product development |
+| **Startup** | CTO + PM + Engineer + Designer + QA | Product development |
 | **Research** | Lead Researcher + Analyst + Writer | Analysis & reports |
 | **Agency** | Creative Director + Designer + Developer | Client projects |
 | **Custom** | Start empty, hire as you go | Full control |
 
-## CLI Usage
+## Why Tycono?
 
-```bash
-npx tycono              # Start server + web dashboard
-npx tycono --tui        # Terminal UI (coming soon)
-npx tycono --help       # Show help
-npx tycono --version    # Show version
-```
+| | Cursor / Lovable / Bolt | Tycono |
+|---|---|---|
+| **Agents** | 1 AI helps you | **AI team works for you** |
+| **Your role** | Keep directing | **Give one order, watch** |
+| **Knowledge** | Resets every session | **Compounds forever** |
+| **Quality** | You review everything | **QA agent catches bugs** |
+| **Scale** | 1 task at a time | **Parallel across roles** |
+| **Interface** | Editor / chat | **Terminal-native TUI** |
+
+## Origin Story
+
+Tycono started as an AI office tycoon game — pixel characters walking around, sitting at desks, chatting in Slack-like channels. It was fun to watch.
+
+But the agents underneath were actually useful. They wrote real code, real documents, made real decisions. The game UI was cute; the real value was the AI team.
+
+So we stripped the pixels and built a terminal tool. Same AI team, no game — just work.
+
+The pixel office lives on as `npx tycono --classic` — a reminder of where it started.
+
+<p align="center">
+  <img src=".github/assets/hero-office.png" alt="Where it started — pixel office" width="480" />
+  <br>
+  <sub>Where it started: an AI office tycoon game</sub>
+</p>
 
 ## Environment Variables
 
@@ -253,23 +228,21 @@ npx tycono --version    # Show version
 | `ANTHROPIC_API_KEY` | Your Anthropic API key | — |
 | `PORT` | Server port | auto-detect |
 | `COMPANY_ROOT` | Company directory | current directory |
+| `EDITOR` | Editor for /open command | vim |
 
 ## Roadmap
 
-- [x] Web dashboard (Office + Pro views)
+- [x] TUI — terminal-native interface (default)
+- [x] Multi-Wave — parallel persistent workspaces
+- [x] Dual Mode — direct answer vs team dispatch
 - [x] CEO Wave dispatch with org-tree targeting
 - [x] AKB — Pre-K / Post-K knowledge loop
 - [x] Port Registry for multi-agent isolation
-- [ ] **TUI mode** — terminal-native multi-panel interface *(in progress)*
+- [x] Session lifecycle persistence
 - [ ] Git worktree isolation per agent session
-- [ ] **Desktop app** (.dmg / .exe) — background execution, notifications, no API key setup needed
+- [ ] **Desktop app** (.dmg / .exe) — background execution, notifications
 - [ ] Multi-LLM support (OpenAI, local models)
-
-## Built with Tycono
-
-This isn't a demo. Tycono's own landing page, documentation, and knowledge base were built by AI agents running inside Tycono. The PM wrote the PRD. The CTO reviewed architecture. The Designer created UX specs. The Engineer implemented every section.
-
-194 knowledge documents. 12 CEO decisions. 8 active roles. All managed through the same system you're about to use.
+- [ ] Company Preset Marketplace
 
 ## Development
 
@@ -282,19 +255,7 @@ cd src/web && npm install && cd ../..
 
 # Dev mode (hot reload)
 npm run dev
-
-# Type check
-npm run typecheck
 ```
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-## Get Help
-
-- [GitHub Issues](https://github.com/seongsu-kang/tycono/issues) — Bug reports and feature requests
-- [GitHub Discussions](https://github.com/seongsu-kang/tycono/discussions) — Questions and ideas
 
 ## License
 
