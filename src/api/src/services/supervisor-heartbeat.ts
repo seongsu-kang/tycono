@@ -282,17 +282,44 @@ class SupervisorHeartbeat {
    * CEO reads files and answers directly.
    */
   private spawnConversation(state: SupervisorState, directive: string): void {
-    // Build conversation context from previous directives
+    // Build conversation context: previous directives + last execution summary
     const deliveredDirectives = state.pendingDirectives.filter(d => d.delivered);
-    const history = deliveredDirectives.length > 0
-      ? `\n[Previous conversation]\n${deliveredDirectives.map(d => `CEO: "${d.text}"`).join('\n')}\n`
+    const directiveHistory = deliveredDirectives.length > 0
+      ? deliveredDirectives.map(d => `- CEO: "${d.text}"`).join('\n')
       : '';
 
-    const task = `${history}[CEO Question] ${directive}
+    // Extract last execution's output from activity stream (what "just happened")
+    let lastExecutionSummary = '';
+    if (state.supervisorSessionId) {
+      try {
+        const events = ActivityStream.readAll(state.supervisorSessionId);
+        // Get last text outputs (the supervisor's final response)
+        const textEvents = events.filter(e => e.type === 'text' && e.roleId === 'ceo');
+        const toolEvents = events.filter(e => e.type === 'tool:start' && e.roleId === 'ceo');
 
-You are the CEO's AI assistant. Answer this question directly by reading relevant files.
-Do NOT dispatch anyone. Do NOT start any work. Just read, analyze, and answer.
-Keep your response concise and informative.`;
+        // Summarize: what tools were used + final text
+        const toolSummary = toolEvents.slice(-10).map(e => {
+          const name = (e.data.name as string) ?? '';
+          const inp = e.data.input as Record<string, unknown> | undefined;
+          const detail = inp?.file_path ?? inp?.command ?? '';
+          return `  → ${name} ${String(detail).slice(0, 60)}`;
+        }).join('\n');
+
+        const lastText = textEvents.slice(-5).map(e => String(e.data.text ?? '')).join('').slice(-500);
+
+        if (toolSummary || lastText) {
+          lastExecutionSummary = `\n[Previous execution in this wave]\nTools used:\n${toolSummary}\n\nLast response:\n${lastText.slice(0, 500)}\n`;
+        }
+      } catch { /* ignore */ }
+    }
+
+    const context = [directiveHistory, lastExecutionSummary].filter(Boolean).join('\n');
+
+    const task = `${context ? context + '\n' : ''}[CEO Question] ${directive}
+
+You are the CEO's AI assistant. The above shows what happened previously in this wave.
+Answer the CEO's question based on context. Be specific — reference files, results, and actions from the previous execution.
+Do NOT dispatch anyone. Do NOT create new files. Just answer concisely.`;
 
     // Reuse session
     let sessionId = state.supervisorSessionId;
