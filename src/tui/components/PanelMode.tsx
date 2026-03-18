@@ -119,14 +119,6 @@ export const PanelMode: React.FC<PanelModeProps> = ({
     ? waves.findIndex(w => w.waveId === focusedWaveId) + 1
     : 0;
 
-  // Count sessions per wave for summary
-  const waveSessionCounts = new Map<string, number>();
-  for (const s of activeSessions) {
-    if (s.waveId) {
-      waveSessionCounts.set(s.waveId, (waveSessionCounts.get(s.waveId) ?? 0) + 1);
-    }
-  }
-
   return (
     <Box flexDirection="column" flexGrow={1}>
       {/* Main content: Org Tree left | Detail + Stream right */}
@@ -139,37 +131,6 @@ export const PanelMode: React.FC<PanelModeProps> = ({
             selectedIndex={selectedRoleIndex}
             flatRoles={flatRoles}
           />
-
-          {/* Resource Summary — below org tree */}
-          <Box flexDirection="column" paddingX={1} marginTop={1}>
-            <Text color="gray">{'\u2500'.repeat(24)}</Text>
-
-            {/* Waves */}
-            {waves.length > 0 && (
-              <Box flexDirection="column">
-                {waves.map((w, i) => {
-                  const isFocused = w.waveId === focusedWaveId;
-                  const count = waveSessionCounts.get(w.waveId) ?? 0;
-                  return (
-                    <Box key={w.waveId}>
-                      <Text color={isFocused ? 'green' : 'gray'}>
-                        {isFocused ? '\u25B8' : ' '} W{i + 1}
-                      </Text>
-                      <Text color="gray"> {count > 0 ? `${count} agents` : 'idle'}</Text>
-                    </Box>
-                  );
-                })}
-              </Box>
-            )}
-
-            {/* Port summary */}
-            {portSummary.totalPorts > 0 && (
-              <Box marginTop={0}>
-                <Text color="blue">{portSummary.totalPorts} ports</Text>
-                <Text color="gray"> allocated</Text>
-              </Box>
-            )}
-          </Box>
         </Box>
 
         {/* Vertical separator — memoized to avoid regenerating on every render */}
