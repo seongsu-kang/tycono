@@ -83,6 +83,7 @@ export interface SessionInfo {
   status: string;
   source: string;
   waveId?: string;
+  parentSessionId?: string;
   createdAt: string;
 }
 

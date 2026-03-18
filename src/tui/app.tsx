@@ -29,76 +29,117 @@ type View = 'loading' | 'setup' | 'dashboard';
 
 let sysLineId = 100000;
 
-/** Format agent tree for /agents command */
+/** Format agent tree: Wave → Role → Session + resources */
 function formatAgentsTree(
   waves: WaveInfo[],
+  allSessions: import('./api').SessionInfo[],
   activeSessions: ActiveSessionInfo[],
   focusedWaveId: string | null,
 ): StreamLine[] {
   const lines: StreamLine[] = [];
 
-  if (waves.length === 0 && activeSessions.length === 0) {
-    lines.push({ id: ++sysLineId, text: 'No active agents.', color: 'gray' });
-    return lines;
+  // Build port lookup: sessionId → ActiveSessionInfo
+  const portMap = new Map<string, ActiveSessionInfo>();
+  for (const s of activeSessions) {
+    portMap.set(s.sessionId, s);
   }
 
   // Group sessions by waveId
-  const sessionsByWave = new Map<string, ActiveSessionInfo[]>();
-  const unlinked: ActiveSessionInfo[] = [];
-  for (const s of activeSessions) {
+  const sessionsByWave = new Map<string, import('./api').SessionInfo[]>();
+  const unlinked: import('./api').SessionInfo[] = [];
+
+  for (const s of allSessions) {
     if (s.waveId) {
       if (!sessionsByWave.has(s.waveId)) sessionsByWave.set(s.waveId, []);
       sessionsByWave.get(s.waveId)!.push(s);
-    } else {
+    } else if (s.status === 'active') {
       unlinked.push(s);
     }
   }
 
-  // Display each wave
+  if (waves.length === 0 && unlinked.length === 0) {
+    lines.push({ id: ++sysLineId, text: 'No active agents.', color: 'gray' });
+    return lines;
+  }
+
+  // Display each wave as tree
   for (let i = 0; i < waves.length; i++) {
     const w = waves[i];
     const isFocused = w.waveId === focusedWaveId;
-    const marker = isFocused ? '*' : ' ';
+    const marker = isFocused ? '\u25B8' : ' ';
     const label = w.directive ? w.directive.slice(0, 50) : '(idle)';
+    const waveSessions = sessionsByWave.get(w.waveId) ?? [];
+
     lines.push({
       id: ++sysLineId,
-      text: `${marker}Wave ${i + 1}: "${label}"`,
+      text: `${marker}Wave ${i + 1}: ${label}  (${waveSessions.length} sessions)`,
       color: isFocused ? 'green' : 'cyan',
     });
 
-    const waveSessions = sessionsByWave.get(w.waveId) ?? [];
     if (waveSessions.length === 0) {
-      lines.push({ id: ++sysLineId, text: '  (no agents)', color: 'gray' });
+      lines.push({ id: ++sysLineId, text: '  (empty)', color: 'gray' });
+      continue;
     }
+
+    // Group wave sessions by role
+    const roleGroups = new Map<string, import('./api').SessionInfo[]>();
     for (const s of waveSessions) {
-      const statusIcon = s.status === 'active' ? '\u25CF' : s.status === 'dead' ? '\u25CF' : '\u25CB';
-      const statusColor = s.status === 'active' ? 'green' : s.status === 'dead' ? 'red' : 'gray';
-      const portInfo = s.ports.api ? `API:${s.ports.api} Vite:${s.ports.vite}` : '(no ports)';
-      const worktree = s.worktreePath ? `\u{1F33F} ${s.worktreePath.split('/').pop()}` : '';
+      if (!roleGroups.has(s.roleId)) roleGroups.set(s.roleId, []);
+      roleGroups.get(s.roleId)!.push(s);
+    }
+
+    const roleEntries = Array.from(roleGroups.entries());
+    for (let ri = 0; ri < roleEntries.length; ri++) {
+      const [roleId, roleSessions] = roleEntries[ri];
+      const isLastRole = ri === roleEntries.length - 1;
+      const branch = isLastRole ? '\u2514\u2500' : '\u251C\u2500';
+
+      // Role status
+      const hasActive = roleSessions.some(s => s.status === 'active');
+      const statusIcon = hasActive ? '\u25CF' : '\u25CB';
+      const statusColor = hasActive ? 'green' : 'gray';
+
       lines.push({
         id: ++sysLineId,
-        text: `  ${statusIcon} ${s.roleId.padEnd(14)} ${portInfo}${worktree ? ' ' + worktree : ''}`,
+        text: `  ${branch} ${statusIcon} ${roleId}  (${roleSessions.length})`,
         color: statusColor,
       });
-      if (s.task) {
+
+      // Sessions under this role
+      const indent = isLastRole ? '     ' : '  \u2502  ';
+      for (const sess of roleSessions.slice(-3)) { // Show last 3 sessions per role
+        const port = portMap.get(sess.id);
+        const portStr = port ? `API:${port.ports.api} Vite:${port.ports.vite}` : '';
+        const worktree = port?.worktreePath ? `\u{1F33F}${port.worktreePath.split('/').pop()}` : '';
+        const statusStr = sess.status === 'active' ? '\u25CF' : '\u25CB';
+        const sesColor = sess.status === 'active' ? 'white' : 'gray';
+
         lines.push({
           id: ++sysLineId,
-          text: `    ${s.task.slice(0, 60)}`,
+          text: `${indent}${statusStr} ${sess.id.slice(0, 22)}  ${portStr} ${worktree}`,
+          color: sesColor,
+        });
+      }
+      if (roleSessions.length > 3) {
+        lines.push({
+          id: ++sysLineId,
+          text: `${indent}  ... +${roleSessions.length - 3} more`,
           color: 'gray',
         });
       }
     }
   }
 
-  // Unlinked sessions (not associated with any wave)
+  // Unlinked active sessions
   if (unlinked.length > 0) {
     lines.push({ id: ++sysLineId, text: '', color: 'white' });
-    lines.push({ id: ++sysLineId, text: 'Unlinked sessions:', color: 'yellow' });
-    for (const s of unlinked) {
-      const portInfo = s.ports.api ? `API:${s.ports.api} Vite:${s.ports.vite}` : '(no ports)';
+    lines.push({ id: ++sysLineId, text: `Unlinked (${unlinked.length}):`, color: 'yellow' });
+    for (const s of unlinked.slice(-5)) {
+      const port = portMap.get(s.id);
+      const portStr = port ? `API:${port.ports.api}` : '';
       lines.push({
         id: ++sysLineId,
-        text: `  ${s.roleId.padEnd(14)} ${portInfo}  ${s.task?.slice(0, 40) ?? ''}`,
+        text: `  ${s.roleId.padEnd(12)} ${s.id.slice(0, 22)}  ${portStr}`,
         color: 'gray',
       });
     }
@@ -317,7 +358,7 @@ export const App: React.FC = () => {
         break;
       }
       case 'agents': {
-        const lines = formatAgentsTree(waves, api.activeSessions, focusedWaveId);
+        const lines = formatAgentsTree(waves, api.sessions, api.activeSessions, focusedWaveId);
         addSystemLines(lines);
         break;
       }
@@ -333,9 +374,15 @@ export const App: React.FC = () => {
           addSystemMessage(`Sessions (${api.activeSessions.length}):`, 'cyan');
           for (const s of api.activeSessions) {
             const alive = s.alive === false ? ' DEAD' : s.pid ? ` PID:${s.pid}` : '';
-            const wave = s.waveId ? ` wave=${String(s.waveId).replace('wave-', 'W')}` : '';
+            // Find wave index
+            let waveLabel = '';
+            if (s.waveId) {
+              const wi = waves.findIndex(w => w.waveId === s.waveId);
+              waveLabel = wi >= 0 ? ` W${wi + 1}` : ` ${String(s.waveId).replace('wave-', 'W')}`;
+            }
+            const worktree = s.worktreePath ? ` \u{1F33F}${s.worktreePath.split('/').pop()}` : '';
             addSystemMessage(
-              `  ${s.sessionId.slice(0, 25).padEnd(26)} ${s.roleId.padEnd(12)} API:${s.ports.api} ${s.status}${alive}${wave}`,
+              `  ${s.sessionId.slice(0, 22).padEnd(23)} ${s.roleId.padEnd(10)} :${s.ports.api}/:${s.ports.vite} ${s.status}${alive}${waveLabel}${worktree}`,
               s.alive === false ? 'red' : s.status === 'active' ? 'green' : 'gray'
             );
           }
