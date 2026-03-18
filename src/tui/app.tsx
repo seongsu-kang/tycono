@@ -364,17 +364,16 @@ export const App: React.FC = () => {
     }
   }, [execute, addSystemMessage, addSystemLines, focusedWaveId, focusedWaveIndex, derivedWaveStatus, api.sessions.length, activeCount, waves, api.activeSessions, api.portSummary]);
 
-  // Global key handler: Tab to toggle mode, Ctrl+C handling
+  // Global key handler: Tab to toggle mode, Ctrl+C always exits
   useInput((input, key) => {
-    if (mode === 'command' && key.tab) {
-      setMode('panel');
-      return;
-    }
-    // Ctrl+C in command mode: exit
     if (key.ctrl && input === 'c') {
       exit();
+      return;
     }
-  }, { isActive: mode === 'command' });
+    if (mode === 'command' && key.tab) {
+      setMode('panel');
+    }
+  });
 
   // Loading state
   if (view === 'loading') {
