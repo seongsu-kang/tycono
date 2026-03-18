@@ -222,6 +222,12 @@ class WaveMultiplexer {
     this.registerSession(waveId, execution);
   }
 
+  /** Remove completed wave sessions from memory */
+  cleanupWave(waveId: string): void {
+    this.waveSessions.delete(waveId);
+    this.clients.delete(waveId);
+  }
+
   detach(waveId: string, client: WaveStreamClient): void {
     client.closed = true;
     clearInterval(client.heartbeat);

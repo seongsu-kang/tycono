@@ -109,6 +109,8 @@ export class ActivityStream {
   close(): void {
     this.closed = true;
     this.subscribers.clear();
+    // Memory: remove from activeStreams cache
+    ActivityStream.activeStreams.delete(this.sessionId);
   }
 
   get isClosed(): boolean {

@@ -539,6 +539,20 @@ class ExecutionManager {
             console.log(`[ExecMgr] Released ports for ${execution.id}: API :${execution.ports.api}, Vite :${execution.ports.vite}`);
           }
         }
+
+        // Memory cleanup: remove completed execution after 60s
+        // Keep briefly for status queries, then GC
+        setTimeout(() => {
+          this.executions.delete(execution.id);
+          // Clean up any leaked sessionMsgContent
+          if (execution.sessionId) {
+            for (const key of this.sessionMsgContent.keys()) {
+              if (key.startsWith(execution.sessionId + ':')) {
+                this.sessionMsgContent.delete(key);
+              }
+            }
+          }
+        }, 60_000);
       });
   }
 
