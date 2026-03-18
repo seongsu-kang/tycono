@@ -149,7 +149,15 @@ class SupervisorHeartbeat {
         state.directive = text;
       }
       state.crashCount = 0;
-      this.scheduleRestart(state, 0);
+
+      // Dual Mode: Conversation vs Dispatch (code-level enforcement)
+      // If directive looks like a question/status check → spawn conversation mode
+      // If directive looks like a task → spawn full supervisor with dispatch tools
+      if (this.isConversationDirective(text)) {
+        this.spawnConversation(state, text);
+      } else {
+        this.scheduleRestart(state, 0);
+      }
     }
 
     return directive;
@@ -232,6 +240,93 @@ class SupervisorHeartbeat {
   listActive(): SupervisorState[] {
     return Array.from(this.supervisors.values())
       .filter(s => s.status === 'running' || s.status === 'starting' || s.status === 'restarting');
+  }
+
+  /* ─── Internal: Dual Mode ─────────────────── */
+
+  /**
+   * Heuristic: is this directive a question/status check (conversation)
+   * or a work task (needs dispatch)?
+   *
+   * Conversation signals: question marks, status keywords, short length
+   * Dispatch signals: imperative verbs (만들어, 수정해, 구현해), long directives
+   */
+  private isConversationDirective(text: string): boolean {
+    const t = text.trim();
+
+    // Short messages with question marks → conversation
+    if (t.includes('?') && t.length < 100) return true;
+
+    // Korean question patterns
+    const questionPatterns = [
+      /확인해/, /알려줘/, /보여줘/, /어때/, /뭐야/, /뭐지/, /뭘까/,
+      /상태/, /상황/, /진행/, /현재/, /어디/, /얼마/,
+      /what/i, /how.*going/i, /status/i, /check/i, /show/i, /tell/i,
+    ];
+    if (questionPatterns.some(p => p.test(t))) return true;
+
+    // Long directives with action verbs → dispatch
+    const taskPatterns = [
+      /만들어/, /구현해/, /개발해/, /수정해/, /변경해/, /리팩토링/,
+      /설계해/, /작성해/, /배포해/, /테스트해/, /고쳐/,
+      /build/i, /create/i, /implement/i, /develop/i, /fix/i, /deploy/i, /refactor/i,
+    ];
+    if (taskPatterns.some(p => p.test(t))) return false;
+
+    // Default: short → conversation, long → dispatch
+    return t.length < 60;
+  }
+
+  /**
+   * Spawn a lightweight conversation session (no dispatch tools).
+   * CEO reads files and answers directly.
+   */
+  private spawnConversation(state: SupervisorState, directive: string): void {
+    // Build conversation context from previous directives
+    const deliveredDirectives = state.pendingDirectives.filter(d => d.delivered);
+    const history = deliveredDirectives.length > 0
+      ? `\n[Previous conversation]\n${deliveredDirectives.map(d => `CEO: "${d.text}"`).join('\n')}\n`
+      : '';
+
+    const task = `${history}[CEO Question] ${directive}
+
+You are the CEO's AI assistant. Answer this question directly by reading relevant files.
+Do NOT dispatch anyone. Do NOT start any work. Just read, analyze, and answer.
+Keep your response concise and informative.`;
+
+    // Reuse session
+    let sessionId = state.supervisorSessionId;
+    if (!sessionId || !getSession(sessionId)) {
+      const session = createSession('ceo', {
+        mode: 'do',
+        source: 'wave',
+        waveId: state.waveId,
+      });
+      sessionId = session.id;
+      state.supervisorSessionId = sessionId;
+    }
+
+    state.status = 'running';
+
+    try {
+      const exec = executionManager.startExecution({
+        type: 'assign',  // assign = no supervisor tools (dispatch/watch/amend)
+        roleId: 'ceo',
+        task,
+        sourceRole: 'ceo',
+        readOnly: true,   // readOnly = no code changes, conversation only
+        sessionId,
+      });
+
+      state.executionId = exec.id;
+      this.watchExecution(state, exec);
+
+      console.log(`[Supervisor] Conversation mode for wave ${state.waveId} | directive: ${directive.slice(0, 60)}`);
+    } catch (err) {
+      console.error(`[Supervisor] Conversation spawn failed:`, err);
+      // Fallback to full supervisor
+      this.scheduleRestart(state, 0);
+    }
   }
 
   /* ─── Internal: Spawn / Restart ────────────── */
