@@ -19,10 +19,11 @@ import { execSync } from 'node:child_process';
 import { OrgTree } from './OrgTree';
 import { StreamView } from './StreamView';
 import type { OrgNode } from '../store';
-import type { SSEEvent, ActiveSessionInfo, SessionInfo } from '../api';
+import type { SSEEvent, ActiveSessionInfo, SessionInfo, KnowledgeDoc } from '../api';
 import type { WaveInfo } from '../hooks/useCommand';
 
 type RightTab = 'stream' | 'docs' | 'info';
+type DocsFilter = 'all' | 'wave' | 'kb' | 'projects';
 
 interface PanelModeProps {
   tree: OrgNode[];
@@ -34,6 +35,7 @@ interface PanelModeProps {
   waveId: string | null;
   activeSessions: ActiveSessionInfo[];
   allSessions: SessionInfo[];
+  knowledgeDocs: KnowledgeDoc[];
   waves: WaveInfo[];
   focusedWaveId: string | null;
   onMove: (direction: 'up' | 'down') => void;
@@ -113,11 +115,12 @@ function readFilePreview(filePath: string, maxLines: number): string[] {
 
 export const PanelMode: React.FC<PanelModeProps> = ({
   tree, flatRoles, events, selectedRoleIndex, selectedRoleId,
-  streamStatus, waveId, activeSessions, allSessions, waves,
+  streamStatus, waveId, activeSessions, allSessions, knowledgeDocs, waves,
   focusedWaveId, onMove, onSelect, onEscape, onFocusWave,
 }) => {
   const [termHeight, setTermHeight] = useState(process.stdout.rows || 30);
   const [rightTab, setRightTab] = useState<RightTab>('stream');
+  const [docsFilter, setDocsFilter] = useState<DocsFilter>('all');
   const [docsIndex, setDocsIndex] = useState(0);
   const [docsScroll, setDocsScroll] = useState(0);
 
@@ -145,18 +148,55 @@ export const PanelMode: React.FC<PanelModeProps> = ({
     return tree.map(scopeNode);
   }, [tree, waveScopedStatuses]);
 
-  // Files created in this wave — only compute when Docs tab is active
-  const waveFiles = useMemo(() => {
-    if (rightTab !== 'docs' && rightTab !== 'info') return [];
-    return extractWaveFiles(events);
+  // Wave files (from SSE events) — only compute when needed
+  const waveFileSet = useMemo(() => {
+    if (rightTab !== 'docs' && rightTab !== 'info') return new Set<string>();
+    return new Set(extractWaveFiles(events));
   }, [rightTab === 'docs' || rightTab === 'info' ? events.length : 0, rightTab]);
 
-  // File preview — only when Docs tab + file selected
-  const selectedFile = waveFiles[docsIndex] ?? null;
+  // Build docs list based on filter
+  const docsList = useMemo(() => {
+    if (rightTab !== 'docs') return [];
+
+    interface DocEntry { path: string; title: string; isWave: boolean; }
+    const entries: DocEntry[] = [];
+
+    // KB docs from API
+    for (const doc of knowledgeDocs) {
+      const isWave = waveFileSet.has(doc.path);
+      const isKb = doc.id.startsWith('knowledge/');
+      const isProject = doc.id.startsWith('projects/');
+
+      if (docsFilter === 'wave' && !isWave) continue;
+      if (docsFilter === 'kb' && !isKb) continue;
+      if (docsFilter === 'projects' && !isProject) continue;
+
+      entries.push({ path: doc.path, title: doc.title || doc.id.split('/').pop() || '', isWave });
+    }
+
+    // Wave-only files not in KB (e.g. code files)
+    for (const f of waveFileSet) {
+      if (!entries.some(e => e.path === f)) {
+        if (docsFilter === 'kb' || docsFilter === 'projects') continue;
+        entries.push({ path: f, title: f.split('/').pop() || f, isWave: true });
+      }
+    }
+
+    // Sort: wave files first, then alphabetical
+    entries.sort((a, b) => {
+      if (a.isWave && !b.isWave) return -1;
+      if (!a.isWave && b.isWave) return 1;
+      return a.title.localeCompare(b.title);
+    });
+
+    return entries;
+  }, [rightTab, docsFilter, knowledgeDocs, waveFileSet]);
+
+  const selectedDoc = docsList[docsIndex] ?? null;
   const filePreview = useMemo(() => {
-    if (!selectedFile || rightTab !== 'docs') return [];
-    return readFilePreview(selectedFile, 60);
-  }, [selectedFile, rightTab]);
+    if (!selectedDoc || rightTab !== 'docs') return [];
+    return readFilePreview(selectedDoc.path, 60);
+  }, [selectedDoc?.path, rightTab]);
 
   useInput((input, key) => {
     if (key.escape) { onEscape(); return; }
@@ -177,8 +217,12 @@ export const PanelMode: React.FC<PanelModeProps> = ({
 
     // j/k: context-dependent
     if (key.upArrow || input === 'k') {
-      if (rightTab === 'docs' && docsScroll > 0) {
-        setDocsScroll(s => Math.max(0, s - 3));
+      if (rightTab === 'docs') {
+        if (docsScroll > 0) {
+          setDocsScroll(s => Math.max(0, s - 3));
+        } else {
+          setDocsIndex(i => Math.max(0, i - 1));
+        }
       } else if (rightTab === 'stream') {
         onMove('up');
       }
@@ -186,28 +230,44 @@ export const PanelMode: React.FC<PanelModeProps> = ({
     }
     if (key.downArrow || input === 'j') {
       if (rightTab === 'docs') {
-        setDocsScroll(s => s + 3);
+        if (docsScroll > 0) {
+          setDocsScroll(s => s + 3);
+        } else {
+          setDocsIndex(i => Math.min(docsList.length - 1, i + 1));
+        }
       } else if (rightTab === 'stream') {
         onMove('down');
       }
       return;
     }
 
+    // Docs filter: 1-4
+    if (rightTab === 'docs') {
+      const filters: DocsFilter[] = ['all', 'wave', 'kb', 'projects'];
+      const fi = parseInt(input, 10);
+      if (fi >= 1 && fi <= 4) {
+        setDocsFilter(filters[fi - 1]);
+        setDocsIndex(0);
+        setDocsScroll(0);
+        return;
+      }
+    }
+
     // Tab key for cycling docs files
     if (key.tab && rightTab === 'docs') {
-      setDocsIndex(i => (i + 1) % Math.max(1, waveFiles.length));
+      setDocsIndex(i => (i + 1) % Math.max(1, docsList.length));
       setDocsScroll(0);
       return;
     }
 
     // Enter
     if (key.return) {
-      if (rightTab === 'docs' && selectedFile) {
-        // Open in vim
+      if (rightTab === 'docs' && selectedDoc) {
         const editor = process.env.EDITOR || 'vim';
         try {
-          execSync(`${editor} "${selectedFile}"`, { stdio: 'inherit' });
+          execSync(`${editor} "${selectedDoc.path}"`, { stdio: 'inherit' });
         } catch { /* user quit editor */ }
+        fileCache.delete(selectedDoc.path); // Invalidate cache after edit
         return;
       }
       if (rightTab === 'stream') {
@@ -216,10 +276,12 @@ export const PanelMode: React.FC<PanelModeProps> = ({
       }
     }
 
-    // 1-9: wave switch
-    const num = parseInt(input, 10);
-    if (num >= 1 && num <= 9 && num <= waves.length) {
-      onFocusWave(waves[num - 1].waveId);
+    // 1-9: wave switch (only in stream/info tabs — docs uses 1-4 for filters)
+    if (rightTab !== 'docs') {
+      const num = parseInt(input, 10);
+      if (num >= 1 && num <= 9 && num <= waves.length) {
+        onFocusWave(waves[num - 1].waveId);
+      }
     }
   });
 
@@ -346,50 +408,66 @@ export const PanelMode: React.FC<PanelModeProps> = ({
             </>
           )}
 
-          {/* Docs tab */}
+          {/* Docs tab — KB browser + wave artifacts */}
           {rightTab === 'docs' && (
             <Box flexDirection="column" paddingX={1} flexGrow={1}>
-              {waveFiles.length === 0 ? (
-                <Text color="gray">No files created in this wave yet.</Text>
-              ) : (
-                <>
-                  {/* File list */}
-                  <Box marginBottom={1}>
-                    <Text color="gray">Files ({waveFiles.length}): </Text>
-                    {waveFiles.map((f, i) => (
-                      <Box key={f} marginRight={1}>
-                        <Text
-                          color={i === docsIndex ? 'cyan' : 'gray'}
-                          bold={i === docsIndex}
-                          inverse={i === docsIndex}
-                        >
-                          {` ${f.split('/').pop()} `}
-                        </Text>
-                      </Box>
-                    ))}
-                    <Text color="gray" dimColor> [Tab] next</Text>
+              {/* Filter bar */}
+              <Box marginBottom={0}>
+                {(['all', 'wave', 'kb', 'projects'] as DocsFilter[]).map((f, i) => (
+                  <Box key={f} marginRight={1}>
+                    <Text
+                      color={docsFilter === f ? 'cyan' : 'gray'}
+                      bold={docsFilter === f}
+                      inverse={docsFilter === f}
+                    >
+                      {f === 'wave' ? ` ${i + 1}:\u2605Wave ` : ` ${i + 1}:${f.charAt(0).toUpperCase() + f.slice(1)} `}
+                    </Text>
                   </Box>
+                ))}
+                <Text color="gray" dimColor> ({docsList.length})</Text>
+              </Box>
 
-                  {/* File preview */}
-                  {selectedFile && (
+              {docsList.length === 0 ? (
+                <Box marginTop={1}>
+                  <Text color="gray">{docsFilter === 'wave' ? 'No files created in this wave.' : 'No documents found.'}</Text>
+                </Box>
+              ) : (
+                <Box flexGrow={1} flexDirection="column">
+                  {/* File list (scrollable region) */}
+                  {!selectedDoc || docsScroll === 0 ? (
+                    <Box flexDirection="column" marginTop={0}>
+                      {docsList.slice(0, termHeight - 8).map((doc, i) => (
+                        <Box key={doc.path}>
+                          <Text
+                            color={i === docsIndex ? 'cyan' : doc.isWave ? 'green' : 'white'}
+                            bold={i === docsIndex}
+                            inverse={i === docsIndex}
+                          >
+                            {doc.isWave ? '\u2605' : ' '} {doc.title.slice(0, 50)}
+                          </Text>
+                        </Box>
+                      ))}
+                      {docsList.length > termHeight - 8 && (
+                        <Text color="gray">  ... +{docsList.length - (termHeight - 8)} more (Tab to cycle)</Text>
+                      )}
+                    </Box>
+                  ) : (
+                    /* File preview (when scrolled into file) */
                     <Box flexDirection="column">
-                      <Text color="cyan" bold>{selectedFile.split('/').slice(-2).join('/')}</Text>
+                      <Text color="cyan" bold>{selectedDoc.isWave ? '\u2605 ' : ''}{selectedDoc.path.split('/').slice(-2).join('/')}</Text>
                       <Text color="gray">{'\u2500'.repeat(50)}</Text>
-                      {filePreview.slice(docsScroll, docsScroll + termHeight - 12).map((line, i) => (
+                      {filePreview.slice(docsScroll - 1, docsScroll - 1 + termHeight - 10).map((line, i) => (
                         <Text key={i} color="white" wrap="wrap">{line}</Text>
                       ))}
-                      {filePreview.length > termHeight - 12 && (
-                        <Text color="gray" dimColor>
-                          {docsScroll > 0 ? '\u2191 ' : ''}j/k scroll | {filePreview.length - docsScroll} lines remaining
-                        </Text>
-                      )}
                     </Box>
                   )}
 
-                  <Box marginTop={1}>
-                    <Text color="gray" dimColor>[Enter] open in {process.env.EDITOR || 'vim'} | [Tab] next file | [j/k] scroll</Text>
+                  <Box marginTop={0}>
+                    <Text color="gray" dimColor>
+                      [Enter] {process.env.EDITOR || 'vim'} | [Tab] next | [j/k] {docsScroll > 0 ? 'scroll' : 'select'} | [k] back
+                    </Text>
                   </Box>
-                </>
+                </Box>
               )}
             </Box>
           )}
@@ -402,7 +480,7 @@ export const PanelMode: React.FC<PanelModeProps> = ({
               <Text color="white">Wave: {focusedWave?.waveId ?? 'none'}</Text>
               <Text color="white">Directive: {focusedWave?.directive || '(idle)'}</Text>
               <Text color="white">Sessions: {waveSessionCount}</Text>
-              <Text color="white">Files modified: {waveFiles.length}</Text>
+              <Text color="white">Files modified: {waveFileSet.size}</Text>
               <Text color="white">SSE events: {events.length}</Text>
 
               {/* Active sessions in this wave */}

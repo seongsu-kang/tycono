@@ -9,10 +9,12 @@ import {
   fetchExecStatus,
   fetchActiveWaves,
   fetchActiveSessions,
+  fetchKnowledgeDocs,
   type CompanyInfo,
   type SessionInfo,
   type ExecStatus,
   type ActiveSessionInfo,
+  type KnowledgeDoc,
 } from '../api';
 
 const POLL_INTERVAL = 5000; // 5 seconds (reduce re-renders)
@@ -31,6 +33,7 @@ export interface ApiState {
   activeWaves: ActiveWaveInfo[];
   activeSessions: ActiveSessionInfo[];
   portSummary: { active: number; totalPorts: number };
+  knowledgeDocs: KnowledgeDoc[];
   error: string | null;
   loaded: boolean;
   refresh(): void;
@@ -43,6 +46,8 @@ export function useApi(): ApiState {
   const [activeWaves, setActiveWaves] = useState<ActiveWaveInfo[]>([]);
   const [activeSessions, setActiveSessions] = useState<ActiveSessionInfo[]>([]);
   const [portSummary, setPortSummary] = useState<{ active: number; totalPorts: number }>({ active: 0, totalPorts: 0 });
+  const [knowledgeDocs, setKnowledgeDocs] = useState<KnowledgeDoc[]>([]);
+  const kbLoadedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const mountedRef = useRef(true);
@@ -75,6 +80,14 @@ export function useApi(): ApiState {
       setActiveSessions(activeSess.sessions ?? []);
       setPortSummary(activeSess.summary ?? { active: 0, totalPorts: 0 });
 
+      // KB docs (load once, not every poll)
+      if (!kbLoadedRef.current) {
+        kbLoadedRef.current = true;
+        fetchKnowledgeDocs().then(docs => {
+          if (mountedRef.current) setKnowledgeDocs(docs);
+        }).catch(() => {});
+      }
+
       setError(null);
       setLoaded(true);
     } catch (err) {
@@ -94,5 +107,5 @@ export function useApi(): ApiState {
     };
   }, [refresh]);
 
-  return { company, sessions, execStatus, activeWaves, activeSessions, portSummary, error, loaded, refresh };
+  return { company, sessions, execStatus, activeWaves, activeSessions, portSummary, knowledgeDocs, error, loaded, refresh };
 }

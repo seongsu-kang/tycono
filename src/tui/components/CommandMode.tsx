@@ -130,12 +130,14 @@ export function summarizeEvent(event: SSEEvent, allRoleIds: string[]): StreamLin
         else if (inp.pattern) detail = ` ${String(inp.pattern)}`;
         else if (inp.description) detail = ` ${String(inp.description).slice(0, 60)}`;
       }
+      // Highlight file writes
+      const isWrite = ['Write', 'Edit'].includes(toolName);
       return {
         id: ++lineCounter,
         prefix: isSupervisor ? undefined : event.roleId,
         prefixColor: roleColor,
-        text: `  \u2192 ${toolName}${detail}`,
-        color: 'gray',
+        text: isWrite ? `  \u{1F4C4} ${toolName}${detail}` : `  \u2192 ${toolName}${detail}`,
+        color: isWrite ? 'green' : 'gray',
         indent: !isSupervisor,
       };
     }

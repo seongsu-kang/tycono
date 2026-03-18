@@ -551,6 +551,7 @@ export const App: React.FC = () => {
             waveId={focusedWaveId}
             activeSessions={api.activeSessions}
             allSessions={api.sessions}
+            knowledgeDocs={api.knowledgeDocs}
             waves={waves}
             focusedWaveId={focusedWaveId}
             onMove={(dir) => {

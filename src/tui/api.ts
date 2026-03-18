@@ -189,6 +189,22 @@ export async function cleanupSessions(): Promise<{ cleaned: number; remaining: n
   return fetchJson<{ cleaned: number; remaining: number }>('/api/active-sessions/cleanup', { method: 'POST' });
 }
 
+/* ─── Knowledge docs ─── */
+
+export interface KnowledgeDoc {
+  id: string;
+  title: string;
+  path: string;
+  type?: string;
+  domain?: string;
+  status?: string;
+  updatedAt?: string;
+}
+
+export async function fetchKnowledgeDocs(): Promise<KnowledgeDoc[]> {
+  return fetchJson<KnowledgeDoc[]>('/api/knowledge');
+}
+
 /* ─── Setup API calls ─── */
 
 export interface TeamTemplate {
