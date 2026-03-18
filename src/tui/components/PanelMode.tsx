@@ -145,14 +145,17 @@ export const PanelMode: React.FC<PanelModeProps> = ({
     return tree.map(scopeNode);
   }, [tree, waveScopedStatuses]);
 
-  // Files created in this wave
-  const waveFiles = useMemo(() => extractWaveFiles(events), [events]);
+  // Files created in this wave — only compute when Docs tab is active
+  const waveFiles = useMemo(() => {
+    if (rightTab !== 'docs' && rightTab !== 'info') return [];
+    return extractWaveFiles(events);
+  }, [rightTab === 'docs' || rightTab === 'info' ? events.length : 0, rightTab]);
 
-  // File preview for selected doc
+  // File preview — only when Docs tab + file selected
   const selectedFile = waveFiles[docsIndex] ?? null;
   const filePreview = useMemo(() => {
     if (!selectedFile || rightTab !== 'docs') return [];
-    return readFilePreview(selectedFile, 100);
+    return readFilePreview(selectedFile, 60);
   }, [selectedFile, rightTab]);
 
   useInput((input, key) => {
