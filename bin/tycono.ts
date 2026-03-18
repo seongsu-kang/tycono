@@ -221,39 +221,23 @@ async function startServerForTui(): Promise<void> {
   const origStdoutWrite = process.stdout.write.bind(process.stdout);
   const origLog = (...args: unknown[]) => origStdoutWrite(args.join(' ') + '\n');
 
-  // Suppress ALL server output BEFORE importing server code
-  // Override console methods globally — affects all subsequently imported modules
-  const _log = console.log, _err = console.error, _warn = console.warn, _info = console.info;
-  console.log = (...a: unknown[]) => logStream.write(a.join(' ') + '\n');
-  console.error = (...a: unknown[]) => logStream.write(a.join(' ') + '\n');
-  console.warn = (...a: unknown[]) => logStream.write(a.join(' ') + '\n');
-  console.info = (...a: unknown[]) => logStream.write(a.join(' ') + '\n');
+  // Redirect console methods to log file BEFORE importing server code
+  // This is the ONLY output suppression — NO stdout.write hijacking
+  // Ink needs full control of stdout.write, any interception breaks rendering
+  console.log = (...a: unknown[]) => { logStream.write(a.join(' ') + '\n'); };
+  console.error = (...a: unknown[]) => { logStream.write(a.join(' ') + '\n'); };
+  console.warn = (...a: unknown[]) => { logStream.write(a.join(' ') + '\n'); };
+  console.info = (...a: unknown[]) => { logStream.write(a.join(' ') + '\n'); };
 
   const { createHttpServer } = await import('../src/api/src/create-server.js');
   const server = createHttpServer();
 
-  const host = process.env.HOST || '0.0.0.0';
-
   await new Promise<void>((resolve) => {
-    server.listen(port, host, () => resolve());
+    server.listen(port, '0.0.0.0', () => resolve());
   });
 
   origLog(`  API server started on port ${port}`);
   origLog(`  Logs: ${logFile}`);
-
-  // Now hijack stdout.write AFTER server started but BEFORE Ink
-  // Block non-Ink output from reaching terminal
-  // Ink always writes ANSI escape sequences — server text output doesn't
-  process.stdout.write = ((chunk: any, ...args: any[]) => {
-    const str = typeof chunk === 'string' ? chunk : chunk.toString();
-    // Ink output: contains ANSI CSI sequences
-    if (str.includes('\x1b[') || str.includes('\x1b(')) {
-      return origStdoutWrite(chunk, ...args);
-    }
-    // Non-Ink (server log leaked): redirect to file
-    logStream.write(str);
-    return true;
-  }) as any;
 
   // Graceful shutdown
   const shutdown = () => {
@@ -263,7 +247,7 @@ async function startServerForTui(): Promise<void> {
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
-  // Start TUI
+  // Start TUI — stdout.write is NOT intercepted, Ink has full control
   const { startTui } = await import('../src/tui/index.tsx');
   await startTui({ port });
 }
