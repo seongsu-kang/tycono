@@ -91,11 +91,21 @@ function extractWaveFiles(events: SSEEvent[]): string[] {
   return Array.from(files);
 }
 
-/** Read file preview (first N lines) */
+/** Read file preview (first N lines, cached) */
+const fileCache = new Map<string, string[]>();
 function readFilePreview(filePath: string, maxLines: number): string[] {
+  const cached = fileCache.get(filePath);
+  if (cached) return cached;
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
-    return content.split('\n').slice(0, maxLines);
+    const lines = content.split('\n').slice(0, maxLines);
+    fileCache.set(filePath, lines);
+    // Evict old entries
+    if (fileCache.size > 5) {
+      const first = fileCache.keys().next().value;
+      if (first) fileCache.delete(first);
+    }
+    return lines;
   } catch {
     return ['(cannot read file)'];
   }

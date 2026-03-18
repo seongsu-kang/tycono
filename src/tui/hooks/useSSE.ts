@@ -8,7 +8,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { subscribeToWaveStream, type SSEEvent, type SSEConnection } from '../api';
 
-const MAX_EVENTS = 150;
+const MAX_EVENTS = 100;
 const RECONNECT_DELAY_MS = 3000;
 const MAX_RECONNECT_DELAY_MS = 15000;
 const BATCH_INTERVAL_MS = 300; // Throttle: update React state max ~3x/sec

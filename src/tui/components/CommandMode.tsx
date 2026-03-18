@@ -10,7 +10,7 @@ import { Box, Text, Static } from 'ink';
 import TextInput from 'ink-text-input';
 import type { SSEEvent } from '../api';
 import { getRoleColor } from '../theme';
-import { renderMarkdownLine } from '../utils/markdown';
+// Markdown rendering is done inline via regex (no external dependency)
 
 const SUPERVISOR_ROLE = 'ceo';
 
@@ -236,29 +236,15 @@ export function summarizeEvent(event: SSEEvent, allRoleIds: string[]): StreamLin
 
 /** Render a single StreamLine */
 function StreamLineRow({ line }: { line: StreamLine }) {
-  // Multi-line markdown: split and render each line
-  if (line.markdown && line.text.includes('\n')) {
-    const lines = line.text.split('\n');
-    return (
-      <Box flexDirection="column">
-        {lines.map((l, i) => (
-          <Box key={i}>
-            {line.indent && <Text>  </Text>}
-            {line.prefix && i === 0 && (
-              <Text color={line.prefixColor} bold>
-                {(line.prefix).padEnd(12)}
-              </Text>
-            )}
-            {line.prefix && i > 0 && <Text>{' '.repeat(12)}</Text>}
-            {renderMarkdownLine(l, `${line.id}-${i}`)}
-          </Box>
-        ))}
-      </Box>
-    );
-  }
-
-  // Single line with markdown
+  // Markdown: inline formatting only (no multi-line splitting — too many elements)
   if (line.markdown) {
+    // Strip markdown markers for terminal display
+    const cleaned = line.text
+      .replace(/^#{1,4}\s+/gm, '')           // ## heading → heading
+      .replace(/\*\*(.+?)\*\*/g, '$1')        // **bold** → bold
+      .replace(/`(.+?)`/g, '$1')              // `code` → code
+      .replace(/^---+$/gm, '\u2500'.repeat(40)); // --- → line
+
     return (
       <Box>
         {line.indent && <Text>  </Text>}
@@ -267,12 +253,11 @@ function StreamLineRow({ line }: { line: StreamLine }) {
             {(line.prefix).padEnd(12)}
           </Text>
         )}
-        {renderMarkdownLine(line.text, line.id)}
+        <Text color={line.color} wrap="wrap">{cleaned}</Text>
       </Box>
     );
   }
 
-  // Plain text (tools, system messages)
   return (
     <Box>
       {line.indent && <Text>  </Text>}
@@ -302,19 +287,19 @@ export const CommandMode: React.FC<CommandModeProps> = ({
     if (line) eventLines.push(line);
   }
 
-  // Merge system messages and event lines (cap total to prevent memory bloat)
-  const allLines = [...systemMessages, ...eventLines].slice(-200);
+  // Merge system messages and event lines (cap total)
+  const allLines = [...systemMessages, ...eventLines].slice(-100);
 
   // Split into committed (scrollback) and live (re-rendered)
   const newCommitted = allLines.slice(committedRef.current);
-  if (newCommitted.length > 8) {
-    const toCommit = newCommitted.slice(0, -8);
+  if (newCommitted.length > 6) {
+    const toCommit = newCommitted.slice(0, -6);
     committedRef.current += toCommit.length;
   }
 
   // Cap committed to prevent Static from holding too many items
   const rawCommitted = allLines.slice(0, committedRef.current);
-  const committedLines = rawCommitted.length > 100 ? rawCommitted.slice(-100) : rawCommitted;
+  const committedLines = rawCommitted.length > 50 ? rawCommitted.slice(-50) : rawCommitted;
   const liveLines = allLines.slice(committedRef.current);
 
   const handleSubmit = useCallback((value: string) => {
