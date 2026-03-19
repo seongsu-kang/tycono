@@ -14,6 +14,8 @@
 import { executionManager, type Execution } from './execution-manager.js';
 import { createSession, getSession, listSessions, addMessage, type Message } from './session-store.js';
 import { buildOrgTree, getSubordinates } from '../engine/org-tree.js';
+import fs from 'node:fs';
+import path from 'node:path';
 import { COMPANY_ROOT } from './file-reader.js';
 import { ActivityStream } from './activity-stream.js';
 import { saveCompletedWave } from './wave-tracker.js';
@@ -129,8 +131,44 @@ class SupervisorHeartbeat {
    * Dispatch Protocol Principle 2: tick이 유일한 동기화 지점.
    */
   addDirective(waveId: string, text: string): PendingDirective | null {
-    const state = this.supervisors.get(waveId);
-    if (!state) return null;
+    let state = this.supervisors.get(waveId);
+
+    // If wave not in memory (e.g., server restarted), restore from disk
+    if (!state) {
+      // Check if this wave existed before (has sessions in session-store)
+      const waveSessions = listSessions().filter(s => s.waveId === waveId);
+      if (waveSessions.length > 0) {
+        // Restore supervisor state for this wave
+        const ceoSession = waveSessions.find(s => s.roleId === 'ceo');
+        // Read original directive from wave artifact file (not the new text)
+        let originalDirective = '';
+        try {
+          const waveFile = path.join(COMPANY_ROOT, 'operations', 'waves', `${waveId}.json`);
+          if (fs.existsSync(waveFile)) {
+            const waveData = JSON.parse(fs.readFileSync(waveFile, 'utf-8'));
+            originalDirective = waveData.directive ?? '';
+          }
+        } catch { /* ignore */ }
+        state = {
+          waveId,
+          directive: originalDirective || text,
+          continuous: false,
+          supervisorSessionId: ceoSession?.id ?? null,
+          executionId: null,
+          status: 'stopped',
+          crashCount: 0,
+          maxCrashRetries: 10,
+          restartTimer: null,
+          pendingDirectives: [],
+          pendingQuestions: [],
+          createdAt: ceoSession?.createdAt ?? new Date().toISOString(),
+        };
+        this.supervisors.set(waveId, state);
+        console.log(`[Supervisor] Restored wave ${waveId} from disk (${waveSessions.length} sessions)`);
+      } else {
+        return null;
+      }
+    }
 
     const directive: PendingDirective = {
       id: `dir-${Date.now()}`,
@@ -283,18 +321,99 @@ class SupervisorHeartbeat {
    * Spawn a lightweight conversation session (no dispatch tools).
    * CEO reads files and answers directly.
    */
+  /**
+   * Load conversation history from activity-stream files for a wave.
+   * Used when supervisor restarts (e.g., TUI restarted) to restore context.
+   */
+  private loadWaveHistory(waveId: string): string {
+    try {
+      // Find CEO sessions for this wave from session-store
+      const allSessions = listSessions();
+      console.log(`[WaveHistory] Loading for wave=${waveId}, total sessions=${allSessions.length}`);
+      const waveCeoSessions = allSessions
+        .filter(s => s.waveId === waveId && s.roleId === 'ceo')
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+      console.log(`[WaveHistory] Found ${waveCeoSessions.length} CEO sessions for wave=${waveId}: ${waveCeoSessions.map(s => s.id).join(', ')}`);
+      if (waveCeoSessions.length === 0) return '';
+
+      const exchanges: Array<{ role: 'ceo' | 'supervisor'; text: string }> = [];
+      for (const ses of waveCeoSessions.slice(-3)) {
+        if (!ActivityStream.exists(ses.id)) continue;
+        const events = ActivityStream.readAll(ses.id);
+
+        let currentText = '';
+        for (const e of events) {
+          // New turn starts — flush accumulated text from previous turn
+          if (e.type === 'msg:start') {
+            if (currentText.trim()) {
+              exchanges.push({ role: 'supervisor', text: currentText.trim().slice(0, 100) });
+              currentText = '';
+            }
+            // Extract CEO directive
+            const task = String(e.data.task ?? '');
+            const match = task.match(/\[CEO (?:Supervisor|Question)\]\s*(.*?)(?:\n|$)/);
+            if (match) {
+              exchanges.push({ role: 'ceo', text: match[1].slice(0, 80) });
+            }
+          }
+          // Accumulate supervisor response text
+          if (e.type === 'text' && e.roleId === 'ceo') {
+            const text = String(e.data.text ?? '').trim();
+            if (text && !text.startsWith('#') && !text.startsWith('\u26D4')) {
+              currentText += text + ' ';
+            }
+          }
+          // Turn boundary — flush
+          if (e.type === 'msg:done' || e.type === 'msg:awaiting_input' || e.type === 'msg:error') {
+            if (currentText.trim()) {
+              exchanges.push({ role: 'supervisor', text: currentText.trim().slice(0, 100) });
+              currentText = '';
+            }
+          }
+        }
+        // Flush any remaining text
+        if (currentText.trim()) {
+          exchanges.push({ role: 'supervisor', text: currentText.trim().slice(0, 100) });
+        }
+      }
+
+      if (exchanges.length === 0) return '';
+
+      // Keep last 4 exchanges (2 Q&A pairs), cap total at 500 chars
+      const recent = exchanges.slice(-4);
+      const formatted = recent.map(e =>
+        e.role === 'ceo' ? `CEO: "${e.text}"` : `→ ${e.text}`
+      ).join('\n');
+
+      const result = formatted.length > 500
+        ? `\n[Previous conversation]\n${formatted.slice(-500)}\n`
+        : `\n[Previous conversation]\n${formatted}\n`;
+      console.log(`[WaveHistory] Result (${result.length} chars): ${result.slice(0, 200)}`);
+      return result;
+    } catch {
+      return '';
+    }
+  }
+
   private spawnConversation(state: SupervisorState, directive: string): void {
-    // Build conversation context: previous directives + last execution summary
+    // Build conversation context: in-memory directives + disk history
     const deliveredDirectives = state.pendingDirectives.filter(d => d.delivered);
     const directiveHistory = deliveredDirectives.length > 0
       ? deliveredDirectives.map(d => `- CEO: "${d.text}"`).join('\n')
       : '';
 
+    // If no in-memory history, load from disk (restart case)
+    const diskHistory = !directiveHistory ? this.loadWaveHistory(state.waveId) : '';
+
     // Extract last execution's output from activity stream (what "just happened")
     let lastExecutionSummary = '';
-    if (state.supervisorSessionId) {
+    // Try current supervisorSessionId first, then search by waveId
+    const sessionIdToCheck = state.supervisorSessionId
+      || listSessions().find(s => s.waveId === state.waveId && s.roleId === 'ceo')?.id;
+    if (sessionIdToCheck) {
       try {
-        const events = ActivityStream.readAll(state.supervisorSessionId);
+        const events = ActivityStream.readAll(sessionIdToCheck);
         // Get last text outputs (the supervisor's final response)
         const textEvents = events.filter(e => e.type === 'text' && e.roleId === 'ceo');
         const toolEvents = events.filter(e => e.type === 'tool:start' && e.roleId === 'ceo');
@@ -315,7 +434,7 @@ class SupervisorHeartbeat {
       } catch { /* ignore */ }
     }
 
-    const context = [directiveHistory, lastExecutionSummary].filter(Boolean).join('\n');
+    const context = [directiveHistory || diskHistory, lastExecutionSummary].filter(Boolean).join('\n');
 
     const task = `${context ? context + '\n' : ''}[CEO Question] ${directive}
 

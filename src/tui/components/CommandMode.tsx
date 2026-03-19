@@ -45,7 +45,7 @@ function isSystemNoise(text: string): boolean {
   if (/^##\s*Your Role/i.test(t)) return true;
   if (t.includes('무엇을 도와드릴까요')) return true;
   // Conversation context leakage
-  if (t.startsWith('[Previous execution]')) return true;
+  if (t.startsWith('[Previous execution')) return true;
   if (/^Tools used:/i.test(t)) return true;
   return false;
 }
@@ -396,18 +396,17 @@ export const CommandMode: React.FC<CommandModeProps> = ({
       {/* Quick action bar — shown when arrow down from input */}
       {quickBarActive && (
         <Box paddingX={0} marginTop={0}>
-          {QUICK_ACTIONS.map((action, i) => (
-            <Box key={action} marginRight={1}>
-              <Text
-                color={i === quickBarIndex ? 'cyan' : 'gray'}
-                bold={i === quickBarIndex}
-                inverse={i === quickBarIndex}
-              >
-                {` ${action} `}
-              </Text>
-            </Box>
-          ))}
-          <Text color="gray" dimColor> \u2190\u2192 select  Enter open  \u2191 back</Text>
+          {QUICK_ACTIONS.map((action, i) => {
+            const selected = i === quickBarIndex;
+            return (
+              <Box key={action} marginRight={1}>
+                <Text color={selected ? 'cyan' : 'gray'} bold={selected}>
+                  {selected ? `[ ${action} ]` : `  ${action}  `}
+                </Text>
+              </Box>
+            );
+          })}
+          <Text color="gray" dimColor> \u2190\u2192  Enter  \u2191back</Text>
         </Box>
       )}
     </Box>

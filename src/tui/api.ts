@@ -159,6 +159,19 @@ export async function fetchActiveWaves(): Promise<{ waves: Array<{ waveId: strin
   return fetchJson('/api/waves/active');
 }
 
+export interface PastWaveInfo {
+  id: string;
+  directive: string;
+  rolesCount: number;
+  startedAt: string;
+  sessionIds?: string[];
+}
+
+export async function fetchPastWaves(limit = 20): Promise<PastWaveInfo[]> {
+  const all = await fetchJson<PastWaveInfo[]>('/api/operations/waves');
+  return all.slice(0, limit);
+}
+
 /* ─── Active Sessions (port/worktree visibility) ─── */
 
 export interface ActiveSessionInfo {

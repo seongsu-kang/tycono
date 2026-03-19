@@ -10,11 +10,13 @@ import {
   fetchActiveWaves,
   fetchActiveSessions,
   fetchKnowledgeDocs,
+  fetchPastWaves,
   type CompanyInfo,
   type SessionInfo,
   type ExecStatus,
   type ActiveSessionInfo,
   type KnowledgeDoc,
+  type PastWaveInfo,
 } from '../api';
 
 const POLL_INTERVAL = 5000; // 5 seconds (reduce re-renders)
@@ -31,6 +33,7 @@ export interface ApiState {
   sessions: SessionInfo[];
   execStatus: ExecStatus | null;
   activeWaves: ActiveWaveInfo[];
+  pastWaves: PastWaveInfo[];
   activeSessions: ActiveSessionInfo[];
   portSummary: { active: number; totalPorts: number };
   knowledgeDocs: KnowledgeDoc[];
@@ -44,6 +47,8 @@ export function useApi(): ApiState {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [execStatus, setExecStatus] = useState<ExecStatus | null>(null);
   const [activeWaves, setActiveWaves] = useState<ActiveWaveInfo[]>([]);
+  const [pastWaves, setPastWaves] = useState<PastWaveInfo[]>([]);
+  const pastWavesLoadedRef = useRef(false);
   const [activeSessions, setActiveSessions] = useState<ActiveSessionInfo[]>([]);
   const [portSummary, setPortSummary] = useState<{ active: number; totalPorts: number }>({ active: 0, totalPorts: 0 });
   const [knowledgeDocs, setKnowledgeDocs] = useState<KnowledgeDoc[]>([]);
@@ -54,13 +59,22 @@ export function useApi(): ApiState {
 
   const refresh = useCallback(async () => {
     try {
-      const [comp, sess, exec, waves, activeSess] = await Promise.all([
+      const promises: [
+        Promise<CompanyInfo | null>,
+        Promise<SessionInfo[]>,
+        Promise<ExecStatus | null>,
+        Promise<{ waves: Array<{ waveId: string; sessionIds: string[] }> }>,
+        Promise<{ sessions: ActiveSessionInfo[]; summary: { active: number; totalPorts: number } }>,
+        Promise<PastWaveInfo[]>,
+      ] = [
         fetchCompany().catch(() => null),
         fetchSessions().catch(() => []),
         fetchExecStatus().catch(() => null),
         fetchActiveWaves().catch(() => ({ waves: [] })),
         fetchActiveSessions().catch(() => ({ sessions: [], summary: { active: 0, totalPorts: 0 } })),
-      ]);
+        !pastWavesLoadedRef.current ? fetchPastWaves(20).catch(() => []) : Promise.resolve([]),
+      ];
+      const [comp, sess, exec, waves, activeSess, pastWavesResult] = await Promise.all(promises);
 
       if (!mountedRef.current) return;
 
@@ -79,6 +93,12 @@ export function useApi(): ApiState {
       // Active sessions (port/resource visibility)
       setActiveSessions(activeSess.sessions ?? []);
       setPortSummary(activeSess.summary ?? { active: 0, totalPorts: 0 });
+
+      // Past waves (load once, included in Promise.all)
+      if (!pastWavesLoadedRef.current && pastWavesResult.length > 0) {
+        pastWavesLoadedRef.current = true;
+        setPastWaves(pastWavesResult);
+      }
 
       // KB docs (load once, not every poll)
       if (!kbLoadedRef.current) {
@@ -108,5 +128,5 @@ export function useApi(): ApiState {
     };
   }, [refresh]);
 
-  return { company, sessions, execStatus, activeWaves, activeSessions, portSummary, knowledgeDocs, error, loaded, refresh };
+  return { company, sessions, execStatus, activeWaves, pastWaves, activeSessions, portSummary, knowledgeDocs, error, loaded, refresh };
 }

@@ -263,17 +263,43 @@ export const App: React.FC = () => {
     if (view !== 'dashboard' || autoWaveCreated.current) return;
 
     if (api.activeWaves.length > 0) {
-      // Attach to existing waves from API
+      // Attach to existing active waves from API
       const apiWaves: WaveInfo[] = api.activeWaves.map(w => ({
         waveId: w.waveId,
         directive: w.directive ?? '',
         startedAt: w.startedAt ?? Date.now(),
       }));
-      setWaves(apiWaves);
+
+      // Also append past waves (completed) that aren't already in active list
+      const activeIds = new Set(apiWaves.map(w => w.waveId));
+      const pastEntries: WaveInfo[] = api.pastWaves
+        .filter(pw => !activeIds.has(pw.id))
+        .slice(0, 10)
+        .map(pw => ({
+          waveId: pw.id,
+          directive: pw.directive || '',
+          startedAt: pw.startedAt ? new Date(pw.startedAt).getTime() : 0,
+        }));
+
+      const allWaves = [...pastEntries, ...apiWaves];
+      setWaves(allWaves);
       setFocusedWaveId(apiWaves[apiWaves.length - 1].waveId);
       autoWaveCreated.current = true;
+    } else if (api.loaded && api.pastWaves.length > 0) {
+      // No active waves, past waves exist — resume last wave (don't create new)
+      autoWaveCreated.current = true;
+      const pastEntries: WaveInfo[] = api.pastWaves.slice(0, 10).map(pw => ({
+        waveId: pw.id,
+        directive: pw.directive || '',
+        startedAt: pw.startedAt ? new Date(pw.startedAt).getTime() : 0,
+      }));
+      // Sort by startedAt ascending (oldest first = Wave 1)
+      pastEntries.sort((a, b) => a.startedAt - b.startedAt);
+      setWaves(pastEntries);
+      // Focus most recent wave (last in sorted list)
+      setFocusedWaveId(pastEntries[pastEntries.length - 1]?.waveId ?? null);
     } else if (api.loaded) {
-      // Create a new empty wave
+      // No active waves, no past waves — fresh start
       autoWaveCreated.current = true;
       dispatchWave().then(result => {
         const newWave: WaveInfo = {
@@ -284,11 +310,10 @@ export const App: React.FC = () => {
         setWaves([newWave]);
         setFocusedWaveId(result.waveId);
       }).catch(() => {
-        // If empty wave creation fails, still proceed — user can /new
         autoWaveCreated.current = true;
       });
     }
-  }, [view, api.activeWaves, api.loaded]);
+  }, [view, api.activeWaves, api.pastWaves, api.loaded]);
 
   // SSE subscription to focused wave
   const sse = useSSE(focusedWaveId);
