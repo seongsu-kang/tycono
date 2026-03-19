@@ -266,8 +266,9 @@ export const App: React.FC = () => {
 
       for (const ses of sessions.slice(-2)) { // Last 2 sessions
         try {
-          const events = await import('./api').then(m => m.fetchJson<any[]>(`/api/jobs/${ses.id}/history`));
-          if (!Array.isArray(events)) continue;
+          const resp = await import('./api').then(m => m.fetchJson<{ events: any[] }>(`/api/jobs/${ses.id}/history`));
+          const events = resp?.events ?? (Array.isArray(resp) ? resp : []);
+          if (!events.length) continue;
 
           for (const e of events) {
             if (e.type === 'msg:start' && e.data?.task) {
