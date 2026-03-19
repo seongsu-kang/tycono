@@ -361,27 +361,39 @@ export const App: React.FC = () => {
   const sse = useSSE(focusedWaveId);
 
   // Load wave history into SSE events (for Panel Mode Stream tab)
+  const historyLoadingRef = useRef<string | null>(null);
   const loadWaveHistoryEvents = useCallback(async (waveId: string) => {
+    // Guard: skip if already loading this wave or another load in progress
+    if (historyLoadingRef.current === waveId) return;
+    historyLoadingRef.current = waveId;
+
     try {
       const sessions = api.sessions.filter(s => s.waveId === waveId && s.roleId === 'ceo');
       const allEvents: import('./api').SSEEvent[] = [];
 
       for (const ses of sessions.slice(-2)) {
+        // Abort if wave changed during loading
+        if (historyLoadingRef.current !== waveId) return;
         try {
           const resp = await import('./api').then(m => m.fetchJson<{ events: any[] }>(`/api/jobs/${ses.id}/history`));
           const events = resp?.events ?? [];
           for (const e of events) {
-            if (['text', 'tool:start', 'tool:result', 'msg:start', 'msg:done', 'msg:error', 'dispatch:start', 'thinking'].includes(e.type)) {
+            if (['text', 'tool:start', 'msg:start', 'msg:done', 'msg:error', 'dispatch:start', 'thinking'].includes(e.type)) {
               allEvents.push(e as import('./api').SSEEvent);
             }
           }
         } catch { /* skip */ }
       }
 
-      if (allEvents.length > 0) {
+      // Only apply if still on this wave
+      if (historyLoadingRef.current === waveId && allEvents.length > 0) {
         sse.loadHistory(allEvents);
       }
-    } catch { /* ignore */ }
+    } catch { /* ignore */ } finally {
+      if (historyLoadingRef.current === waveId) {
+        historyLoadingRef.current = null;
+      }
+    }
   }, [api.sessions, sse]);
 
   // Build org tree — flatRoleIds follows visual top-to-bottom order
