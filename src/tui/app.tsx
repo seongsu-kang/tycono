@@ -297,7 +297,7 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (view !== 'dashboard' || autoWaveCreated.current) return;
 
-    if (api.activeWaves.length > 0) {
+    if (api.activeWaves.length > 0 || api.pastWaves.length > 0) {
       // Attach to existing active waves from API
       const apiWaves: WaveInfo[] = api.activeWaves.map(w => ({
         waveId: w.waveId,
@@ -322,22 +322,6 @@ export const App: React.FC = () => {
       // Focus most recent wave
       setFocusedWaveId(allWaves[allWaves.length - 1]?.waveId ?? null);
       autoWaveCreated.current = true;
-    } else if (api.loaded && api.pastWaves.length > 0) {
-      // No active waves, past waves exist — resume last wave (don't create new)
-      autoWaveCreated.current = true;
-      const pastEntries: WaveInfo[] = api.pastWaves.slice(0, 10).map(pw => ({
-        waveId: pw.id,
-        directive: pw.directive || '',
-        startedAt: pw.startedAt ? new Date(pw.startedAt).getTime() : 0,
-      }));
-      // Sort by startedAt ascending (oldest first = Wave 1)
-      pastEntries.sort((a, b) => a.startedAt - b.startedAt);
-      setWaves(pastEntries);
-      // Focus most recent wave (last in sorted list)
-      const lastWave = pastEntries[pastEntries.length - 1];
-      setFocusedWaveId(lastWave?.waveId ?? null);
-
-      // SSE replay handles history display automatically (persistent channel model)
     } else if (api.loaded) {
       // No active waves, no past waves — fresh start
       autoWaveCreated.current = true;
