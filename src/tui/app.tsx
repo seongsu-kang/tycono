@@ -363,9 +363,11 @@ export const App: React.FC = () => {
   // Load wave history into SSE events (for Panel Mode Stream tab)
   const historyLoadingRef = useRef<string | null>(null);
   const loadWaveHistoryEvents = useCallback(async (waveId: string) => {
-    // Guard: skip if already loading this wave or another load in progress
+    // Guard: skip if already loading this wave
     if (historyLoadingRef.current === waveId) return;
     historyLoadingRef.current = waveId;
+    // Wait for SSE reconnection to settle (it calls setEvents([]) on connect)
+    await new Promise(r => setTimeout(r, 500));
 
     try {
       const sessions = api.sessions.filter(s => s.waveId === waveId && s.roleId === 'ceo');
