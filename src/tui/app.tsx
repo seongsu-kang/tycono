@@ -258,30 +258,6 @@ export const App: React.FC = () => {
     });
   }, []);
 
-  // Load wave history into SSE events (for Panel Mode Stream tab)
-  const loadWaveHistoryEvents = useCallback(async (waveId: string) => {
-    try {
-      const sessions = api.sessions.filter(s => s.waveId === waveId && s.roleId === 'ceo');
-      const allEvents: import('./api').SSEEvent[] = [];
-
-      for (const ses of sessions.slice(-2)) {
-        try {
-          const resp = await import('./api').then(m => m.fetchJson<{ events: any[] }>(`/api/jobs/${ses.id}/history`));
-          const events = resp?.events ?? [];
-          for (const e of events) {
-            if (['text', 'tool:start', 'tool:result', 'msg:start', 'msg:done', 'msg:error', 'dispatch:start', 'thinking'].includes(e.type)) {
-              allEvents.push(e as import('./api').SSEEvent);
-            }
-          }
-        } catch { /* skip */ }
-      }
-
-      if (allEvents.length > 0) {
-        sse.loadHistory(allEvents);
-      }
-    } catch { /* ignore */ }
-  }, [api.sessions, sse]);
-
   // Load previous conversation from wave's activity stream into system messages
   const loadPreviousConversation = useCallback(async (waveId: string) => {
     try {
@@ -383,6 +359,30 @@ export const App: React.FC = () => {
 
   // SSE subscription to focused wave
   const sse = useSSE(focusedWaveId);
+
+  // Load wave history into SSE events (for Panel Mode Stream tab)
+  const loadWaveHistoryEvents = useCallback(async (waveId: string) => {
+    try {
+      const sessions = api.sessions.filter(s => s.waveId === waveId && s.roleId === 'ceo');
+      const allEvents: import('./api').SSEEvent[] = [];
+
+      for (const ses of sessions.slice(-2)) {
+        try {
+          const resp = await import('./api').then(m => m.fetchJson<{ events: any[] }>(`/api/jobs/${ses.id}/history`));
+          const events = resp?.events ?? [];
+          for (const e of events) {
+            if (['text', 'tool:start', 'tool:result', 'msg:start', 'msg:done', 'msg:error', 'dispatch:start', 'thinking'].includes(e.type)) {
+              allEvents.push(e as import('./api').SSEEvent);
+            }
+          }
+        } catch { /* skip */ }
+      }
+
+      if (allEvents.length > 0) {
+        sse.loadHistory(allEvents);
+      }
+    } catch { /* ignore */ }
+  }, [api.sessions, sse]);
 
   // Build org tree — flatRoleIds follows visual top-to-bottom order
   const roles = api.company?.roles ?? [];
