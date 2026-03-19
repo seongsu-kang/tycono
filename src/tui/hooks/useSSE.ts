@@ -45,6 +45,7 @@ export interface SSEState {
   events: SSEEvent[];
   streamStatus: 'idle' | 'streaming' | 'done' | 'error';
   clearEvents(): void;
+  loadHistory(events: SSEEvent[]): void;
 }
 
 export function useSSE(waveId: string | null): SSEState {
@@ -76,6 +77,10 @@ export function useSSE(waveId: string | null): SSEState {
     batchRef.current = [];
     setEvents([]);
     maxSeqRef.current = 0;
+  }, []);
+
+  const loadHistory = useCallback((historyEvents: SSEEvent[]) => {
+    setEvents(historyEvents.slice(-MAX_EVENTS));
   }, []);
 
   useEffect(() => {
@@ -171,5 +176,5 @@ export function useSSE(waveId: string | null): SSEState {
     };
   }, [waveId, flushBatch]);
 
-  return { events, streamStatus, clearEvents };
+  return { events, streamStatus, clearEvents, loadHistory };
 }

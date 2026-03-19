@@ -258,6 +258,30 @@ export const App: React.FC = () => {
     });
   }, []);
 
+  // Load wave history into SSE events (for Panel Mode Stream tab)
+  const loadWaveHistoryEvents = useCallback(async (waveId: string) => {
+    try {
+      const sessions = api.sessions.filter(s => s.waveId === waveId && s.roleId === 'ceo');
+      const allEvents: import('./api').SSEEvent[] = [];
+
+      for (const ses of sessions.slice(-2)) {
+        try {
+          const resp = await import('./api').then(m => m.fetchJson<{ events: any[] }>(`/api/jobs/${ses.id}/history`));
+          const events = resp?.events ?? [];
+          for (const e of events) {
+            if (['text', 'tool:start', 'tool:result', 'msg:start', 'msg:done', 'msg:error', 'dispatch:start', 'thinking'].includes(e.type)) {
+              allEvents.push(e as import('./api').SSEEvent);
+            }
+          }
+        } catch { /* skip */ }
+      }
+
+      if (allEvents.length > 0) {
+        sse.loadHistory(allEvents);
+      }
+    } catch { /* ignore */ }
+  }, [api.sessions, sse]);
+
   // Load previous conversation from wave's activity stream into system messages
   const loadPreviousConversation = useCallback(async (waveId: string) => {
     try {
@@ -338,6 +362,7 @@ export const App: React.FC = () => {
       // Load previous conversation into stream (like claude --resume)
       if (lastWave) {
         loadPreviousConversation(lastWave.waveId);
+        loadWaveHistoryEvents(lastWave.waveId);
       }
     } else if (api.loaded) {
       // No active waves, no past waves — fresh start
@@ -402,8 +427,9 @@ export const App: React.FC = () => {
     onFocusWave: (waveId) => {
       setFocusedWaveId(waveId);
       sse.clearEvents();
-      setSystemMessages([]); // Clear old messages
+      setSystemMessages([]);
       loadPreviousConversation(waveId);
+      loadWaveHistoryEvents(waveId);
     },
     onQuit: () => exit(),
     onShowPanel: () => setMode('panel'),
@@ -651,6 +677,7 @@ export const App: React.FC = () => {
               sse.clearEvents();
               setSystemMessages([]);
               loadPreviousConversation(newWaveId);
+              loadWaveHistoryEvents(newWaveId);
             }}
           />
         </Box>
