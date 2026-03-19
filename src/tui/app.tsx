@@ -258,6 +258,40 @@ export const App: React.FC = () => {
     });
   }, []);
 
+  // Load previous conversation from wave's activity stream into system messages
+  const loadPreviousConversation = useCallback(async (waveId: string) => {
+    try {
+      const sessions = api.sessions.filter(s => s.waveId === waveId && s.roleId === 'ceo');
+      if (sessions.length === 0) return;
+
+      for (const ses of sessions.slice(-2)) { // Last 2 sessions
+        try {
+          const events = await import('./api').then(m => m.fetchJson<any[]>(`/api/jobs/${ses.id}/history`));
+          if (!Array.isArray(events)) continue;
+
+          for (const e of events) {
+            if (e.type === 'msg:start' && e.data?.task) {
+              const task = String(e.data.task);
+              const match = task.match(/\[CEO (?:Supervisor|Question)\]\s*(.*?)(?:\n|$)/);
+              if (match) {
+                addSystemMessage(`> ${match[1].slice(0, 80)}`, 'green');
+              }
+            }
+            if (e.type === 'text' && e.roleId === 'ceo') {
+              const text = String(e.data?.text ?? '').trim();
+              if (text && text.length > 5 && !text.startsWith('#') && !text.startsWith('\u26D4') && !text.startsWith('[')) {
+                addSystemMessage(text.slice(0, 200), 'white');
+              }
+            }
+          }
+        } catch { /* skip individual session errors */ }
+      }
+
+      addSystemMessage('\u2500'.repeat(40), 'gray');
+      addSystemMessage('(previous conversation loaded)', 'gray');
+    } catch { /* ignore */ }
+  }, [api.sessions, addSystemMessage]);
+
   // Auto-wave: on dashboard entry, create an empty wave or attach to existing
   useEffect(() => {
     if (view !== 'dashboard' || autoWaveCreated.current) return;
@@ -297,7 +331,13 @@ export const App: React.FC = () => {
       pastEntries.sort((a, b) => a.startedAt - b.startedAt);
       setWaves(pastEntries);
       // Focus most recent wave (last in sorted list)
-      setFocusedWaveId(pastEntries[pastEntries.length - 1]?.waveId ?? null);
+      const lastWave = pastEntries[pastEntries.length - 1];
+      setFocusedWaveId(lastWave?.waveId ?? null);
+
+      // Load previous conversation into stream (like claude --resume)
+      if (lastWave) {
+        loadPreviousConversation(lastWave.waveId);
+      }
     } else if (api.loaded) {
       // No active waves, no past waves — fresh start
       autoWaveCreated.current = true;
