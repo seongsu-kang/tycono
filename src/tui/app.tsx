@@ -317,8 +317,10 @@ export const App: React.FC = () => {
         }));
 
       const allWaves = [...pastEntries, ...apiWaves];
+      allWaves.sort((a, b) => a.startedAt - b.startedAt);
       setWaves(allWaves);
-      setFocusedWaveId(apiWaves[apiWaves.length - 1].waveId);
+      // Focus most recent wave
+      setFocusedWaveId(allWaves[allWaves.length - 1]?.waveId ?? null);
       autoWaveCreated.current = true;
     } else if (api.loaded && api.pastWaves.length > 0) {
       // No active waves, past waves exist — resume last wave (don't create new)
