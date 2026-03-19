@@ -335,11 +335,7 @@ export const App: React.FC = () => {
       const lastWave = pastEntries[pastEntries.length - 1];
       setFocusedWaveId(lastWave?.waveId ?? null);
 
-      // Load previous conversation into stream (like claude --resume)
-      if (lastWave) {
-        loadPreviousConversation(lastWave.waveId);
-        loadWaveHistoryEvents(lastWave.waveId);
-      }
+      // SSE replay handles history display automatically (persistent channel model)
     } else if (api.loaded) {
       // No active waves, no past waves — fresh start
       autoWaveCreated.current = true;
@@ -442,8 +438,7 @@ export const App: React.FC = () => {
       setFocusedWaveId(waveId);
       sse.clearEvents();
       setSystemMessages([]);
-      loadPreviousConversation(waveId);
-      loadWaveHistoryEvents(waveId);
+      // SSE reconnect handles history replay automatically
     },
     onQuit: () => exit(),
     onShowPanel: () => setMode('panel'),
@@ -690,8 +685,6 @@ export const App: React.FC = () => {
               setFocusedWaveId(newWaveId);
               sse.clearEvents();
               setSystemMessages([]);
-              loadPreviousConversation(newWaveId);
-              loadWaveHistoryEvents(newWaveId);
             }}
           />
         </Box>

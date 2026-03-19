@@ -50,14 +50,16 @@ export function handleExecRequest(req: IncomingMessage, res: ServerResponse): vo
 
   // ── /api/waves/active — restore active waves after refresh ──
   if (method === 'GET' && url === '/api/waves/active') {
-    // Recovery: rebuild wave→session mapping from session-store if lost
-    // Only recover ACTIVE sessions to prevent OOM on large datasets (140+ sessions)
+    // Recovery: rebuild wave→session mapping from session-store
+    // Include done sessions (persistent channel model) but limit to CEO sessions
     const waves = waveMultiplexer.getActiveWaves();
     if (waves.length === 0) {
       const allSessions = listSessions();
       let recovered = 0;
       for (const ses of allSessions) {
-        if (!ses.waveId || ses.status !== 'active') continue;
+        if (!ses.waveId) continue;
+        // Only recover CEO sessions for wave display (team sessions loaded on demand)
+        if (ses.roleId !== 'ceo') continue;
         const exec = executionManager.getActiveExecution(ses.id);
         if (exec) {
           waveMultiplexer.registerSession(ses.waveId, exec);
@@ -476,10 +478,10 @@ function handleWaveStream(waveId: string, url: string, res: ServerResponse, req:
 
   let sessionIds = waveMultiplexer.getWaveSessionIds(waveId);
 
-  // Recovery: only recover ACTIVE sessions for this wave (not all 140)
+  // Recovery: recover sessions for this wave (active + done = persistent channel)
   if (sessionIds.length === 0) {
     const allSessions = listSessions();
-    const waveSessions = allSessions.filter(s => s.waveId === waveId && s.status === 'active');
+    const waveSessions = allSessions.filter(s => s.waveId === waveId);
     for (const ses of waveSessions) {
       const exec = executionManager.getActiveExecution(ses.id);
       if (exec) {
