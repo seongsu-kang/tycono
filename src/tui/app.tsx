@@ -402,6 +402,8 @@ export const App: React.FC = () => {
     onFocusWave: (waveId) => {
       setFocusedWaveId(waveId);
       sse.clearEvents();
+      setSystemMessages([]); // Clear old messages
+      loadPreviousConversation(waveId);
     },
     onQuit: () => exit(),
     onShowPanel: () => setMode('panel'),
@@ -647,6 +649,8 @@ export const App: React.FC = () => {
             onFocusWave={(newWaveId) => {
               setFocusedWaveId(newWaveId);
               sse.clearEvents();
+              setSystemMessages([]);
+              loadPreviousConversation(newWaveId);
             }}
           />
         </Box>
