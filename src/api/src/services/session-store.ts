@@ -109,8 +109,31 @@ function writeImmediate(session: Session): void {
 }
 
 /* ─── In-memory cache ───────────────────── */
+/*
+ * OOM prevention: inactive sessions cache metadata only (no messages).
+ * Messages are loaded on-demand from disk when getSession() is called.
+ * Active sessions keep messages in memory for streaming writes.
+ *
+ * Before: 61 sessions × 50KB avg messages = 3MB+ baseline, grows to 100s of MB
+ * After:  61 sessions × 1KB metadata + 5 active × 50KB = ~310KB baseline
+ */
 
 const cache = new Map<string, Session>();
+
+/** Strip messages from session to save memory (keeps metadata) */
+function stripMessages(session: Session): Session {
+  if (session.messages.length === 0) return session;
+  return { ...session, messages: [] };
+}
+
+/** Load full session from disk (with messages) */
+function loadFromDisk(id: string): Session | undefined {
+  const p = sessionPath(id);
+  if (!fs.existsSync(p)) return undefined;
+  try {
+    return JSON.parse(fs.readFileSync(p, 'utf-8')) as Session;
+  } catch { return undefined; }
+}
 
 function loadAll(): void {
   ensureDir();
@@ -118,7 +141,12 @@ function loadAll(): void {
   for (const file of files) {
     try {
       const data = JSON.parse(fs.readFileSync(path.join(sessionsDir(), file), 'utf-8')) as Session;
-      cache.set(data.id, data);
+      // Only keep messages for active sessions; strip for done/interrupted
+      if (data.status === 'active' || data.status === 'awaiting_input') {
+        cache.set(data.id, data);
+      } else {
+        cache.set(data.id, stripMessages(data));
+      }
     } catch { /* skip corrupted */ }
   }
 }
@@ -165,7 +193,15 @@ export function createSession(roleId: string, opts: CreateSessionOptions = {}): 
 
 export function getSession(id: string): Session | undefined {
   ensureLoaded();
-  return cache.get(id);
+  const cached = cache.get(id);
+  if (!cached) return undefined;
+
+  // If messages were stripped (inactive session), reload from disk on demand
+  if (cached.messages.length === 0 && cached.status !== 'active') {
+    const full = loadFromDisk(id);
+    if (full) return full; // Return disk version (don't cache — it's a one-time read)
+  }
+  return cached;
 }
 
 export function listSessions(): Omit<Session, 'messages'>[] {
@@ -251,6 +287,11 @@ export function updateSession(id: string, updates: Partial<Pick<Session, 'title'
   if (updates.waveId !== undefined) session.waveId = updates.waveId;
   session.updatedAt = new Date().toISOString();
   writeImmediate(session);
+
+  // OOM prevention: when session becomes inactive, strip messages from cache
+  if (updates.status && updates.status !== 'active' && updates.status !== 'awaiting_input') {
+    cache.set(id, stripMessages(session));
+  }
 
   return session;
 }
