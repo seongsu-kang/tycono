@@ -1,6 +1,6 @@
 {
   "name": "tycono",
-  "version": "0.3.11",
+  "version": "0.3.12-beta.0",
   "description": "Build an AI company. Watch them work.",
   "type": "module",
   "bin": {
