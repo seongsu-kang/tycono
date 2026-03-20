@@ -176,7 +176,7 @@ class ExecutionManager {
     orgTree: ReturnType<typeof buildOrgTree>,
   ): Promise<void> {
     try {
-      const ports = await portRegistry.allocate(execution.id, params.roleId, params.task);
+      const ports = await portRegistry.allocate(execution.sessionId || execution.id, params.roleId, params.task);
       execution.ports = ports;
       console.log(`[ExecMgr] Allocated ports for ${execution.id} (${params.roleId}): API :${ports.api}, Vite :${ports.vite}`);
     } catch (err) {
@@ -534,7 +534,7 @@ class ExecutionManager {
       })
       .finally(() => {
         if (execution.ports) {
-          const released = portRegistry.release(execution.id);
+          const released = portRegistry.release(execution.sessionId || execution.id);
           if (released) {
             console.log(`[ExecMgr] Released ports for ${execution.id}: API :${execution.ports.api}, Vite :${execution.ports.vite}`);
           }
