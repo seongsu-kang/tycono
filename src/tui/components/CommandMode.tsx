@@ -369,8 +369,8 @@ export const CommandMode: React.FC<CommandModeProps> = ({
         setAcIndex(i => Math.max(0, i - 1));
         return;
       }
-      if (key.tab) {
-        // Tab → fill input with selected command (don't execute)
+      if (key.rightArrow) {
+        // → fill input with selected command (don't execute)
         const selected = acCandidates[acIndex];
         if (selected) {
           const base = selected.cmd.split(' ')[0]; // e.g. "/new" from "/new [text]"
@@ -494,7 +494,7 @@ export const CommandMode: React.FC<CommandModeProps> = ({
               <Text color="gray" dimColor> {c.desc}</Text>
             </Box>
           ))}
-          <Text color="gray" dimColor>  \u2191\u2193 select  Tab fill  Enter run  Esc cancel</Text>
+          <Text color="gray" dimColor>  \u2191\u2193 select  \u2192 fill  Enter run  Esc cancel</Text>
         </Box>
       )}
 
