@@ -182,6 +182,12 @@ class WaveMultiplexer {
       const key = `${event.roleId}:${event.seq}`;
       if (client.sentEvents.has(key)) return;
       client.sentEvents.add(key);
+      // OOM prevention: cap sentEvents to prevent unbounded Set growth
+      if (client.sentEvents.size > 5000) {
+        const entries = Array.from(client.sentEvents);
+        client.sentEvents.clear();
+        for (const e of entries.slice(-2000)) client.sentEvents.add(e);
+      }
 
       const waveSeq = client.waveSeq++;
       sendSSE(client, 'wave:event', {

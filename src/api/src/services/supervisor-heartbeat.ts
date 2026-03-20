@@ -19,6 +19,7 @@ import path from 'node:path';
 import { COMPANY_ROOT } from './file-reader.js';
 import { ActivityStream } from './activity-stream.js';
 import { saveCompletedWave } from './wave-tracker.js';
+import { waveMultiplexer } from './wave-multiplexer.js';
 
 /* ─── Types ──────────────────────────────────── */
 
@@ -768,9 +769,17 @@ ${state.continuous ? `## Continuous Improvement Mode (ON)
         console.error(`[Supervisor] Failed to auto-save wave ${state.waveId}:`, err);
       }
 
-      // OOM prevention: clear accumulated directive/question history
+      // OOM prevention: clear accumulated state + wave multiplexer sessions
       state.pendingDirectives = [];
       state.pendingQuestions = [];
+
+      // Delayed cleanup: remove wave sessions from multiplexer + supervisor map
+      // (delay allows SSE clients to receive final events)
+      setTimeout(() => {
+        waveMultiplexer.cleanupWave(state.waveId);
+        this.supervisors.delete(state.waveId);
+        console.log(`[Supervisor] Cleaned up wave ${state.waveId} from memory`);
+      }, 60_000).unref(); // 1 minute after wave done
     }
   }
 

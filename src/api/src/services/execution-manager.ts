@@ -214,7 +214,7 @@ class ExecutionManager {
     let harnessTurnCount = 0;
     let softLimitWarned = false;
     let hardLimitReached = false;
-    let accumulatedOutput = '';
+    const outputChunks: string[] = [];
 
     const teamStatus: import('../../../shared/types').TeamStatus = {};
     for (const [, e] of this.executions) {
@@ -258,7 +258,7 @@ class ExecutionManager {
       },
       {
         onText: (text) => {
-          accumulatedOutput += text;
+          outputChunks.push(text);
           execution.stream.emit('text', params.roleId, { text });
           if (execution.sessionId) {
             this.updateSessionRoleMessage(execution, text);
@@ -501,7 +501,7 @@ class ExecutionManager {
       .catch((err: Error) => {
         if (hardLimitReached) {
           execution.result = {
-            output: accumulatedOutput,
+            output: outputChunks.join(''),
             turns: harnessTurnCount,
             totalTokens: { input: 0, output: 0 },
             toolCalls: [],
