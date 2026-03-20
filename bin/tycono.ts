@@ -270,11 +270,37 @@ async function startServerForTui(): Promise<void> {
   origLog(`  API server started on port ${port}`);
   origLog(`  Logs: ${logFile}`);
 
-  // Memory monitor — log heap usage every 30s to detect leaks
+  // Memory monitor — 10s interval, with spike detection + forced GC
+  let lastHeap = 0;
   setInterval(() => {
     const mem = process.memoryUsage();
-    logStream.write(`[MEM] heap=${Math.round(mem.heapUsed / 1024 / 1024)}MB/${Math.round(mem.heapTotal / 1024 / 1024)}MB rss=${Math.round(mem.rss / 1024 / 1024)}MB\n`);
-  }, 30_000).unref();
+    const heapMB = Math.round(mem.heapUsed / 1024 / 1024);
+    const heapTotalMB = Math.round(mem.heapTotal / 1024 / 1024);
+    const rssMB = Math.round(mem.rss / 1024 / 1024);
+    const spike = heapMB - lastHeap;
+
+    // Always log
+    logStream.write(`[MEM] heap=${heapMB}MB/${heapTotalMB}MB rss=${rssMB}MB${spike > 50 ? ` ⚠️ SPIKE +${spike}MB` : ''}\n`);
+
+    // Spike detection: >100MB jump in 10s
+    if (spike > 100) {
+      logStream.write(`[MEM] ⛔ MEMORY SPIKE: +${spike}MB in 10s (${lastHeap}MB → ${heapMB}MB)\n`);
+    }
+
+    // Warning at 2GB
+    if (heapMB > 2048 && lastHeap <= 2048) {
+      logStream.write(`[MEM] ⚠️ HEAP WARNING: ${heapMB}MB — approaching limit. Forcing GC.\n`);
+      if (global.gc) global.gc();
+    }
+
+    // Critical at 4GB — force GC
+    if (heapMB > 4096) {
+      logStream.write(`[MEM] ⛔ HEAP CRITICAL: ${heapMB}MB — forcing GC\n`);
+      if (global.gc) global.gc();
+    }
+
+    lastHeap = heapMB;
+  }, 10_000).unref();
 
   // Graceful shutdown — mark active sessions as interrupted
   const shutdown = () => {
