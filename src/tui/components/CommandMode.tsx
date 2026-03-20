@@ -286,6 +286,23 @@ function StreamLineRow({ line }: { line: StreamLine }) {
 const QUICK_ACTIONS = ['waves', 'agents', 'sessions', 'ports', 'docs'] as const;
 type QuickAction = typeof QUICK_ACTIONS[number];
 
+/* ─── Command Autocomplete ─── */
+const COMMANDS: Array<{ cmd: string; desc: string }> = [
+  { cmd: '/new [text]', desc: 'Create new wave' },
+  { cmd: '/waves', desc: 'List waves' },
+  { cmd: '/focus <n>', desc: 'Switch wave' },
+  { cmd: '/stop', desc: 'Stop execution' },
+  { cmd: '/docs', desc: 'Wave files' },
+  { cmd: '/read <path>', desc: 'Preview file' },
+  { cmd: '/open <path>', desc: 'Open in editor' },
+  { cmd: '/agents', desc: 'Agent tree' },
+  { cmd: '/sessions', desc: 'Active sessions' },
+  { cmd: '/kill <id>', desc: 'Kill session' },
+  { cmd: '/cleanup', desc: 'Remove dead' },
+  { cmd: '/help', desc: 'Help' },
+  { cmd: '/quit', desc: 'Exit' },
+];
+
 export const CommandMode: React.FC<CommandModeProps> = ({
   events,
   allRoleIds,
@@ -300,6 +317,7 @@ export const CommandMode: React.FC<CommandModeProps> = ({
   const [userInputs, setUserInputs] = useState<StreamLine[]>([]);
   const [quickBarActive, setQuickBarActive] = useState(false);
   const [quickBarIndex, setQuickBarIndex] = useState(0);
+  const [acIndex, setAcIndex] = useState(0);
 
   // Convert events to stream lines (collapse consecutive thinking from same role)
   const eventLines: StreamLine[] = [];
@@ -332,8 +350,45 @@ export const CommandMode: React.FC<CommandModeProps> = ({
   const committedLines = allLines.slice(Math.max(0, committedRef.current - 20), committedRef.current);
   const liveLines = allLines.slice(committedRef.current);
 
-  // Quick bar navigation
+  // Autocomplete: filter commands when input starts with /
+  const acOpen = input.startsWith('/') && input.length >= 1;
+  const acCandidates = acOpen
+    ? COMMANDS.filter(c => c.cmd.startsWith(input) || c.cmd.split(' ')[0].startsWith(input))
+    : [];
+  const acVisible = acOpen && acCandidates.length > 0;
+
+  // Quick bar + autocomplete navigation
   useInput((ch, key) => {
+    // Autocomplete mode
+    if (acVisible) {
+      if (key.downArrow) {
+        setAcIndex(i => Math.min(acCandidates.length - 1, i + 1));
+        return;
+      }
+      if (key.upArrow) {
+        setAcIndex(i => Math.max(0, i - 1));
+        return;
+      }
+      if (key.tab) {
+        // Tab → fill input with selected command (don't execute)
+        const selected = acCandidates[acIndex];
+        if (selected) {
+          const base = selected.cmd.split(' ')[0]; // e.g. "/new" from "/new [text]"
+          setInput(base + ' ');
+          setAcIndex(0);
+        }
+        return;
+      }
+      if (key.escape) {
+        setInput('');
+        setAcIndex(0);
+        return;
+      }
+      // Don't intercept Enter — let TextInput handle it for submission
+      return;
+    }
+
+    // Quick bar mode
     if (quickBarActive) {
       if (key.upArrow || key.escape) {
         setQuickBarActive(false);
@@ -421,12 +476,27 @@ export const CommandMode: React.FC<CommandModeProps> = ({
         <Text color={quickBarActive ? 'gray' : 'yellow'} bold>&gt; </Text>
         <TextInput
           value={input}
-          onChange={setInput}
+          onChange={(v) => { setInput(v); setAcIndex(0); }}
           onSubmit={handleSubmit}
           placeholder=""
           focus={!quickBarActive}
         />
       </Box>
+
+      {/* Command autocomplete — shown when typing / */}
+      {acVisible && (
+        <Box flexDirection="column" paddingX={0}>
+          {acCandidates.slice(0, 8).map((c, i) => (
+            <Box key={c.cmd}>
+              <Text color={i === acIndex ? 'cyan' : 'gray'} bold={i === acIndex}>
+                {i === acIndex ? '\u25B8 ' : '  '}{c.cmd.split(' ')[0].padEnd(12)}
+              </Text>
+              <Text color="gray" dimColor> {c.desc}</Text>
+            </Box>
+          ))}
+          <Text color="gray" dimColor>  \u2191\u2193 select  Tab fill  Enter run  Esc cancel</Text>
+        </Box>
+      )}
 
       {/* Quick action bar — shown when arrow down from input */}
       {quickBarActive && (
