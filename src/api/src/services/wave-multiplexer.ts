@@ -16,6 +16,7 @@ export interface WaveStreamEnvelope {
 interface AttachedSession {
   sessionId: string;
   roleId: string;
+  executionId: string;
   unsubscribe: () => void;
 }
 
@@ -137,7 +138,15 @@ class WaveMultiplexer {
   }
 
   private subscribeSessionToClient(waveId: string, client: WaveStreamClient, execution: Execution, sendNotification: boolean): void {
-    if (client.attachedSessions.has(execution.sessionId)) return;
+    // If already attached to this session with a DIFFERENT execution, re-subscribe
+    // This handles the resume case where a new execution reuses the same sessionId
+    const existing = client.attachedSessions.get(execution.sessionId);
+    if (existing) {
+      if (existing.executionId === execution.id) return; // Same execution, skip
+      existing.unsubscribe();
+      client.attachedSessions.delete(execution.sessionId);
+      console.log(`[WaveMux] re-subscribing session=${execution.sessionId} (new exec=${execution.id})`);
+    }
 
     const sessionId = execution.sessionId;
     const roleId = execution.roleId;
@@ -197,6 +206,7 @@ class WaveMultiplexer {
     client.attachedSessions.set(sessionId, {
       sessionId,
       roleId,
+      executionId: execution.id,
       unsubscribe: () => execution.stream.unsubscribe(subscriber),
     });
 

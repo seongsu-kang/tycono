@@ -86,6 +86,21 @@ export function handleExecRequest(req: IncomingMessage, res: ServerResponse): vo
     return;
   }
 
+  // ── /api/waves/:waveId/stop — Stop wave execution ──
+  const stopMatch = url.match(/^\/api\/waves\/([^/]+)\/stop$/);
+  if (method === 'POST' && stopMatch) {
+    const waveId = stopMatch[1];
+    supervisorHeartbeat.stop(waveId);
+    // Also abort all running executions for this wave
+    const waveSessions = listSessions().filter(s => s.waveId === waveId && s.status === 'active');
+    let aborted = 0;
+    for (const ses of waveSessions) {
+      if (executionManager.abortSession(ses.id)) aborted++;
+    }
+    jsonResponse(res, 200, { ok: true, waveId, abortedSessions: aborted });
+    return;
+  }
+
   // ── /api/waves/:waveId/directive — CEO adds directive mid-execution ──
   const directiveMatch = url.match(/^\/api\/waves\/([^/]+)\/directive$/);
   if (method === 'POST' && directiveMatch) {
@@ -164,16 +179,6 @@ function handleJobsRequest(url: string, method: string, req: IncomingMessage, re
         createdAt: exec.createdAt,
       }));
     }
-    return;
-  }
-
-  // GET /api/jobs/:id/history — internal only
-  const historyMatch = reqPath.match(/^\/api\/jobs\/([^/]+)\/history$/);
-  if (method === 'GET' && historyMatch) {
-    const id = historyMatch[1];
-    const events = ActivityStream.readAll(id);
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ events }));
     return;
   }
 
@@ -711,7 +716,17 @@ function handleWaveDirective(waveId: string, body: Record<string, unknown>, res:
     return;
   }
 
-  const directive = supervisorHeartbeat.addDirective(waveId, text);
+  let directive = supervisorHeartbeat.addDirective(waveId, text);
+  if (!directive) {
+    // Fallback: wave exists but addDirective couldn't restore.
+    // Use start() with the SAME waveId to keep it in the same wave context.
+    console.log(`[WaveDirective] No supervisor found for wave ${waveId}, creating supervisor in-place`);
+    const state = supervisorHeartbeat.start(waveId, text);
+    if (state.status !== 'error') {
+      directive = { id: `dir-fallback-${Date.now()}`, text, createdAt: new Date().toISOString(), delivered: false };
+    }
+  }
+
   if (!directive) {
     jsonResponse(res, 404, { error: `No active supervisor for wave ${waveId}` });
     return;

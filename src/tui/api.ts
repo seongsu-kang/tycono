@@ -155,6 +155,12 @@ export async function sendDirective(waveId: string, text: string): Promise<{ ok:
   });
 }
 
+export async function stopWave(waveId: string): Promise<{ ok: boolean; abortedSessions: number }> {
+  return fetchJson<{ ok: boolean; abortedSessions: number }>(`/api/waves/${waveId}/stop`, {
+    method: 'POST',
+  });
+}
+
 export async function fetchActiveWaves(): Promise<{ waves: Array<{ waveId: string; sessionIds: string[] }> }> {
   return fetchJson('/api/waves/active');
 }

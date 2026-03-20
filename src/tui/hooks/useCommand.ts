@@ -16,7 +16,7 @@
  */
 
 import { useCallback } from 'react';
-import { dispatchWave, sendDirective, fetchJson, killSession, cleanupSessions, fetchActiveSessions } from '../api';
+import { dispatchWave, sendDirective, stopWave, fetchJson, killSession, cleanupSessions, fetchActiveSessions } from '../api';
 
 export interface WaveInfo {
   waveId: string;
@@ -101,6 +101,20 @@ export function useCommand(options: UseCommandOptions) {
 
         case 'sessions':
           return { type: 'sessions', message: '__sessions__' };
+
+        case 'stop': {
+          // Stop current wave execution
+          const targetWaveId = args?.trim() || focusedWaveId;
+          if (!targetWaveId) {
+            return { type: 'error', message: 'No wave to stop. Use /stop or focus a wave first.' };
+          }
+          try {
+            const result = await stopWave(targetWaveId);
+            return { type: 'success', message: `Wave stopped. ${result.abortedSessions} sessions aborted.` };
+          } catch (err) {
+            return { type: 'error', message: `Stop failed: ${err instanceof Error ? err.message : 'unknown'}` };
+          }
+        }
 
         case 'kill': {
           if (!args) {

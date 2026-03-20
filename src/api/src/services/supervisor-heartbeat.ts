@@ -98,8 +98,36 @@ class SupervisorHeartbeat {
       return state;
     }
 
+    // Save wave file immediately so directive persists across restarts
+    this.saveWaveFile(waveId, directive);
+
     this.spawnSupervisor(state);
     return state;
+  }
+
+  /**
+   * Save wave file immediately so directive persists across restarts.
+   * saveCompletedWave() adds session/role details on completion.
+   */
+  private saveWaveFile(waveId: string, directive: string): void {
+    try {
+      const wavesDir = path.join(COMPANY_ROOT, 'operations', 'waves');
+      if (!fs.existsSync(wavesDir)) fs.mkdirSync(wavesDir, { recursive: true });
+      const wavePath = path.join(wavesDir, `${waveId}.json`);
+      if (!fs.existsSync(wavePath)) {
+        fs.writeFileSync(wavePath, JSON.stringify({
+          id: waveId,
+          waveId,
+          directive,
+          startedAt: new Date().toISOString(),
+          sessionIds: [],
+          roles: [],
+        }, null, 2));
+        console.log(`[Supervisor] Wave file created: ${wavePath}`);
+      }
+    } catch (err) {
+      console.warn(`[Supervisor] Failed to save wave file for ${waveId}:`, err);
+    }
   }
 
   /**
@@ -137,18 +165,20 @@ class SupervisorHeartbeat {
     if (!state) {
       // Check if this wave existed before (has sessions in session-store)
       const waveSessions = listSessions().filter(s => s.waveId === waveId);
-      if (waveSessions.length > 0) {
-        // Restore supervisor state for this wave
-        const ceoSession = waveSessions.find(s => s.roleId === 'ceo');
-        // Read original directive from wave artifact file (not the new text)
-        let originalDirective = '';
-        try {
-          const waveFile = path.join(COMPANY_ROOT, 'operations', 'waves', `${waveId}.json`);
-          if (fs.existsSync(waveFile)) {
-            const waveData = JSON.parse(fs.readFileSync(waveFile, 'utf-8'));
-            originalDirective = waveData.directive ?? '';
-          }
-        } catch { /* ignore */ }
+      const ceoSession = waveSessions.find(s => s.roleId === 'ceo') ?? null;
+
+      // Read original directive from wave artifact file
+      let originalDirective = '';
+      try {
+        const waveFile = path.join(COMPANY_ROOT, 'operations', 'waves', `${waveId}.json`);
+        if (fs.existsSync(waveFile)) {
+          const waveData = JSON.parse(fs.readFileSync(waveFile, 'utf-8'));
+          originalDirective = waveData.directive ?? '';
+        }
+      } catch { /* ignore */ }
+
+      if (waveSessions.length > 0 || originalDirective) {
+        // Restore supervisor state — from sessions or wave file
         state = {
           waveId,
           directive: originalDirective || text,
@@ -164,7 +194,7 @@ class SupervisorHeartbeat {
           createdAt: ceoSession?.createdAt ?? new Date().toISOString(),
         };
         this.supervisors.set(waveId, state);
-        console.log(`[Supervisor] Restored wave ${waveId} from disk (${waveSessions.length} sessions)`);
+        console.log(`[Supervisor] Restored wave ${waveId} from disk (${waveSessions.length} sessions, directive=${originalDirective ? 'yes' : 'no'})`);
       } else {
         return null;
       }

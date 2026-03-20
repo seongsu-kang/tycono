@@ -164,8 +164,14 @@ export function summarizeEvent(event: SSEEvent, allRoleIds: string[]): StreamLin
     case 'msg:start': {
       const task = ((event.data.task as string) ?? '');
       const cleanTask = task.replace(/\u26D4[^\u26D4]*\u26D4[^"]*/g, '').trim().slice(0, 60);
-      // Hide supervisor started message (internal noise)
-      if (isSupervisor) return null;
+      if (isSupervisor) {
+        // Show minimal feedback so user knows input was received
+        return {
+          id: ++lineCounter,
+          text: '\u2026 processing',
+          color: 'gray',
+        };
+      }
       return {
         id: ++lineCounter,
         prefix: event.roleId,

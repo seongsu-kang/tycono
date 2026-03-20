@@ -258,41 +258,6 @@ export const App: React.FC = () => {
     });
   }, []);
 
-  // Load previous conversation from wave's activity stream into system messages
-  const loadPreviousConversation = useCallback(async (waveId: string) => {
-    try {
-      const sessions = api.sessions.filter(s => s.waveId === waveId && s.roleId === 'ceo');
-      if (sessions.length === 0) return;
-
-      for (const ses of sessions.slice(-2)) { // Last 2 sessions
-        try {
-          const resp = await import('./api').then(m => m.fetchJson<{ events: any[] }>(`/api/jobs/${ses.id}/history`));
-          const events = resp?.events ?? (Array.isArray(resp) ? resp : []);
-          if (!events.length) continue;
-
-          for (const e of events) {
-            if (e.type === 'msg:start' && e.data?.task) {
-              const task = String(e.data.task);
-              const match = task.match(/\[CEO (?:Supervisor|Question)\]\s*(.*?)(?:\n|$)/);
-              if (match) {
-                addSystemMessage(`> ${match[1].slice(0, 80)}`, 'green');
-              }
-            }
-            if (e.type === 'text' && e.roleId === 'ceo') {
-              const text = String(e.data?.text ?? '').trim();
-              if (text && text.length > 5 && !text.startsWith('#') && !text.startsWith('\u26D4') && !text.startsWith('[')) {
-                addSystemMessage(text.slice(0, 200), 'white');
-              }
-            }
-          }
-        } catch { /* skip individual session errors */ }
-      }
-
-      addSystemMessage('\u2500'.repeat(40), 'gray');
-      addSystemMessage('(previous conversation loaded)', 'gray');
-    } catch { /* ignore */ }
-  }, [api.sessions, addSystemMessage]);
-
   // Auto-wave: on dashboard entry, create an empty wave or attach to existing
   useEffect(() => {
     if (view !== 'dashboard' || autoWaveCreated.current) return;
@@ -341,44 +306,6 @@ export const App: React.FC = () => {
 
   // SSE subscription to focused wave
   const sse = useSSE(focusedWaveId);
-
-  // Load wave history into SSE events (for Panel Mode Stream tab)
-  const historyLoadingRef = useRef<string | null>(null);
-  const loadWaveHistoryEvents = useCallback(async (waveId: string) => {
-    // Guard: skip if already loading this wave
-    if (historyLoadingRef.current === waveId) return;
-    historyLoadingRef.current = waveId;
-    // Wait for SSE reconnection to settle (it calls setEvents([]) on connect)
-    await new Promise(r => setTimeout(r, 500));
-
-    try {
-      const sessions = api.sessions.filter(s => s.waveId === waveId && s.roleId === 'ceo');
-      const allEvents: import('./api').SSEEvent[] = [];
-
-      for (const ses of sessions.slice(-2)) {
-        // Abort if wave changed during loading
-        if (historyLoadingRef.current !== waveId) return;
-        try {
-          const resp = await import('./api').then(m => m.fetchJson<{ events: any[] }>(`/api/jobs/${ses.id}/history`));
-          const events = resp?.events ?? [];
-          for (const e of events) {
-            if (['text', 'tool:start', 'msg:start', 'msg:done', 'msg:error', 'dispatch:start', 'thinking'].includes(e.type)) {
-              allEvents.push(e as import('./api').SSEEvent);
-            }
-          }
-        } catch { /* skip */ }
-      }
-
-      // Only apply if still on this wave
-      if (historyLoadingRef.current === waveId && allEvents.length > 0) {
-        sse.loadHistory(allEvents);
-      }
-    } catch { /* ignore */ } finally {
-      if (historyLoadingRef.current === waveId) {
-        historyLoadingRef.current = null;
-      }
-    }
-  }, [api.sessions, sse]);
 
   // Build org tree — flatRoleIds follows visual top-to-bottom order
   const roles = api.company?.roles ?? [];
@@ -554,6 +481,10 @@ export const App: React.FC = () => {
         }
         break;
       }
+      case 'success':
+        addSystemMessage(result.message, 'green');
+        api.refresh();
+        break;
       case 'error':
         addSystemMessage(result.message, 'red');
         break;
@@ -563,6 +494,7 @@ export const App: React.FC = () => {
         addSystemMessage('  /new [text]          Create new wave', 'white');
         addSystemMessage('  /waves               List all waves', 'white');
         addSystemMessage('  /focus <n>           Switch to wave n', 'white');
+        addSystemMessage('  /stop                Stop current wave execution', 'white');
         addSystemMessage('  /docs                Files created in this wave', 'white');
         addSystemMessage('  /read <path>         Preview file content', 'white');
         addSystemMessage('  /open <path>         Open in $EDITOR', 'white');
