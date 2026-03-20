@@ -156,7 +156,9 @@ export const PanelMode: React.FC<PanelModeProps> = ({
     return () => { process.stdout.off('resize', onResize); };
   }, []);
 
-  const separatorStr = useMemo(() => '\u2502\n'.repeat(Math.max(5, termHeight - 8)), [termHeight]);
+  // OOM fix: single separator character instead of repeated newlines
+  // Previous: '│\n'.repeat(30) created 30 yoga nodes → layout explosion on large terminals
+  const separatorStr = '\u2502';
 
   const waveScopedStatuses = useMemo(
     () => getWaveScopedStatuses(allSessions, focusedWaveId),
@@ -379,10 +381,8 @@ export const PanelMode: React.FC<PanelModeProps> = ({
           )}
         </Box>
 
-        {/* Vertical separator */}
-        <Box flexDirection="column" marginX={0}>
-          <Text color="gray">{separatorStr}</Text>
-        </Box>
+        {/* Vertical separator — single character, not repeated newlines */}
+        <Text color="gray">{separatorStr}</Text>
 
         {/* Right: Tabbed panel */}
         <Box flexGrow={1} flexDirection="column" overflow="hidden">
