@@ -767,6 +767,10 @@ ${state.continuous ? `## Continuous Improvement Mode (ON)
       } catch (err) {
         console.error(`[Supervisor] Failed to auto-save wave ${state.waveId}:`, err);
       }
+
+      // OOM prevention: clear accumulated directive/question history
+      state.pendingDirectives = [];
+      state.pendingQuestions = [];
     }
   }
 

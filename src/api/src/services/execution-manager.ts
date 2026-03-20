@@ -548,6 +548,14 @@ class ExecutionManager {
             }
           }
         }
+
+        // OOM prevention: remove completed execution from memory after delay
+        // (delay allows getActiveExecution to find it briefly for multiplexer/recovery)
+        setTimeout(() => {
+          this.executions.delete(execution.id);
+          // Also close the ActivityStream to free subscribers + file handles
+          execution.stream.close();
+        }, 30_000).unref();
       });
   }
 
@@ -915,6 +923,15 @@ Your job: monitor progress, course-correct if needed, wait for completion, then 
 
       this.executions.set(execution.id, execution);
       console.log(`[ExecMgr] Recovered execution for session ${sessionId} (status: ${execution.status})`);
+
+      // OOM prevention: auto-cleanup recovered executions (they're only needed briefly for replay)
+      if (execution.status === 'done' || execution.status === 'error') {
+        setTimeout(() => {
+          this.executions.delete(execution.id);
+          execution.stream.close();
+        }, 30_000).unref();
+      }
+
       return execution;
     } catch (err) {
       console.warn(`[ExecMgr] Failed to recover execution from streams:`, err);
