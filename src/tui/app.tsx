@@ -326,10 +326,15 @@ export const App: React.FC = () => {
     return 'idle' as const;
   }, [sse.streamStatus, activeCount]);
 
-  // Focused wave index (1-based)
+  // Focused wave index (1-based) + startedAt
   const focusedWaveIndex = useMemo(() => {
     if (!focusedWaveId) return 0;
     return waves.findIndex(w => w.waveId === focusedWaveId) + 1;
+  }, [focusedWaveId, waves]);
+
+  const focusedWaveStartedAt = useMemo(() => {
+    if (!focusedWaveId) return 0;
+    return waves.find(w => w.waveId === focusedWaveId)?.startedAt ?? 0;
   }, [focusedWaveId, waves]);
 
   // Command handler
@@ -375,12 +380,18 @@ export const App: React.FC = () => {
         if (waves.length === 0) {
           addSystemMessage('No waves.', 'gray');
         } else {
+          // Show recent 8 waves max to prevent scrollback overflow
+          const MAX_SHOW = 8;
+          const showWaves = waves.length > MAX_SHOW ? waves.slice(-MAX_SHOW) : waves;
+          const skipped = waves.length - showWaves.length;
+          if (skipped > 0) addSystemMessage(`(+${skipped} older waves)`, 'gray');
           addSystemMessage('Waves:', 'cyan');
-          waves.forEach((w, i) => {
+          showWaves.forEach((w) => {
+            const idx = waves.indexOf(w);
             const isFocused = w.waveId === focusedWaveId;
             const prefix = isFocused ? '*' : ' ';
             const label = w.directive ? w.directive.slice(0, 60) : '(idle)';
-            addSystemMessage(`${prefix}${i + 1}. Wave ${i + 1} \u2014 ${label}`, isFocused ? 'green' : 'white');
+            addSystemMessage(`${prefix}${idx + 1}. Wave ${idx + 1} \u2014 ${label}`, isFocused ? 'green' : 'white');
           });
         }
         break;
@@ -630,6 +641,8 @@ export const App: React.FC = () => {
         onQuickAction={(action) => {
           handleCommandSubmit(`/${action}`);
         }}
+        activeSessions={api.activeSessions}
+        focusedWaveId={focusedWaveId}
       />
       <StatusBar
         companyName={api.company?.name ?? 'Loading...'}
@@ -639,6 +652,9 @@ export const App: React.FC = () => {
         activeCount={activeCount}
         portCount={api.portSummary.totalPorts}
         totalCost={0}
+        activeSessions={api.activeSessions}
+        focusedWaveId={focusedWaveId}
+        waveStartedAt={focusedWaveStartedAt}
       />
     </Box>
   );

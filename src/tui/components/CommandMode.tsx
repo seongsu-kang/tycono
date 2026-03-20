@@ -8,7 +8,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { Box, Text, Static, useInput } from 'ink';
 import TextInput from 'ink-text-input';
-import type { SSEEvent } from '../api';
+import type { SSEEvent, ActiveSessionInfo } from '../api';
 import { getRoleColor } from '../theme';
 // Markdown rendering is done inline via regex (no external dependency)
 
@@ -30,6 +30,8 @@ interface CommandModeProps {
   systemMessages: StreamLine[];
   onSubmit: (input: string) => void;
   onQuickAction?: (action: string) => void;
+  activeSessions?: ActiveSessionInfo[];
+  focusedWaveId?: string | null;
 }
 
 let lineCounter = 0;
@@ -290,6 +292,8 @@ export const CommandMode: React.FC<CommandModeProps> = ({
   systemMessages,
   onSubmit,
   onQuickAction,
+  activeSessions,
+  focusedWaveId,
 }) => {
   const [input, setInput] = useState('');
   const committedRef = useRef(0);
@@ -297,9 +301,15 @@ export const CommandMode: React.FC<CommandModeProps> = ({
   const [quickBarActive, setQuickBarActive] = useState(false);
   const [quickBarIndex, setQuickBarIndex] = useState(0);
 
-  // Convert events to stream lines
+  // Convert events to stream lines (collapse consecutive thinking from same role)
   const eventLines: StreamLine[] = [];
-  for (const event of events) {
+  for (let i = 0; i < events.length; i++) {
+    const event = events[i];
+    // Skip thinking events if next event from same role is also thinking
+    if (event.type === 'thinking' && i + 1 < events.length) {
+      const next = events[i + 1];
+      if (next.type === 'thinking' && next.roleId === event.roleId) continue;
+    }
     const line = summarizeEvent(event, allRoleIds);
     if (line) eventLines.push(line);
   }
@@ -386,6 +396,25 @@ export const CommandMode: React.FC<CommandModeProps> = ({
           </Text>
         </Box>
       )}
+
+      {/* Live mini-tree — shows active roles during dispatch */}
+      {(() => {
+        if (!activeSessions || !focusedWaveId) return null;
+        const waveRoles = activeSessions
+          .filter(s => s.waveId === focusedWaveId && s.status === 'active')
+          .map(s => s.roleId);
+        const unique = [...new Set(waveRoles)];
+        if (unique.length === 0) return null;
+        return (
+          <Box paddingX={0}>
+            <Text color="gray">{unique.map((r, i) => {
+              const dot = '\u25CF';
+              const arrow = i < unique.length - 1 ? '\u2192' : '';
+              return `${dot}${r}${arrow}`;
+            }).join('')}</Text>
+          </Box>
+        );
+      })()}
 
       {/* Input */}
       <Box paddingX={0} marginTop={0}>

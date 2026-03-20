@@ -1,10 +1,11 @@
 /**
  * StatusBar — bottom bar (Claude Code style)
- * Shows: company name, wave index [focused/total], active roles, ports, cost
+ * Shows: company name, wave info, dispatch chain, active roles, elapsed, cost
  */
 
 import React from 'react';
 import { Box, Text } from 'ink';
+import type { ActiveSessionInfo } from '../api';
 
 interface StatusBarProps {
   companyName: string;
@@ -14,6 +15,17 @@ interface StatusBarProps {
   activeCount: number;
   portCount: number;       // total allocated ports
   totalCost: number;
+  activeSessions?: ActiveSessionInfo[];
+  focusedWaveId?: string | null;
+  waveStartedAt?: number;  // timestamp of focused wave start
+}
+
+function elapsed(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m${s % 60}s`;
+  return `${Math.floor(m / 60)}h${m % 60}m`;
 }
 
 export const StatusBar: React.FC<StatusBarProps> = ({
@@ -24,6 +36,9 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   activeCount,
   portCount,
   totalCost,
+  activeSessions,
+  focusedWaveId,
+  waveStartedAt,
 }) => {
   const statusDot = waveStatus === 'running' ? ' \u25CF'
     : waveStatus === 'done' ? ' \u2713'
@@ -35,6 +50,25 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 
   // Show [1/3] only when 2+ waves
   const countLabel = waveCount >= 2 ? ` [${waveIndex}/${waveCount}]` : '';
+
+  // Dispatch chain: show active roles for focused wave
+  let chainLabel = '';
+  if (activeSessions && focusedWaveId && waveStatus === 'running') {
+    const waveRoles = activeSessions
+      .filter(s => s.waveId === focusedWaveId && s.status === 'active')
+      .map(s => s.roleId);
+    // Deduplicate and show chain
+    const unique = [...new Set(waveRoles)];
+    if (unique.length > 0) {
+      chainLabel = unique.join('\u2192');
+    }
+  }
+
+  // Elapsed time
+  let elapsedLabel = '';
+  if (waveStartedAt && waveStatus === 'running') {
+    elapsedLabel = elapsed(Date.now() - waveStartedAt);
+  }
 
   return (
     <Box width="100%" paddingX={1}>
@@ -49,7 +83,19 @@ export const StatusBar: React.FC<StatusBarProps> = ({
           </Text>
         </>
       )}
-      {activeCount > 0 && (
+      {chainLabel && (
+        <>
+          <Text color="gray"> | </Text>
+          <Text color="yellow">{chainLabel}</Text>
+        </>
+      )}
+      {elapsedLabel && (
+        <>
+          <Text color="gray"> </Text>
+          <Text color="gray">{elapsedLabel}</Text>
+        </>
+      )}
+      {!chainLabel && activeCount > 0 && (
         <>
           <Text color="gray"> | </Text>
           <Text color="yellow">{activeCount} active</Text>
