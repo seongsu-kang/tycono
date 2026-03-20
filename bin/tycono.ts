@@ -317,6 +317,19 @@ async function startServerForTui(): Promise<void> {
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
+  // Handle TTY read errors gracefully (EIO on stdin when terminal disconnects)
+  // Without this: "Error: read EIO" → Unhandled 'error' event → crash
+  process.stdin.on('error', (err) => {
+    logStream.write(`[TTY] stdin error: ${err.code ?? err.message}\n`);
+    if (err.code === 'EIO' || err.code === 'EPIPE') {
+      // Terminal disconnected — graceful shutdown
+      shutdown();
+    }
+  });
+  process.stdout.on('error', (err) => {
+    logStream.write(`[TTY] stdout error: ${err.code ?? err.message}\n`);
+  });
+
   // Start TUI — stdout.write is NOT intercepted, Ink has full control
   const { startTui } = await import('../src/tui/index.tsx');
   await startTui({ port });
