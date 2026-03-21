@@ -45,6 +45,36 @@ interface PanelModeProps {
   onFocusWave: (waveId: string) => void;
 }
 
+function flattenTreeForText(nodes: OrgNode[], isLast: boolean[] = []): string[] {
+  const lines: string[] = [];
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    const last = i === nodes.length - 1;
+    let prefix = '';
+    for (const l of isLast) prefix += l ? '   ' : '\u2502  ';
+    prefix += last ? '\u2514\u2500 ' : '\u251C\u2500 ';
+    const icon = node.status === 'working' ? '\u25CF' : node.status === 'done' ? '\u2713' : '\u25CB';
+    lines.push(`${prefix}${icon} ${node.role.id}`);
+    if (node.children.length > 0) lines.push(...flattenTreeForText(node.children, [...isLast, last]));
+  }
+  return lines;
+}
+
+function eventToOneLiner(event: SSEEvent): string | null {
+  const time = new Date(event.ts).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const role = event.roleId.padEnd(12);
+  switch (event.type) {
+    case 'text': { const t = ((event.data.text as string) ?? '').trim(); return t ? `${time} ${role} ${t.slice(0, 100)}` : null; }
+    case 'thinking': { const t = ((event.data.text as string) ?? '').trim(); return t ? `${time} ${role} \uD83D\uDCAD ${t.slice(0, 80)}` : null; }
+    case 'tool:start': { const n = (event.data.name as string) ?? ''; return `${time} ${role} \u2192 ${n}`; }
+    case 'msg:start': return `${time} ${role} \u25B6 Started`;
+    case 'msg:done': return `${time} ${role} \u2713 Done`;
+    case 'msg:error': return `${time} ${role} \u2717 Error`;
+    case 'dispatch:start': return `${time} ${role} \u21D2 ${event.data.targetRole as string ?? ''}`;
+    default: return null;
+  }
+}
+
 function getWaveScopedStatuses(
   allSessions: SessionInfo[],
   focusedWaveId: string | null,
@@ -352,214 +382,84 @@ const PanelModeInner: React.FC<PanelModeProps> = ({
   }, [focusedWaveId, companyRoot]);
 
   const leftWidth = 28;
+  const termCols = process.stdout.columns || 120;
+
+  // === RADICAL FIX: render entire Panel as ONE pre-formatted Text ===
+  // yoga-layout OOMs on 245+ column terminals with nested Box layout.
+  // Solution: build the entire screen as a string, render as single <Text>.
+
+  const buildScreen = (): string => {
+    const rightWidth = Math.max(40, termCols - leftWidth - 3);
+    const lines: string[] = [];
+
+    // Header
+    const waveTitle = `W${focusedWaveIndex} ${focusedWave?.directive?.slice(0, leftWidth - 6) || '(idle)'}`;
+    const tabBar = ['Stream', 'Docs', 'Info'].map(t =>
+      t.toLowerCase() === rightTab ? `[${t}]` : ` ${t} `
+    ).join('  ');
+    lines.push(`${waveTitle.padEnd(leftWidth)} \u2502 ${tabBar}`);
+
+    // Sessions count
+    if (waveSessionCount > 0) {
+      lines.push(`${(waveSessionCount + ' sessions').padEnd(leftWidth)} \u2502`);
+    }
+
+    // OrgTree (left) + Stream (right) side by side
+    const ceoIcon = waveScopedStatuses['ceo'] === 'working' ? '\u25CF' : waveScopedStatuses['ceo'] === 'done' ? '\u2713' : '\u25CB';
+    const treeLines = [`\u2500\u2500 Org Tree \u2500\u2500`, `${ceoIcon} CEO`];
+    const flatEntries = flattenTreeForText(waveScopedTree);
+    treeLines.push(...flatEntries);
+
+    // Stream lines (right side)
+    const streamLines: string[] = [];
+    if (rightTab === 'stream') {
+      const maxEv = Math.min(termHeight - 8, 20);
+      const visible = (selectedRoleId ? events.filter(e => e.roleId === selectedRoleId) : events).slice(-maxEv);
+      for (const ev of visible) {
+        const line = eventToOneLiner(ev);
+        if (line) streamLines.push(line.slice(0, rightWidth));
+      }
+      if (streamLines.length === 0) {
+        streamLines.push(waveId ? 'Waiting for events...' : 'No active stream.');
+      }
+    } else if (rightTab === 'info') {
+      streamLines.push(`Wave: ${focusedWave?.waveId ?? 'none'}`);
+      streamLines.push(`Directive: ${focusedWave?.directive || '(idle)'}`);
+      streamLines.push(`Sessions: ${waveSessionCount}`);
+      streamLines.push(`SSE events: ${events.length}`);
+    } else {
+      streamLines.push('(Docs tab — press h/l to switch)');
+    }
+
+    // Merge left + right
+    const maxLines = Math.max(treeLines.length, streamLines.length);
+    for (let i = 0; i < maxLines; i++) {
+      const left = (treeLines[i] ?? '').padEnd(leftWidth);
+      const right = streamLines[i] ?? '';
+      lines.push(`${left} \u2502 ${right}`);
+    }
+
+    // Wave tabs
+    if (waves.length > 1) {
+      const waveTabs = waves.map((w, i) =>
+        w.waveId === focusedWaveId ? `[${i + 1}]` : ` ${i + 1} `
+      ).join(' ');
+      lines.push('');
+      lines.push(waveTabs);
+    }
+
+    return lines.join('\n');
+  };
+
+  // Render entire panel as single Text to avoid yoga OOM
+  const screen = buildScreen();
 
   return (
-    <Box flexDirection="column" flexGrow={1}>
-      <Box flexGrow={1}>
-        {/* Left: Wave title + Org Tree + Wave tabs */}
-        <Box flexDirection="column" width={leftWidth}>
-          <Box paddingX={1}>
-            <Text color="green" bold>W{focusedWaveIndex}</Text>
-            {wavePreset && wavePreset !== 'default' && (
-              <Text color="magenta"> ({wavePreset})</Text>
-            )}
-            <Text color="gray"> </Text>
-            <Text color="white" wrap="truncate">
-              {focusedWave?.directive ? focusedWave.directive.slice(0, leftWidth - 6) : '(idle)'}
-            </Text>
-          </Box>
-          {waveSessionCount > 0 && (
-            <Box paddingX={1}>
-              <Text color="gray">{waveSessionCount} sessions</Text>
-            </Box>
-          )}
-
-          <OrgTree
-            tree={waveScopedTree}
-            focused={rightTab === 'stream'}
-            selectedIndex={selectedRoleIndex}
-            flatRoles={flatRoles}
-            ceoStatus={waveScopedStatuses['ceo'] ?? 'idle'}
-          />
-
-          {waves.length > 1 && (
-            <Box paddingX={1} marginTop={1}>
-              {waves.map((w, i) => (
-                <Box key={w.waveId} marginRight={1}>
-                  <Text
-                    color={w.waveId === focusedWaveId ? 'green' : 'gray'}
-                    bold={w.waveId === focusedWaveId}
-                    inverse={w.waveId === focusedWaveId}
-                  >{` ${i + 1} `}</Text>
-                </Box>
-              ))}
-            </Box>
-          )}
-        </Box>
-
-        {/* Vertical separator — single character, not repeated newlines */}
-        <Text color="gray">{separatorStr}</Text>
-
-        {/* Right: Tabbed panel */}
-        <Box flexGrow={1} flexDirection="column">
-          {/* Tab bar */}
-          <Box paddingX={1} marginBottom={0}>
-            {(['stream', 'docs', 'info'] as RightTab[]).map(tab => (
-              <Box key={tab} marginRight={1}>
-                <Text
-                  color={rightTab === tab ? 'cyan' : 'gray'}
-                  bold={rightTab === tab}
-                  inverse={rightTab === tab}
-                >
-                  {` ${tab.charAt(0).toUpperCase() + tab.slice(1)} `}
-                </Text>
-              </Box>
-            ))}
-            <Text color="gray" dimColor> [h/l] switch</Text>
-          </Box>
-
-          {/* Stream tab */}
-          {rightTab === 'stream' && (
-            <>
-              {selectedRoleId && selectedSession && (
-                <Box flexDirection="column" paddingX={1}>
-                  <Box justifyContent="space-between">
-                    <Text bold color="cyan">{selectedRoleId}</Text>
-                    <Text color={selectedSession.status === 'active' ? 'green' : 'gray'}>
-                      {selectedSession.status === 'active' ? '\u25CF' : '\u25CB'} {selectedSession.status}
-                      {selectedSession.startedAt ? ` (${elapsed(selectedSession.startedAt)})` : ''}
-                    </Text>
-                  </Box>
-                  {selectedSession.ports.api > 0 && (
-                    <Text color="gray">Port API:{selectedSession.ports.api} Vite:{selectedSession.ports.vite}</Text>
-                  )}
-                  <Text color="gray">{'\u2500'.repeat(40)}</Text>
-                </Box>
-              )}
-              {selectedRoleId && !selectedSession && (
-                <Box flexDirection="column" paddingX={1}>
-                  <Text bold color="cyan">{selectedRoleId}</Text>
-                  <Text color="gray">(not active in this wave)</Text>
-                  <Text color="gray">{'\u2500'.repeat(40)}</Text>
-                </Box>
-              )}
-              <StreamView
-                events={roleEvents}
-                allRoleIds={flatRoles}
-                streamStatus={streamStatus}
-                waveId={waveId}
-                roleLabel={roleLabel}
-              />
-            </>
-          )}
-
-          {/* Docs tab — KB browser + wave artifacts */}
-          {rightTab === 'docs' && (
-            <Box flexDirection="column" paddingX={1} flexGrow={1}>
-              {/* Filter bar */}
-              <Box marginBottom={0}>
-                {(['all', 'wave', 'kb', 'projects'] as DocsFilter[]).map((f, i) => (
-                  <Box key={f} marginRight={1}>
-                    <Text
-                      color={docsFilter === f ? 'cyan' : 'gray'}
-                      bold={docsFilter === f}
-                      inverse={docsFilter === f}
-                    >
-                      {f === 'wave' ? ` ${i + 1}:\u2605Wave ` : ` ${i + 1}:${f.charAt(0).toUpperCase() + f.slice(1)} `}
-                    </Text>
-                  </Box>
-                ))}
-                <Text color="gray" dimColor> ({docsList.length})</Text>
-              </Box>
-
-              {docsList.length === 0 ? (
-                <Box marginTop={1}>
-                  <Text color="gray">{docsFilter === 'wave' ? 'No files created in this wave.' : 'No documents found.'}</Text>
-                </Box>
-              ) : (
-                <Box flexGrow={1} flexDirection="column">
-                  {docsScroll === 0 ? (
-                    /* File list — only render visible window (prevent Yoga OOM on 600+ files) */
-                    <Box flexDirection="column" marginTop={0}>
-                      <Text color="gray" dimColor>{docsList.length} files{docsIndex > 0 ? ` (${docsIndex + 1}/${docsList.length})` : ''}</Text>
-                      {docsList.slice(docsIndex, docsIndex + termHeight - 10).map((doc, i) => (
-                        <Box key={doc.path}>
-                          <Text
-                            color={i === 0 ? 'cyan' : doc.isWave ? 'green' : 'white'}
-                            bold={i === 0}
-                            inverse={i === 0}
-                          >
-                            {doc.isWave ? '\u2605' : ' '} {doc.title.slice(0, 55)}
-                          </Text>
-                        </Box>
-                      ))}
-                    </Box>
-                  ) : (
-                    /* File preview */
-                    <Box flexDirection="column">
-                      <Text color="cyan" bold>{selectedDoc?.isWave ? '\u2605 ' : ''}{selectedDoc?.path.split('/').slice(-2).join('/')}</Text>
-                      <Text color="gray">{'\u2500'.repeat(50)}</Text>
-                      {filePreview.slice(docsScroll - 1, docsScroll - 1 + termHeight - 10).map((line, i) => (
-                        <Text key={i} color="white" wrap="wrap">{line}</Text>
-                      ))}
-                    </Box>
-                  )}
-
-                  <Box marginTop={0}>
-                    <Text color="gray" dimColor>
-                      [Enter] {process.env.EDITOR || 'vim'} | [j/k] {docsScroll > 0 ? 'scroll' : 'select'}
-                    </Text>
-                  </Box>
-                </Box>
-              )}
-            </Box>
-          )}
-
-          {/* Info tab */}
-          {rightTab === 'info' && (
-            <Box flexDirection="column" paddingX={1}>
-              <Text bold color="cyan">Wave Info</Text>
-              <Text color="gray">{'\u2500'.repeat(40)}</Text>
-              <Text color="white">Wave: {focusedWave?.waveId ?? 'none'}</Text>
-              {wavePreset && <Text color="magenta">Preset: {wavePreset}</Text>}
-              <Text color="white">Directive: {focusedWave?.directive || '(idle)'}</Text>
-              <Text color="white">Sessions: {waveSessionCount}</Text>
-              <Text color="white">Files modified: {waveFileSet.size}</Text>
-              <Text color="white">SSE events: {events.length}</Text>
-
-              {/* Active sessions in this wave */}
-              {waveSessionCount > 0 && (
-                <>
-                  <Text color="gray" bold>{'\n'}Active in this wave:</Text>
-                  {allSessions
-                    .filter(s => s.waveId === focusedWaveId && s.status === 'active')
-                    .slice(0, 10)
-                    .map(s => {
-                      const port = activeSessions.find(a => a.sessionId === s.id);
-                      return (
-                        <Text key={s.id} color="white">
-                          {`  ${s.roleId.padEnd(12)} ${s.id.slice(0, 20)} ${port ? `API:${port.ports.api}` : ''}`}
-                        </Text>
-                      );
-                    })
-                  }
-                </>
-              )}
-            </Box>
-          )}
-        </Box>
-      </Box>
-
-      {/* Footer */}
-      <Box width="100%">
-        <Text color="gray">{'\u2500'.repeat(process.stdout.columns || 70)}</Text>
-      </Box>
-      <Box paddingX={1} justifyContent="center">
-        <Text color="gray" dimColor>
-          [h/l] tab  [j/k] {rightTab === 'stream' ? 'role' : 'scroll'}  {rightTab === 'docs' ? '[Enter] vim  ' : ''}
-          {waves.length > 1 ? '[1-9] wave  ' : ''}[Esc] command
-        </Text>
-      </Box>
+    <Box flexDirection="column">
+      <Text wrap="truncate">{screen}</Text>
+      <Text color="gray" dimColor>
+        [h/l] tab  [j/k] role  {waves.length > 1 ? '[1-9] wave  ' : ''}[Esc] command
+      </Text>
     </Box>
   );
 };
