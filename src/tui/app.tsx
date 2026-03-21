@@ -235,54 +235,6 @@ export const App: React.FC = () => {
   // User input lines — lifted from CommandMode to survive Panel mode switches
   const [userInputs, setUserInputs] = useState<StreamLine[]>([]);
 
-  // Event line processing — lifted from CommandMode to survive Panel unmount/remount.
-  // Without this, every Tab→Escape cycle resets refs → reprocesses all events → <Static> duplicates.
-  const prevEventsLenRef = useRef(0);
-  const eventLinesRef = useRef<StreamLine[]>([]);
-
-  useMemo(() => {
-    const events = sse.events;
-    // Reset if events array was cleared (wave switch)
-    if (events.length < prevEventsLenRef.current) {
-      eventLinesRef.current = [];
-      prevEventsLenRef.current = 0;
-    }
-
-    const startIdx = prevEventsLenRef.current;
-    if (startIdx >= events.length) return;
-
-    const seenDone = new Set<string>();
-    const doneIndices = new Map<string, number>();
-    for (let i = 0; i < events.length; i++) {
-      if (events[i].type === 'msg:done') {
-        doneIndices.set(events[i].roleId, i);
-      }
-    }
-
-    for (let i = startIdx; i < events.length; i++) {
-      const event = events[i];
-      if (event.type === 'thinking' && i + 1 < events.length) {
-        const next = events[i + 1];
-        if (next.type === 'thinking' && next.roleId === event.roleId) continue;
-      }
-      if (event.type === 'msg:done') {
-        const key = `${event.roleId}:done`;
-        if (seenDone.has(key)) continue;
-        if (doneIndices.get(event.roleId) !== i) continue;
-        seenDone.add(key);
-      }
-      const line = summarizeEvent(event, flatRoleIds);
-      if (line) eventLinesRef.current.push(line);
-    }
-    prevEventsLenRef.current = events.length;
-
-    if (eventLinesRef.current.length > 80) {
-      eventLinesRef.current = eventLinesRef.current.slice(-80);
-    }
-  }, [sse.events, flatRoleIds]);
-
-  const eventLines = eventLinesRef.current;
-
   // Preset selection state (for /new without args)
   const [pendingPresetSelect, setPendingPresetSelect] = useState<PresetSummary[] | null>(null);
   const selectedPresetRef = useRef<string | null>(null);
@@ -373,6 +325,42 @@ export const App: React.FC = () => {
   const activeCount = Object.values(statuses).filter(
     s => s === 'working' || s === 'streaming'
   ).length;
+
+  // Event line processing — lifted from CommandMode to survive Panel unmount/remount.
+  const prevEventsLenRef = useRef(0);
+  const eventLinesRef = useRef<StreamLine[]>([]);
+
+  useMemo(() => {
+    const events = sse.events;
+    if (events.length < prevEventsLenRef.current) {
+      eventLinesRef.current = [];
+      prevEventsLenRef.current = 0;
+    }
+    const startIdx = prevEventsLenRef.current;
+    if (startIdx >= events.length) return;
+
+    const seenDone = new Set<string>();
+    const doneIndices = new Map<string, number>();
+    for (let i = 0; i < events.length; i++) {
+      if (events[i].type === 'msg:done') doneIndices.set(events[i].roleId, i);
+    }
+    for (let i = startIdx; i < events.length; i++) {
+      const event = events[i];
+      if (event.type === 'thinking' && i + 1 < events.length &&
+          events[i + 1].type === 'thinking' && events[i + 1].roleId === event.roleId) continue;
+      if (event.type === 'msg:done') {
+        if (doneIndices.get(event.roleId) !== i) continue;
+      }
+      const line = summarizeEvent(event, flatRoleIds);
+      if (line) eventLinesRef.current.push(line);
+    }
+    prevEventsLenRef.current = events.length;
+    if (eventLinesRef.current.length > 80) {
+      eventLinesRef.current = eventLinesRef.current.slice(-80);
+    }
+  }, [sse.events, flatRoleIds]);
+
+  const eventLines = eventLinesRef.current;
 
   // Derived wave status
   const derivedWaveStatus = useMemo(() => {
