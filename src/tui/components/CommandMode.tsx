@@ -480,7 +480,7 @@ export const CommandMode: React.FC<CommandModeProps> = ({
       ))}
 
       {/* Empty state */}
-      {allLines.length === 0 && (
+      {liveLines.length === 0 && committedLines.length === 0 && (
         <Box>
           <Text color="gray" dimColor>
             Type a message to your AI team, or /help for commands.
