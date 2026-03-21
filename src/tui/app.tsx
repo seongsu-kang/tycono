@@ -21,7 +21,7 @@ import { useApi } from './hooks/useApi';
 import { useSSE } from './hooks/useSSE';
 import { useCommand, type WaveInfo } from './hooks/useCommand';
 import { dispatchWave } from './api';
-import type { ActiveSessionInfo } from './api';
+import type { ActiveSessionInfo, PresetSummary } from './api';
 import { buildOrgTree, flattenOrgRoleIds } from './store';
 
 type Mode = 'command' | 'panel';
@@ -231,6 +231,10 @@ export const App: React.FC = () => {
   // System messages (command feedback displayed in stream area)
   const [systemMessages, setSystemMessages] = useState<StreamLine[]>([]);
 
+  // Preset selection state (for /new without args)
+  const [pendingPresetSelect, setPendingPresetSelect] = useState<PresetSummary[] | null>(null);
+  const selectedPresetRef = useRef<string | null>(null);
+
   // Terminal full height with resize tracking (minus 1 for wide-char overflow safety)
   const [termHeight, setTermHeight] = useState((process.stdout.rows || 30) - 1);
 
@@ -337,21 +341,24 @@ export const App: React.FC = () => {
     return waves.find(w => w.waveId === focusedWaveId)?.startedAt ?? 0;
   }, [focusedWaveId, waves]);
 
+  // Wave creation callback — shared by useCommand and preset selection flow
+  const onWaveCreated = useCallback((newWaveId: string, directive: string) => {
+    const newWave: WaveInfo = {
+      waveId: newWaveId,
+      directive,
+      startedAt: Date.now(),
+    };
+    setWaves(prev => [...prev, newWave]);
+    setFocusedWaveId(newWaveId);
+    sse.clearEvents();
+    api.refresh();
+  }, [sse, api]);
+
   // Command handler
   const { execute } = useCommand({
     focusedWaveId,
     waves,
-    onWaveCreated: (newWaveId, directive) => {
-      const newWave: WaveInfo = {
-        waveId: newWaveId,
-        directive,
-        startedAt: Date.now(),
-      };
-      setWaves(prev => [...prev, newWave]);
-      setFocusedWaveId(newWaveId);
-      sse.clearEvents();
-      api.refresh();
-    },
+    onWaveCreated,
     onFocusWave: (waveId) => {
       setFocusedWaveId(waveId);
       sse.clearEvents();
@@ -365,6 +372,44 @@ export const App: React.FC = () => {
   // Handle command submission from CommandMode
   const handleCommandSubmit = useCallback(async (input: string) => {
     // User input is already shown by CommandMode (immediate commit to Static)
+
+    // Preset selection mode: user types a number to pick preset
+    if (pendingPresetSelect) {
+      const trimmed = input.trim();
+      const idx = parseInt(trimmed, 10);
+      if (!isNaN(idx) && idx >= 1 && idx <= pendingPresetSelect.length) {
+        const selected = pendingPresetSelect[idx - 1];
+        setPendingPresetSelect(null);
+        addSystemMessage(`Selected: ${selected.name}. Type your directive:`, 'cyan');
+        // Store selected preset for next input
+        selectedPresetRef.current = selected.id;
+        return;
+      }
+      // If user typed text instead of number, treat as directive with selected/default preset
+      const presetId = selectedPresetRef.current || 'default';
+      setPendingPresetSelect(null);
+      selectedPresetRef.current = null;
+      try {
+        const waveResult = await dispatchWave(trimmed || undefined, { preset: presetId });
+        onWaveCreated(waveResult.waveId, trimmed);
+      } catch (err) {
+        addSystemMessage(`Wave failed: ${err instanceof Error ? err.message : 'unknown'}`, 'red');
+      }
+      return;
+    }
+
+    // If a preset was selected previously, this input is the directive
+    if (selectedPresetRef.current) {
+      const presetId = selectedPresetRef.current;
+      selectedPresetRef.current = null;
+      try {
+        const waveResult = await dispatchWave(input.trim() || undefined, { preset: presetId });
+        onWaveCreated(waveResult.waveId, input.trim());
+      } catch (err) {
+        addSystemMessage(`Wave failed: ${err instanceof Error ? err.message : 'unknown'}`, 'red');
+      }
+      return;
+    }
 
     const result = await execute(input);
 
@@ -513,6 +558,7 @@ export const App: React.FC = () => {
         addSystemMessage('  /sessions            Sessions + ports (kill/cleanup)', 'white');
         addSystemMessage('  /kill <id>           Kill a session', 'white');
         addSystemMessage('  /cleanup             Remove dead sessions', 'white');
+        addSystemMessage('  /preset list         Installed presets', 'white');
         addSystemMessage('  /help                This help', 'white');
         addSystemMessage('  /quit                Exit', 'white');
         addSystemMessage('Keys: [Tab] team panel  [1-9] wave  [Esc] back  [Ctrl+C] quit', 'gray');
@@ -526,6 +572,46 @@ export const App: React.FC = () => {
           addSystemMessage(`Sessions: ${api.sessions.length}  Active: ${activeCount}  Waves: ${waves.length}  Ports: ${api.portSummary.totalPorts}`, 'white');
         }
         break;
+      case 'preset_list': {
+        const presets = result.presets ?? [];
+        if (presets.length === 0) {
+          addSystemMessage('No presets installed.', 'gray');
+        } else {
+          addSystemMessage('Installed presets:', 'cyan');
+          for (const p of presets) {
+            const star = p.isDefault ? ' \u2605' : '';
+            const desc = p.description ? ` \u2014 ${p.description}` : '';
+            addSystemMessage(`  ${p.id} (${p.rolesCount} roles)${desc}${star}`, p.isDefault ? 'green' : 'white');
+          }
+        }
+        break;
+      }
+      case 'preset_select': {
+        const presets = result.presets ?? [];
+        if (presets.length === 0) {
+          addSystemMessage('No presets. Creating wave with default team.', 'gray');
+          try {
+            const waveResult = await dispatchWave();
+            onWaveCreated(waveResult.waveId, '');
+          } catch { /* ignore */ }
+        } else if (presets.length === 1) {
+          // Only default → show prompt to enter directive
+          addSystemMessage('Only default preset available. Type your directive:', 'gray');
+        } else {
+          // Multiple presets → show selection
+          addSystemMessage('Select a team preset for this wave:', 'cyan');
+          for (let i = 0; i < presets.length; i++) {
+            const p = presets[i];
+            const star = p.isDefault ? ' \u2605' : '';
+            const desc = p.description ? ` \u2014 ${p.description}` : '';
+            addSystemMessage(`  ${i + 1}. ${p.name} (${p.rolesCount} roles)${desc}${star}`, p.isDefault ? 'green' : 'white');
+          }
+          addSystemMessage('Type a number to select, then enter your directive.', 'gray');
+          // Store presets for number selection — handled via pendingPresetSelect
+          setPendingPresetSelect(presets);
+        }
+        break;
+      }
       case 'panel':
         break;
       case 'quit':
@@ -535,7 +621,7 @@ export const App: React.FC = () => {
           addSystemMessage(result.message, 'green');
         }
     }
-  }, [execute, addSystemMessage, addSystemLines, focusedWaveId, focusedWaveIndex, derivedWaveStatus, api.sessions.length, activeCount, waves, api.activeSessions, api.portSummary]);
+  }, [execute, addSystemMessage, addSystemLines, focusedWaveId, focusedWaveIndex, derivedWaveStatus, api.sessions.length, activeCount, waves, api.activeSessions, api.portSummary, pendingPresetSelect, onWaveCreated]);
 
   // Global key handler: Tab to toggle mode, Ctrl+C always exits
   useInput((input, key) => {
@@ -582,6 +668,15 @@ export const App: React.FC = () => {
   // Command Mode: scrollable terminal (no fullscreen)
   // Panel Mode: fullscreen (intentional — like vim for inspection)
   if (mode === 'panel') {
+    // OOM debug: minimal Panel Mode to isolate if yoga layout is the cause
+    if (process.env.PANEL_MINIMAL) {
+      return (
+        <Box flexDirection="column">
+          <Text color="cyan">Panel Mode (minimal debug)</Text>
+          <Text color="gray">Events: {sse.events.length} | Roles: {flatRoleIds.length} | Press Esc to go back</Text>
+        </Box>
+      );
+    }
     return (
       <Box flexDirection="column" height={termHeight}>
         <Box flexGrow={1} flexDirection="column">
