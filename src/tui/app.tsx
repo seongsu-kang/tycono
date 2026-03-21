@@ -14,8 +14,6 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
 import { StatusBar } from './components/StatusBar';
-import { OrgTree } from './components/OrgTree';
-import { StreamView } from './components/StreamView';
 import { CommandMode, type StreamLine } from './components/CommandMode';
 import { PanelMode } from './components/PanelMode';
 import { SetupWizard } from './components/SetupWizard';
@@ -670,49 +668,6 @@ export const App: React.FC = () => {
   // Command Mode: scrollable terminal (no fullscreen)
   // Panel Mode: fullscreen (intentional — like vim for inspection)
   if (mode === 'panel') {
-    // OOM debug levels: 0=full, 1=minimal, 2=orgTree only, 3=stream only
-    const debugLevel = parseInt(process.env.PANEL_MINIMAL || '0', 10);
-    if (debugLevel === 1) {
-      return (
-        <Box flexDirection="column">
-          <Text color="cyan">Panel Mode (minimal)</Text>
-          <Text color="gray">Events: {sse.events.length} | Press Esc</Text>
-        </Box>
-      );
-    }
-    if (debugLevel === 2) {
-      return (
-        <Box flexDirection="column">
-          <OrgTree tree={orgTree} focused={true} selectedIndex={0} flatRoles={flatRoleIds} ceoStatus="idle" />
-          <Text color="gray">OrgTree only | Press Esc</Text>
-        </Box>
-      );
-    }
-    if (debugLevel === 3) {
-      return (
-        <Box flexDirection="column">
-          <StreamView events={sse.events} allRoleIds={flatRoleIds} streamStatus={sse.streamStatus} waveId={focusedWaveId} roleLabel="All" />
-          <Text color="gray">StreamView only | Press Esc</Text>
-        </Box>
-      );
-    }
-    if (debugLevel === 4) {
-      // Full layout structure but empty content
-      return (
-        <Box flexDirection="column" height={termHeight}>
-          <Box flexGrow={1}>
-            <Box flexDirection="column" width={28}>
-              <Text color="green">Left Panel</Text>
-            </Box>
-            <Text color="gray">{'\u2502'}</Text>
-            <Box flexGrow={1} flexDirection="column" overflow="hidden">
-              <Text color="cyan">Right Panel</Text>
-            </Box>
-          </Box>
-          <StatusBar companyName="test" waveIndex={1} waveCount={1} waveStatus="idle" activeCount={0} portCount={0} totalCost={0} />
-        </Box>
-      );
-    }
     return (
       <Box flexDirection="column">
         <Box flexDirection="column">
