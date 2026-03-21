@@ -162,7 +162,12 @@ const PanelModeInner: React.FC<PanelModeProps> = ({
       if (line) rightContentLines.push(line.slice(0, rightWidth));
     }
     if (rightContentLines.length === 0) {
-      rightContentLines.push(waveId ? `Waiting... (total ${events.length} events)` : 'No active stream. Type a directive to start.');
+      if (selectedRoleId && events.length > 0) {
+        rightContentLines.push(`No events for ${selectedRoleId} (${events.length} total)`);
+        rightContentLines.push('Press Enter to show all roles');
+      } else {
+        rightContentLines.push(waveId ? `Waiting for events... (${events.length} in buffer)` : 'No active stream. Type a directive to start.');
+      }
     }
   } else if (rightTab === 'info') {
     rightContentLines.push(`Wave: ${focusedWave?.waveId ?? 'none'}`);
