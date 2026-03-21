@@ -329,8 +329,10 @@ export const CommandMode: React.FC<CommandModeProps> = ({
     if (line) eventLines.push(line);
   }
 
-  // Merge user inputs + system messages + event lines (cap total)
-  const allLines = [...userInputs, ...systemMessages, ...eventLines].slice(-60);
+  // Merge all lines sorted by ID (chronological) — prevents user input from being sliced off
+  const allLines = [...userInputs, ...systemMessages, ...eventLines]
+    .sort((a, b) => a.id - b.id)
+    .slice(-60);
 
   // Reset committedRef if it exceeds allLines (prevents unbounded growth)
   if (committedRef.current > allLines.length) {
