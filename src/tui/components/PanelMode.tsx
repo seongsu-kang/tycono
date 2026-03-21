@@ -70,8 +70,8 @@ function eventLine(ev: SSEEvent): string | null {
   catch { t = '--:--:--'; }
   const r = (ev.roleId ?? '').padEnd(12);
   switch (ev.type) {
-    case 'text': { const x = ((ev.data.text as string) ?? '').trim(); return x ? `${t} ${r} ${x.slice(0, 120)}` : null; }
-    case 'thinking': { const x = ((ev.data.text as string) ?? '').trim(); return x ? `${t} ${r} \uD83D\uDCAD ${x.slice(0, 80)}` : null; }
+    case 'text': { const x = ((ev.data.text as string) ?? '').replace(/\n/g, ' ').trim(); return x ? `${t} ${r} ${x.slice(0, 120)}` : null; }
+    case 'thinking': { const x = ((ev.data.text as string) ?? '').replace(/\n/g, ' ').trim(); return x ? `${t} ${r} \uD83D\uDCAD ${x.slice(0, 80)}` : null; }
     case 'tool:start': { const n = (ev.data.name as string) ?? ''; const d = ev.data.input ? (((ev.data.input as any).file_path || (ev.data.input as any).command || (ev.data.input as any).pattern || '') as string).slice(0, 50) : ''; return `${t} ${r} \u2192 ${n} ${d}`; }
     case 'tool:result': return `${t} ${r} \u2190 ${(ev.data.name as string) ?? ''} done`;
     case 'msg:start': return `${t} ${r} \u25B6 Started`;
@@ -157,6 +157,9 @@ const PanelModeInner: React.FC<PanelModeProps> = ({
   const leftWidth = 28;
   const termCols = process.stdout.columns || 120;
   const rightWidth = termCols - leftWidth - 3;
+  const headerLines = 2;
+  const footerLines = 3;
+  const contentHeight = Math.max(termHeight - headerLines - footerLines, 5);
 
   // === Build left column: OrgTree ===
   const ceoIcon = statuses['ceo'] === 'working' ? '\u25CF' : statuses['ceo'] === 'done' ? '\u2713' : '\u25CB';
@@ -176,7 +179,7 @@ const PanelModeInner: React.FC<PanelModeProps> = ({
   const rightContentLines: string[] = [];
   let selectedDocPath: string | null = null;
   if (rightTab === 'stream') {
-    const maxEv = Math.max(5, termHeight - 10);
+    const maxEv = Math.max(5, contentHeight - 2);
     const filtered = selectedRoleId ? events.filter(e => e.roleId === selectedRoleId) : events;
     const visible = filtered.slice(-maxEv);
     for (const ev of visible) {
@@ -237,11 +240,8 @@ const PanelModeInner: React.FC<PanelModeProps> = ({
     }
   }
 
-  // === Merge left + right, pad to fill terminal height ===
-  const headerLines = 3; // header + separator + org tree title
-  const footerLines = 2; // separator + keybindings
-  const contentHeight = Math.max(termHeight - headerLines - footerLines, 5);
-  const maxRows = Math.max(leftLines.length, rightContentLines.length, contentHeight);
+  // === Merge left + right, cap to terminal height ===
+  const maxRows = contentHeight;
 
   const rows: Array<{ left: string; right: string; leftSelected: boolean; leftWorking: boolean }> = [];
   for (let i = 0; i < maxRows; i++) {
