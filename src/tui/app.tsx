@@ -630,6 +630,8 @@ export const App: React.FC = () => {
       return;
     }
     if (mode === 'command' && key.tab) {
+      // Clear terminal before Panel Mode (removes Command Mode scrollback)
+      process.stdout.write('\x1b[2J\x1b[H');
       setMode('panel');
     }
   });

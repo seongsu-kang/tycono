@@ -10,6 +10,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Box, Text, useInput } from 'ink';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
 import type { OrgNode } from '../store';
 import type { SSEEvent, ActiveSessionInfo, SessionInfo } from '../api';
 import type { WaveInfo } from '../hooks/useCommand';
@@ -137,9 +138,7 @@ const PanelModeInner: React.FC<PanelModeProps> = ({
     }
     if (key.return) {
       if (rightTab === 'docs' && selectedDocPath) {
-        // Open in vim
         try {
-          const { execSync } = require('child_process');
           const editor = process.env.EDITOR || 'vim';
           execSync(`${editor} "${selectedDocPath}"`, { stdio: 'inherit' });
         } catch { /* ignore */ }
