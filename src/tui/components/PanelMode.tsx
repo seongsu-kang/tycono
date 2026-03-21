@@ -100,6 +100,8 @@ const PanelModeInner: React.FC<PanelModeProps> = ({
   const [termHeight, setTermHeight] = useState(process.stdout.rows || 30);
   const [rightTab, setRightTab] = useState<RightTab>('stream');
   const [docsIndex, setDocsIndex] = useState(0);
+  const [docsFilter, setDocsFilter] = useState<'all' | 'wave' | 'kb' | 'projects'>('all');
+  const [docsPreview, setDocsPreview] = useState(false); // true = file preview mode
 
   useEffect(() => {
     const fn = () => setTermHeight(process.stdout.rows || 30);
@@ -119,7 +121,10 @@ const PanelModeInner: React.FC<PanelModeProps> = ({
 
   // Key handling
   useInput((input, key) => {
-    if (key.escape) { onEscape(); return; }
+    if (key.escape) {
+      if (docsPreview) { setDocsPreview(false); return; }
+      onEscape(); return;
+    }
     if (input === 'h' || key.leftArrow) {
       const tabs: RightTab[] = ['stream', 'docs', 'info'];
       const idx = tabs.indexOf(rightTab);
@@ -145,18 +150,37 @@ const PanelModeInner: React.FC<PanelModeProps> = ({
     }
     if (key.return) {
       if (rightTab === 'docs' && selectedDocPath) {
-        try {
-          const editor = process.env.EDITOR || 'vim';
-          execSync(`${editor} "${selectedDocPath}"`, { stdio: 'inherit' });
-        } catch { /* ignore */ }
+        if (docsPreview) {
+          // In preview → open in vim
+          try {
+            const editor = process.env.EDITOR || 'vim';
+            execSync(`${editor} "${selectedDocPath}"`, { stdio: 'inherit' });
+          } catch { /* ignore */ }
+          setDocsPreview(false);
+        } else {
+          // In list → toggle preview
+          setDocsPreview(true);
+        }
+        return;
       } else {
         onSelect();
       }
       return;
     }
-    // Wave switch 1-9
+    // Docs filter 1-4
+    if (rightTab === 'docs') {
+      const filters = ['all', 'wave', 'kb', 'projects'] as const;
+      const fi = parseInt(input, 10);
+      if (fi >= 1 && fi <= 4) {
+        setDocsFilter(filters[fi - 1]);
+        setDocsIndex(0);
+        setDocsPreview(false);
+        return;
+      }
+    }
+    // Wave switch 1-9 (not in docs filter mode)
     const num = parseInt(input, 10);
-    if (num >= 1 && num <= 9 && num <= waves.length) {
+    if (rightTab !== 'docs' && num >= 1 && num <= 9 && num <= waves.length) {
       onFocusWave(waves[num - 1].waveId);
     }
   });
@@ -217,40 +241,91 @@ const PanelModeInner: React.FC<PanelModeProps> = ({
     rightContentLines.push(`Sessions: ${waveSessionCount}  Events: ${events.length}`);
     rightContentLines.push(`Stream: ${streamStatus}`);
   } else if (rightTab === 'docs') {
-    // Docs: scan .md files with j/k scroll + Enter to open
+    // Docs: scan + filter + ★ wave artifacts + preview
     try {
-      const skip = new Set(['.git', 'node_modules', '.tycono', '.worktrees', 'dist', '.claude', '.obsidian']);
-      const mdFiles: string[] = [];
-      const mdPaths: string[] = []; // full paths for vim
+      const skipDirs = new Set(['.git', 'node_modules', '.tycono', '.worktrees', 'dist', '.claude', '.obsidian']);
+      const allMdFiles: Array<{ rel: string; full: string }> = [];
       const walk = (dir: string, depth: number) => {
-        if (depth > 3 || mdFiles.length > 200) return;
+        if (depth > 3 || allMdFiles.length > 300) return;
         try {
           for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-            if (skip.has(e.name)) continue;
+            if (skipDirs.has(e.name)) continue;
             const full = path.join(dir, e.name);
             if (e.isDirectory()) walk(full, depth + 1);
             else if (e.name.endsWith('.md')) {
-              mdFiles.push(full.replace(companyRoot + '/', ''));
-              mdPaths.push(full);
+              allMdFiles.push({ rel: full.replace(companyRoot + '/', ''), full });
             }
           }
         } catch {}
       };
       walk(companyRoot, 0);
-      mdFiles.sort();
-      mdPaths.sort();
-      // Cap docsIndex
-      const cappedIdx = Math.min(docsIndex, mdFiles.length - 1);
-      if (cappedIdx !== docsIndex) setDocsIndex(Math.max(0, cappedIdx));
-      selectedDocPath = mdPaths[cappedIdx] ?? null;
+      allMdFiles.sort((a, b) => a.rel.localeCompare(b.rel));
 
-      const maxVisible = Math.max(5, termHeight - 12);
-      const scrollStart = Math.max(0, Math.min(cappedIdx - 3, mdFiles.length - maxVisible));
-      rightContentLines.push(`${mdFiles.length} documents  [j/k] browse  [Enter] ${process.env.EDITOR || 'vim'}`);
-      for (let i = scrollStart; i < Math.min(scrollStart + maxVisible, mdFiles.length); i++) {
-        const selected = i === cappedIdx;
-        const prefix = selected ? '\u25B6 ' : '  ';
-        rightContentLines.push(`${prefix}${mdFiles[i].slice(0, rightWidth - 4)}`);
+      // Wave artifact files (from SSE events)
+      const waveFiles = new Set<string>();
+      for (const ev of events) {
+        if (ev.type === 'tool:start') {
+          const name = (ev.data.name as string) ?? '';
+          const inp = ev.data.input as Record<string, unknown> | undefined;
+          if (['Write', 'Edit', 'NotebookEdit'].includes(name) && inp?.file_path) {
+            waveFiles.add(String(inp.file_path));
+          }
+        }
+      }
+
+      // Apply filter
+      const filtered = allMdFiles.filter(f => {
+        if (docsFilter === 'wave') return waveFiles.has(f.full);
+        if (docsFilter === 'kb') return f.rel.startsWith('knowledge/');
+        if (docsFilter === 'projects') return f.rel.startsWith('projects/');
+        return true; // 'all'
+      });
+
+      // Sort: wave files first
+      filtered.sort((a, b) => {
+        const aw = waveFiles.has(a.full) ? 0 : 1;
+        const bw = waveFiles.has(b.full) ? 0 : 1;
+        if (aw !== bw) return aw - bw;
+        return a.rel.localeCompare(b.rel);
+      });
+
+      // Cap docsIndex
+      const cappedIdx = Math.min(docsIndex, Math.max(0, filtered.length - 1));
+      if (cappedIdx !== docsIndex) setDocsIndex(cappedIdx);
+      selectedDocPath = filtered[cappedIdx]?.full ?? null;
+
+      if (docsPreview && selectedDocPath) {
+        // === Preview mode ===
+        const previewLines: string[] = [];
+        try {
+          const content = fs.readFileSync(selectedDocPath, 'utf-8');
+          previewLines.push(...content.split('\n').slice(0, contentHeight - 3));
+        } catch { previewLines.push('(cannot read)'); }
+        const shortName = selectedDocPath.split('/').slice(-2).join('/');
+        rightContentLines.push(`${waveFiles.has(selectedDocPath) ? '\u2605 ' : ''}${shortName}  [Esc] back  [Enter] ${process.env.EDITOR || 'vim'}`);
+        rightContentLines.push('\u2500'.repeat(Math.min(50, rightWidth)));
+        for (const pl of previewLines) {
+          if (rightContentLines.length >= contentHeight) break;
+          rightContentLines.push(pl.slice(0, rightWidth));
+        }
+      } else {
+        // === List mode ===
+        const filterLabels = ['1:All', '2:\u2605Wave', '3:KB', '4:Projects'];
+        const filterBar = filterLabels.map((f, i) => {
+          const key = ['all', 'wave', 'kb', 'projects'][i];
+          return key === docsFilter ? `[${f}]` : ` ${f} `;
+        }).join(' ');
+        rightContentLines.push(`${filterBar}  ${filtered.length} docs  [j/k] browse  [Enter] preview`);
+
+        const maxVisible = Math.max(5, contentHeight - 3);
+        const scrollStart = Math.max(0, Math.min(cappedIdx - 3, filtered.length - maxVisible));
+        for (let i = scrollStart; i < Math.min(scrollStart + maxVisible, filtered.length); i++) {
+          const selected = i === cappedIdx;
+          const isWave = waveFiles.has(filtered[i].full);
+          const prefix = selected ? '\u25B6 ' : '  ';
+          const star = isWave ? '\u2605' : ' ';
+          rightContentLines.push(`${prefix}${star} ${filtered[i].rel.slice(0, rightWidth - 6)}`);
+        }
       }
     } catch {
       rightContentLines.push('Cannot scan documents');
