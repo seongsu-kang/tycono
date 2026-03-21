@@ -1,13 +1,13 @@
 /**
- * StreamView — detailed stream panel for Panel Mode (right side)
- * Shows full event details with timestamps for a selected role.
- * No aggressive truncation — shows tools, thinking, dispatch like Claude Code.
+ * StreamView — stream panel for Panel Mode
+ * Simplified to single Text render to prevent yoga OOM on wide terminals.
+ * Previous: 30 events × 3 React elements = 90 yoga nodes → OOM on 245+ columns
+ * Now: 1 Text element with pre-formatted string
  */
 
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { SSEEvent } from '../api';
-import { getRoleColor } from '../theme';
 
 interface StreamViewProps {
   events: SSEEvent[];
@@ -21,111 +21,58 @@ function formatTime(ts: string): string {
   try {
     const d = new Date(ts);
     return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  } catch {
-    return '--:--:--';
-  }
+  } catch { return '--:--:--'; }
 }
 
-function renderEvent(event: SSEEvent): { content: string; contentColor: string } | null {
-  switch (event.type) {
-    case 'msg:start':
-      return {
-        content: `\u25B6 Started: ${(event.data.task as string)?.replace(/\u26D4[^\u26D4]*\u26D4[^"]*/g, '').trim().slice(0, 80) ?? ''}`,
-        contentColor: 'green',
-      };
+function eventToLine(event: SSEEvent): string | null {
+  const time = formatTime(event.ts);
+  const role = event.roleId.padEnd(12);
 
+  switch (event.type) {
+    case 'msg:start': {
+      const task = ((event.data.task as string) ?? '').replace(/\u26D4[^\u26D4]*\u26D4[^"]*/g, '').trim().slice(0, 80);
+      return `${time} ${role} \u25B6 Started: ${task}`;
+    }
     case 'msg:done': {
       const turns = event.data.turns as number | undefined;
-      return {
-        content: `\u2713 Done${turns ? ` (${turns} turns)` : ''}`,
-        contentColor: 'green',
-      };
+      return `${time} ${role} \u2713 Done${turns ? ` (${turns} turns)` : ''}`;
     }
-
     case 'msg:error':
-      return {
-        content: `\u2717 Error: ${(event.data.error as string ?? event.data.message as string ?? '').slice(0, 120)}`,
-        contentColor: 'red',
-      };
-
+      return `${time} ${role} \u2717 ${((event.data.error ?? event.data.message) as string ?? '').slice(0, 80)}`;
     case 'text': {
-      const text = ((event.data.text as string) ?? '');
-      if (!text.trim()) return null;
-      // Don't truncate — let terminal wrap
-      return { content: text, contentColor: 'white' };
+      const text = ((event.data.text as string) ?? '').trim();
+      if (!text) return null;
+      return `${time} ${role} ${text.slice(0, 120)}`;
     }
-
     case 'thinking': {
-      const text = ((event.data.text as string) ?? '').slice(0, 150);
-      if (!text.trim()) return null;
-      return { content: `\uD83D\uDCAD ${text}`, contentColor: 'gray' };
+      const text = ((event.data.text as string) ?? '').trim().slice(0, 100);
+      if (!text) return null;
+      return `${time} ${role} \uD83D\uDCAD ${text}`;
     }
-
     case 'tool:start': {
       const name = (event.data.name as string) ?? 'tool';
-      const input = event.data.input;
+      const input = event.data.input as Record<string, unknown> | undefined;
       let detail = '';
-      if (input && typeof input === 'object') {
-        const inp = input as Record<string, unknown>;
-        if (inp.file_path) detail = ` ${String(inp.file_path)}`;
-        else if (inp.command) detail = ` ${String(inp.command).slice(0, 80)}`;
-        else if (inp.pattern) detail = ` ${String(inp.pattern)}`;
-        else detail = ` ${JSON.stringify(input).slice(0, 80)}`;
+      if (input) {
+        if (input.file_path) detail = ` ${String(input.file_path).slice(0, 60)}`;
+        else if (input.command) detail = ` ${String(input.command).slice(0, 60)}`;
+        else if (input.pattern) detail = ` ${String(input.pattern)}`;
       }
-      return {
-        content: `\u2192 ${name}${detail}`,
-        contentColor: 'gray',
-      };
+      return `${time} ${role} \u2192 ${name}${detail}`;
     }
-
-    case 'tool:result':
-      return {
-        content: `\u2190 ${(event.data.name as string) ?? 'tool'} done`,
-        contentColor: 'gray',
-      };
-
     case 'dispatch:start':
-      return {
-        content: `\u21D2 dispatch ${event.data.targetRole as string ?? ''}: ${(event.data.task as string)?.replace(/\u26D4[^\u26D4]*\u26D4[^"]*/g, '').trim().slice(0, 80) ?? ''}`,
-        contentColor: 'yellow',
-      };
-
-    case 'dispatch:done':
-      return {
-        content: `\u21D0 ${event.data.targetRole as string ?? ''} completed`,
-        contentColor: 'yellow',
-      };
-
-    case 'msg:awaiting_input': {
-      const question = (event.data.question as string) ?? '';
-      return {
-        content: question ? `? ${question.slice(0, 120)}` : '? Awaiting input...',
-        contentColor: 'yellow',
-      };
-    }
-
-    // Hidden (truly internal only)
-    case 'heartbeat:tick':
-    case 'heartbeat:skip':
-    case 'prompt:assembled':
-    case 'trace:response':
-      return null;
-
+      return `${time} ${role} \u21D2 dispatch ${event.data.targetRole as string ?? ''}`;
     default:
       return null;
   }
 }
 
 const StreamViewInner: React.FC<StreamViewProps> = ({
-  events,
-  allRoleIds,
-  streamStatus,
-  waveId,
-  roleLabel,
+  events, allRoleIds, streamStatus, waveId, roleLabel,
 }) => {
-  const maxVisible = 30;
+  const termRows = process.stdout.rows || 40;
+  const maxVisible = Math.min(Math.max(5, termRows - 15), 20);
   const visibleEvents = events.slice(-maxVisible);
-
   const turnCount = events.filter(e => e.type === 'text' || e.type === 'tool:start').length;
 
   const statusLabel = streamStatus === 'streaming' ? '\u25CF streaming'
@@ -133,39 +80,24 @@ const StreamViewInner: React.FC<StreamViewProps> = ({
     : streamStatus === 'error' ? '\u2717 error'
     : 'idle';
 
+  // Build single text block (1 yoga node instead of 90+)
+  const lines = visibleEvents
+    .map(e => eventToLine(e))
+    .filter(Boolean) as string[];
+
+  const content = lines.length > 0
+    ? lines.join('\n')
+    : (waveId ? `Streaming... waiting for ${roleLabel !== 'All' ? roleLabel + ' ' : ''}events` : 'No active stream. Dispatch a wave to start.');
+
   return (
-    <Box flexDirection="column" paddingX={1} flexGrow={1}>
-      <Box justifyContent="space-between">
-        <Text bold color="cyan">
-          Stream ({roleLabel})
-        </Text>
+    <Box flexDirection="column" paddingX={1}>
+      <Text bold color="cyan">
+        Stream ({roleLabel}){'  '}
         <Text color={streamStatus === 'streaming' ? 'green' : 'gray'}>
           {statusLabel} {turnCount > 0 ? `turn ${turnCount}` : ''}
         </Text>
-      </Box>
-
-      {visibleEvents.length === 0 && (
-        <Box marginTop={1}>
-          <Text color="gray" dimColor>
-            {waveId
-              ? `Streaming... waiting for ${roleLabel !== 'All' ? roleLabel + ' ' : ''}events`
-              : 'No active stream. Dispatch a wave to start.'}
-          </Text>
-        </Box>
-      )}
-
-      {visibleEvents.map((event, i) => {
-        const rendered = renderEvent(event);
-        if (!rendered) return null;
-        const roleColor = getRoleColor(event.roleId, allRoleIds);
-        return (
-          <Box key={`${event.seq}-${i}`}>
-            <Text color="gray" dimColor>{formatTime(event.ts)} </Text>
-            <Text color={roleColor} bold>{event.roleId.padEnd(12)}</Text>
-            <Text color={rendered.contentColor} wrap="truncate">{rendered.content}</Text>
-          </Box>
-        );
-      })}
+      </Text>
+      <Text color="white" wrap="truncate">{content}</Text>
     </Box>
   );
 };
