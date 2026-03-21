@@ -634,10 +634,10 @@ export const App: React.FC = () => {
       setMode('panel');
     }
     // Esc in Command Mode → interrupt supervisor (like Claude Code)
-    if (mode === 'command' && key.escape && focusedWaveId && derivedWaveStatus === 'running') {
-      stopWave(focusedWaveId).then(() => {
-        addSystemMessage('\u23F9 Interrupted. Type to continue.', 'yellow');
-      }).catch(() => {});
+    // Only when actually streaming (not idle/done) — prevents spam on repeated Esc
+    if (mode === 'command' && key.escape && focusedWaveId
+        && (sse.streamStatus === 'streaming')) {
+      stopWave(focusedWaveId).catch(() => {});
     }
   });
 
