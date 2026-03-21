@@ -216,7 +216,12 @@ const PanelModeInner: React.FC<PanelModeProps> = ({
     if (activeRoleId) rightContentLines.push(`\u25B8 ${activeRoleId}`);
     const maxEv = Math.max(5, contentHeight - 3);
     const filtered = activeRoleId ? events.filter(e => e.roleId === activeRoleId) : events;
-    const visible = filtered.slice(-maxEv);
+    // Dedup msg:done — only show last one per role (session reuse causes duplicates)
+    const deduped = filtered.filter((ev, i) => {
+      if (ev.type !== 'msg:done') return true;
+      return !filtered.slice(i + 1).some(e => e.type === 'msg:done' && e.roleId === ev.roleId);
+    });
+    const visible = deduped.slice(-maxEv);
     for (const ev of visible) {
       const line = eventLine(ev);
       if (!line) continue;

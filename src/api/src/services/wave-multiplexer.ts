@@ -95,12 +95,7 @@ class WaveMultiplexer {
       const allEvents: { event: ActivityEvent; sessionId: string }[] = [];
       for (const exec of recentSessions) {
         const events = ActivityStream.readFrom(exec.sessionId, 0);
-        // Find last execution boundary (last msg:start) — avoid replaying old executions
-        let lastStartIdx = -1;
-        for (let i = events.length - 1; i >= 0; i--) {
-          if (events[i].type === 'msg:start') { lastStartIdx = i; break; }
-        }
-        const recent = lastStartIdx >= 0 ? events.slice(lastStartIdx) : events.slice(-50);
+        const recent = events.slice(-50);
         for (const event of recent) {
           allEvents.push({ event, sessionId: exec.sessionId });
         }
@@ -163,12 +158,7 @@ class WaveMultiplexer {
       });
 
       const events = ActivityStream.readFrom(execution.sessionId, 0);
-      // Replay only last execution (from last msg:start) — avoid duplicate done events
-      let lastStart = -1;
-      for (let i = events.length - 1; i >= 0; i--) {
-        if (events[i].type === 'msg:start') { lastStart = i; break; }
-      }
-      const recentEvents = lastStart >= 0 ? events.slice(lastStart) : events.slice(-50);
+      const recentEvents = events.slice(-50);
       for (const event of recentEvents) {
         const key = `${event.roleId}:${event.seq}`;
         if (client.sentEvents.has(key)) continue;

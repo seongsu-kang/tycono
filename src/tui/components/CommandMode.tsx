@@ -306,14 +306,24 @@ export const CommandMode: React.FC<CommandModeProps> = ({
   const [quickBarIndex, setQuickBarIndex] = useState(0);
   const [acIndex, setAcIndex] = useState(0);
 
-  // Convert events to stream lines (collapse consecutive thinking from same role)
+  // Convert events to stream lines (collapse duplicates from session reuse)
   const eventLines: StreamLine[] = [];
+  const seenDone = new Set<string>(); // dedup msg:done per role
   for (let i = 0; i < events.length; i++) {
     const event = events[i];
-    // Skip thinking events if next event from same role is also thinking
+    // Skip consecutive thinking from same role
     if (event.type === 'thinking' && i + 1 < events.length) {
       const next = events[i + 1];
       if (next.type === 'thinking' && next.roleId === event.roleId) continue;
+    }
+    // Dedup msg:done — only show last one per role (session reuse causes duplicates)
+    if (event.type === 'msg:done') {
+      const key = `${event.roleId}:done`;
+      if (seenDone.has(key)) continue;
+      // Check if there's a later msg:done from same role — skip this one
+      const hasLater = events.slice(i + 1).some(e => e.type === 'msg:done' && e.roleId === event.roleId);
+      if (hasLater) continue;
+      seenDone.add(key);
     }
     const line = summarizeEvent(event, allRoleIds);
     if (line) eventLines.push(line);
