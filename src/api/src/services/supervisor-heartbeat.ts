@@ -554,6 +554,12 @@ Do NOT dispatch anyone. Do NOT create new files. Just answer concisely.`;
   /* ─── Internal: Spawn / Restart ────────────── */
 
   private spawnSupervisor(state: SupervisorState): void {
+    // Use latest pending directive as the active task (not the wave's initial directive)
+    const undelivered = state.pendingDirectives.filter(d => !d.delivered);
+    if (undelivered.length > 0) {
+      state.directive = undelivered[undelivered.length - 1].text;
+    }
+
     const orgTree = buildOrgTree(COMPANY_ROOT, state.preset);
     let cLevelRoles = getSubordinates(orgTree, 'ceo');
 
