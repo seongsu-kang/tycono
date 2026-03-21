@@ -91,6 +91,7 @@ const PanelModeInner: React.FC<PanelModeProps> = ({
 }) => {
   const [termHeight, setTermHeight] = useState(process.stdout.rows || 30);
   const [rightTab, setRightTab] = useState<RightTab>('stream');
+  const [docsIndex, setDocsIndex] = useState(0);
 
   useEffect(() => {
     const fn = () => setTermHeight(process.stdout.rows || 30);
@@ -123,9 +124,30 @@ const PanelModeInner: React.FC<PanelModeProps> = ({
       if (idx < tabs.length - 1) setRightTab(tabs[idx + 1]);
       return;
     }
-    if (input === 'k' || key.upArrow) { onMove('up'); return; }
-    if (input === 'j' || key.downArrow) { onMove('down'); return; }
-    if (key.return) { onSelect(); return; }
+    // j/k context-dependent
+    if (input === 'k' || key.upArrow) {
+      if (rightTab === 'docs') { setDocsIndex(i => Math.max(0, i - 1)); }
+      else { onMove('up'); }
+      return;
+    }
+    if (input === 'j' || key.downArrow) {
+      if (rightTab === 'docs') { setDocsIndex(i => i + 1); } // capped later by docsList length
+      else { onMove('down'); }
+      return;
+    }
+    if (key.return) {
+      if (rightTab === 'docs' && selectedDocPath) {
+        // Open in vim
+        try {
+          const { execSync } = require('child_process');
+          const editor = process.env.EDITOR || 'vim';
+          execSync(`${editor} "${selectedDocPath}"`, { stdio: 'inherit' });
+        } catch { /* ignore */ }
+      } else {
+        onSelect();
+      }
+      return;
+    }
     // Wave switch 1-9
     const num = parseInt(input, 10);
     if (num >= 1 && num <= 9 && num <= waves.length) {
@@ -151,8 +173,9 @@ const PanelModeInner: React.FC<PanelModeProps> = ({
     })),
   ];
 
-  // === Build right column: Stream/Info ===
+  // === Build right column: Stream/Info/Docs ===
   const rightContentLines: string[] = [];
+  let selectedDocPath: string | null = null;
   if (rightTab === 'stream') {
     const maxEv = Math.max(5, termHeight - 10);
     const filtered = selectedRoleId ? events.filter(e => e.roleId === selectedRoleId) : events;
@@ -175,29 +198,41 @@ const PanelModeInner: React.FC<PanelModeProps> = ({
     rightContentLines.push(`Sessions: ${waveSessionCount}  Events: ${events.length}`);
     rightContentLines.push(`Stream: ${streamStatus}`);
   } else if (rightTab === 'docs') {
-    // Docs: scan .md files from COMPANY_ROOT
+    // Docs: scan .md files with j/k scroll + Enter to open
     try {
       const skip = new Set(['.git', 'node_modules', '.tycono', '.worktrees', 'dist', '.claude', '.obsidian']);
       const mdFiles: string[] = [];
+      const mdPaths: string[] = []; // full paths for vim
       const walk = (dir: string, depth: number) => {
-        if (depth > 3 || mdFiles.length > 50) return;
+        if (depth > 3 || mdFiles.length > 200) return;
         try {
           for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
             if (skip.has(e.name)) continue;
             const full = path.join(dir, e.name);
             if (e.isDirectory()) walk(full, depth + 1);
-            else if (e.name.endsWith('.md')) mdFiles.push(full.replace(companyRoot + '/', ''));
+            else if (e.name.endsWith('.md')) {
+              mdFiles.push(full.replace(companyRoot + '/', ''));
+              mdPaths.push(full);
+            }
           }
         } catch {}
       };
       walk(companyRoot, 0);
       mdFiles.sort();
-      const maxDocs = Math.max(5, termHeight - 12);
-      rightContentLines.push(`${mdFiles.length} documents`);
-      for (const f of mdFiles.slice(0, maxDocs)) {
-        rightContentLines.push(`  ${f.slice(0, rightWidth - 4)}`);
+      mdPaths.sort();
+      // Cap docsIndex
+      const cappedIdx = Math.min(docsIndex, mdFiles.length - 1);
+      if (cappedIdx !== docsIndex) setDocsIndex(Math.max(0, cappedIdx));
+      selectedDocPath = mdPaths[cappedIdx] ?? null;
+
+      const maxVisible = Math.max(5, termHeight - 12);
+      const scrollStart = Math.max(0, Math.min(cappedIdx - 3, mdFiles.length - maxVisible));
+      rightContentLines.push(`${mdFiles.length} documents  [j/k] browse  [Enter] ${process.env.EDITOR || 'vim'}`);
+      for (let i = scrollStart; i < Math.min(scrollStart + maxVisible, mdFiles.length); i++) {
+        const selected = i === cappedIdx;
+        const prefix = selected ? '\u25B6 ' : '  ';
+        rightContentLines.push(`${prefix}${mdFiles[i].slice(0, rightWidth - 4)}`);
       }
-      if (mdFiles.length > maxDocs) rightContentLines.push(`  ... +${mdFiles.length - maxDocs} more`);
     } catch {
       rightContentLines.push('Cannot scan documents');
     }
@@ -259,7 +294,7 @@ const PanelModeInner: React.FC<PanelModeProps> = ({
       <Text color="gray">{sep}</Text>
       <Text>
         {waveTabs ? <Text color="gray">{waveTabs + '  '}</Text> : null}
-        <Text color="gray" dimColor>{'[h/l] tab  [j/k] role  [Enter] filter  '}</Text>
+        <Text color="gray" dimColor>{rightTab === 'docs' ? '[h/l] tab  [j/k] browse  [Enter] open  ' : '[h/l] tab  [j/k] role  [Enter] filter  '}</Text>
         {waves.length > 1 ? <Text color="gray" dimColor>{'[1-9] wave  '}</Text> : null}
         <Text color="gray" dimColor>{'[Esc] back'}</Text>
       </Text>
