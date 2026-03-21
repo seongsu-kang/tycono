@@ -716,11 +716,11 @@ export const App: React.FC = () => {
     );
   }
 
-  // Command Mode: scrollable terminal (no fullscreen)
-  // Panel Mode: fullscreen (intentional — like vim for inspection)
-  if (mode === 'panel') {
-    return (
-      <Box flexDirection="column">
+  // Both modes rendered — CommandMode stays mounted to preserve <Static> state.
+  // Panel mode renders on TOP when active; CommandMode hidden but alive underneath.
+  return (
+    <Box flexDirection="column">
+      {mode === 'panel' && (
         <Box flexDirection="column">
           <PanelMode
             tree={orgTree}
@@ -754,35 +754,22 @@ export const App: React.FC = () => {
             }}
           />
         </Box>
-        <StatusBar
-          companyName={api.company?.name ?? 'Loading...'}
-          waveIndex={focusedWaveIndex}
-          waveCount={waves.length}
-          waveStatus={derivedWaveStatus}
-          activeCount={activeCount}
-          portCount={api.portSummary.totalPorts}
-          totalCost={0}
+      )}
+      <Box display={mode === 'panel' ? 'none' : 'flex'} flexDirection="column">
+        <CommandMode
+          eventLines={eventLines}
+          systemMessages={systemMessages}
+          userInputs={userInputs}
+          committedRef={committedRef}
+          onUserInput={(line) => setUserInputs(prev => [...prev.slice(-10), line])}
+          onSubmit={handleCommandSubmit}
+          onQuickAction={(action) => {
+            handleCommandSubmit(`/${action}`);
+          }}
+          activeSessions={api.activeSessions}
+          focusedWaveId={focusedWaveId}
         />
       </Box>
-    );
-  }
-
-  // Command Mode: natural terminal flow (scrollable with mouse wheel)
-  return (
-    <Box flexDirection="column">
-      <CommandMode
-        eventLines={eventLines}
-        systemMessages={systemMessages}
-        userInputs={userInputs}
-        committedRef={committedRef}
-        onUserInput={(line) => setUserInputs(prev => [...prev.slice(-10), line])}
-        onSubmit={handleCommandSubmit}
-        onQuickAction={(action) => {
-          handleCommandSubmit(`/${action}`);
-        }}
-        activeSessions={api.activeSessions}
-        focusedWaveId={focusedWaveId}
-      />
       <StatusBar
         companyName={api.company?.name ?? 'Loading...'}
         waveIndex={focusedWaveIndex}
