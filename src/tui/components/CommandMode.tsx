@@ -28,6 +28,7 @@ interface CommandModeProps {
   eventLines: StreamLine[];
   systemMessages: StreamLine[];
   userInputs: StreamLine[];
+  committedRef: React.MutableRefObject<number>;
   onUserInput: (line: StreamLine) => void;
   onSubmit: (input: string) => void;
   onQuickAction?: (action: string) => void;
@@ -295,6 +296,7 @@ export const CommandMode: React.FC<CommandModeProps> = ({
   eventLines,
   systemMessages,
   userInputs,
+  committedRef,
   onUserInput,
   onSubmit,
   onQuickAction,
@@ -302,7 +304,6 @@ export const CommandMode: React.FC<CommandModeProps> = ({
   focusedWaveId,
 }) => {
   const [input, setInput] = useState('');
-  const committedRef = useRef(0);
   const [quickBarActive, setQuickBarActive] = useState(false);
   const [quickBarIndex, setQuickBarIndex] = useState(0);
   const [acIndex, setAcIndex] = useState(0);

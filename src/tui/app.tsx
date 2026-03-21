@@ -235,6 +235,10 @@ export const App: React.FC = () => {
   // User input lines — lifted from CommandMode to survive Panel mode switches
   const [userInputs, setUserInputs] = useState<StreamLine[]>([]);
 
+  // Committed line counter — lifted to survive CommandMode unmount/remount (Panel switch)
+  // Without this, remount resets committedRef to 0 → <Static> re-renders all items → duplication
+  const committedRef = useRef(0);
+
   // Preset selection state (for /new without args)
   const [pendingPresetSelect, setPendingPresetSelect] = useState<PresetSummary[] | null>(null);
   const selectedPresetRef = useRef<string | null>(null);
@@ -770,6 +774,7 @@ export const App: React.FC = () => {
         eventLines={eventLines}
         systemMessages={systemMessages}
         userInputs={userInputs}
+        committedRef={committedRef}
         onUserInput={(line) => setUserInputs(prev => [...prev.slice(-10), line])}
         onSubmit={handleCommandSubmit}
         onQuickAction={(action) => {
