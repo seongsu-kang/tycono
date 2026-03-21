@@ -180,7 +180,7 @@ class ExecutionManager {
 
     this.executions.set(execId, execution);
 
-    this.initializeAndRunExecution(execution, params, orgTree);
+    this.initializeAndRunExecution(execution, params, orgTree, presetId);
 
     return execution;
   }
@@ -189,6 +189,7 @@ class ExecutionManager {
     execution: Execution,
     params: StartExecutionParams,
     orgTree: ReturnType<typeof buildOrgTree>,
+    presetId?: string,
   ): Promise<void> {
     try {
       const ports = await portRegistry.allocate(execution.sessionId || execution.id, params.roleId, params.task);
