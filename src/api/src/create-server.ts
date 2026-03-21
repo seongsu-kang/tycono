@@ -33,6 +33,7 @@ import { questsRouter } from './routes/quests.js';
 import { coinsRouter } from './routes/coins.js';
 import { activeSessionsRouter } from './routes/active-sessions.js';
 import { supervisionRouter } from './routes/supervision.js';
+import { presetsRouter } from './routes/presets.js';
 import { importKnowledge } from './services/knowledge-importer.js';
 import { AnthropicProvider, type LLMProvider } from './engine/llm-adapter.js';
 import { readConfig } from './services/company-config.js';
@@ -212,6 +213,7 @@ export function createExpressApp(): express.Application {
   app.use('/api/coins', coinsRouter);
   app.use('/api/active-sessions', activeSessionsRouter);
   app.use('/api/supervision', supervisionRouter);
+  app.use('/api/presets', presetsRouter);
 
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', companyRoot: COMPANY_ROOT });
