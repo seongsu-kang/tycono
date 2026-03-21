@@ -10,7 +10,7 @@ if (!process.env.__TYCONO_HEAP_SET && !process.execArgv.some(a => a.includes('ma
   process.env.__TYCONO_HEAP_SET = '1';
   try {
     execFileSync(process.execPath, [
-      '--max-old-space-size=8192',
+      '--max-old-space-size=4096',
       '--expose-gc',
       '--heapsnapshot-near-heap-limit=1',
       ...process.execArgv,
