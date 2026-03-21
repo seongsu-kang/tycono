@@ -5,7 +5,7 @@
  * Shows full output: text, tools, thinking, dispatch — no aggressive truncation.
  */
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useMemo } from 'react';
 import { Box, Text, Static, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import type { SSEEvent, ActiveSessionInfo } from '../api';
@@ -306,28 +306,58 @@ export const CommandMode: React.FC<CommandModeProps> = ({
   const [quickBarIndex, setQuickBarIndex] = useState(0);
   const [acIndex, setAcIndex] = useState(0);
 
-  // Convert events to stream lines (collapse duplicates from session reuse)
-  const eventLines: StreamLine[] = [];
-  const seenDone = new Set<string>(); // dedup msg:done per role
-  for (let i = 0; i < events.length; i++) {
-    const event = events[i];
-    // Skip consecutive thinking from same role
-    if (event.type === 'thinking' && i + 1 < events.length) {
-      const next = events[i + 1];
-      if (next.type === 'thinking' && next.roleId === event.roleId) continue;
+  // Convert events to stream lines — memoized to prevent <Static> duplication.
+  // Without useMemo, every re-render calls summarizeEvent → new lineCounter IDs
+  // → <Static> treats them as new items → duplicate output in terminal scrollback.
+  const prevEventsLenRef = useRef(0);
+  const eventLinesRef = useRef<StreamLine[]>([]);
+
+  useMemo(() => {
+    // Reset if events array was cleared (wave switch)
+    if (events.length < prevEventsLenRef.current) {
+      eventLinesRef.current = [];
+      prevEventsLenRef.current = 0;
     }
-    // Dedup msg:done — only show last one per role (session reuse causes duplicates)
-    if (event.type === 'msg:done') {
-      const key = `${event.roleId}:done`;
-      if (seenDone.has(key)) continue;
-      // Check if there's a later msg:done from same role — skip this one
-      const hasLater = events.slice(i + 1).some(e => e.type === 'msg:done' && e.roleId === event.roleId);
-      if (hasLater) continue;
-      seenDone.add(key);
+
+    // Only process newly added events (events array grows monotonically)
+    const startIdx = prevEventsLenRef.current;
+    if (startIdx >= events.length) return;
+
+    const seenDone = new Set<string>();
+    // Re-scan for msg:done dedup across ALL events (need full context)
+    const doneIndices = new Map<string, number>();
+    for (let i = 0; i < events.length; i++) {
+      if (events[i].type === 'msg:done') {
+        doneIndices.set(events[i].roleId, i);
+      }
     }
-    const line = summarizeEvent(event, allRoleIds);
-    if (line) eventLines.push(line);
-  }
+
+    for (let i = startIdx; i < events.length; i++) {
+      const event = events[i];
+      // Skip consecutive thinking from same role
+      if (event.type === 'thinking' && i + 1 < events.length) {
+        const next = events[i + 1];
+        if (next.type === 'thinking' && next.roleId === event.roleId) continue;
+      }
+      // Dedup msg:done — only show last one per role
+      if (event.type === 'msg:done') {
+        const key = `${event.roleId}:done`;
+        if (seenDone.has(key)) continue;
+        if (doneIndices.get(event.roleId) !== i) continue; // Not the last one
+        seenDone.add(key);
+      }
+      const line = summarizeEvent(event, allRoleIds);
+      if (line) eventLinesRef.current.push(line);
+    }
+    prevEventsLenRef.current = events.length;
+
+    // Cap to prevent unbounded growth
+    if (eventLinesRef.current.length > 60) {
+      eventLinesRef.current = eventLinesRef.current.slice(-60);
+    }
+  }, [events, allRoleIds]);
+
+  const eventLines = eventLinesRef.current;
 
   // Merge all lines sorted by ID (chronological) — prevents user input from being sliced off
   const allLines = [...userInputs, ...systemMessages, ...eventLines]
