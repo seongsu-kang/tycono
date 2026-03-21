@@ -402,7 +402,7 @@ const PanelModeInner: React.FC<PanelModeProps> = ({
       const line = eventToOneLiner(ev);
       if (line) rightLines.push(line.slice(0, rightWidth));
     }
-    if (rightLines.length === 0) rightLines.push(waveId ? 'Waiting for events...' : 'No active stream.');
+    if (rightLines.length === 0) rightLines.push(waveId ? `Waiting... (${events.length} events, waveId=${waveId?.slice(-8)})` : 'No active stream.');
   } else if (rightTab === 'info') {
     rightLines.push(`Wave: ${focusedWave?.waveId ?? 'none'}`);
     if (wavePreset) rightLines.push(`Preset: ${wavePreset}`);

@@ -714,7 +714,7 @@ export const App: React.FC = () => {
       );
     }
     return (
-      <Box flexDirection="column">
+      <Box flexDirection="column" height={termHeight}>
         <Box flexGrow={1} flexDirection="column">
           <PanelMode
             tree={orgTree}
