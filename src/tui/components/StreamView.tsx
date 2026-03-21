@@ -116,7 +116,7 @@ function renderEvent(event: SSEEvent): { content: string; contentColor: string }
   }
 }
 
-export const StreamView: React.FC<StreamViewProps> = ({
+export const StreamView: React.FC<StreamViewProps> = React.memo(({
   events,
   allRoleIds,
   streamStatus,
@@ -162,10 +162,10 @@ export const StreamView: React.FC<StreamViewProps> = ({
           <Box key={`${event.seq}-${i}`}>
             <Text color="gray" dimColor>{formatTime(event.ts)} </Text>
             <Text color={roleColor} bold>{event.roleId.padEnd(12)}</Text>
-            <Text color={rendered.contentColor} wrap="wrap">{rendered.content}</Text>
+            <Text color={rendered.contentColor} wrap="truncate">{rendered.content}</Text>
           </Box>
         );
       })}
     </Box>
   );
-};
+}));

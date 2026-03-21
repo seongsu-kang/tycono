@@ -139,7 +139,7 @@ function readFilePreview(filePath: string, maxLines: number): string[] {
   }
 }
 
-export const PanelMode: React.FC<PanelModeProps> = ({
+export const PanelMode: React.FC<PanelModeProps> = React.memo(({
   tree, flatRoles, events, selectedRoleIndex, selectedRoleId,
   streamStatus, waveId, activeSessions, allSessions, companyRoot, waves,
   focusedWaveId, onMove, onSelect, onEscape, onFocusWave,
@@ -545,4 +545,4 @@ export const PanelMode: React.FC<PanelModeProps> = ({
       </Box>
     </Box>
   );
-};
+}));
