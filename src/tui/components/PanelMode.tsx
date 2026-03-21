@@ -139,7 +139,7 @@ function readFilePreview(filePath: string, maxLines: number): string[] {
   }
 }
 
-export const PanelMode: React.FC<PanelModeProps> = React.memo(({
+const PanelModeInner: React.FC<PanelModeProps> = ({
   tree, flatRoles, events, selectedRoleIndex, selectedRoleId,
   streamStatus, waveId, activeSessions, allSessions, companyRoot, waves,
   focusedWaveId, onMove, onSelect, onEscape, onFocusWave,
@@ -338,6 +338,19 @@ export const PanelMode: React.FC<PanelModeProps> = React.memo(({
     ? allSessions.filter(s => s.waveId === focusedWaveId).length
     : 0;
 
+  // Read preset from wave file on disk
+  const wavePreset = useMemo(() => {
+    if (!focusedWaveId || !companyRoot) return null;
+    try {
+      const wavePath = path.join(companyRoot, 'operations', 'waves', `${focusedWaveId}.json`);
+      if (fs.existsSync(wavePath)) {
+        const data = JSON.parse(fs.readFileSync(wavePath, 'utf-8'));
+        return data.preset as string | undefined;
+      }
+    } catch { /* ignore */ }
+    return null;
+  }, [focusedWaveId, companyRoot]);
+
   const leftWidth = 28;
 
   return (
@@ -347,6 +360,9 @@ export const PanelMode: React.FC<PanelModeProps> = React.memo(({
         <Box flexDirection="column" width={leftWidth}>
           <Box paddingX={1}>
             <Text color="green" bold>W{focusedWaveIndex}</Text>
+            {wavePreset && wavePreset !== 'default' && (
+              <Text color="magenta"> ({wavePreset})</Text>
+            )}
             <Text color="gray"> </Text>
             <Text color="white" wrap="truncate">
               {focusedWave?.directive ? focusedWave.directive.slice(0, leftWidth - 6) : '(idle)'}
@@ -505,6 +521,7 @@ export const PanelMode: React.FC<PanelModeProps> = React.memo(({
               <Text bold color="cyan">Wave Info</Text>
               <Text color="gray">{'\u2500'.repeat(40)}</Text>
               <Text color="white">Wave: {focusedWave?.waveId ?? 'none'}</Text>
+              {wavePreset && <Text color="magenta">Preset: {wavePreset}</Text>}
               <Text color="white">Directive: {focusedWave?.directive || '(idle)'}</Text>
               <Text color="white">Sessions: {waveSessionCount}</Text>
               <Text color="white">Files modified: {waveFileSet.size}</Text>
@@ -545,4 +562,6 @@ export const PanelMode: React.FC<PanelModeProps> = React.memo(({
       </Box>
     </Box>
   );
-}));
+};
+
+export const PanelMode = React.memo(PanelModeInner);

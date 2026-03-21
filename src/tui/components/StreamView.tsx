@@ -116,7 +116,7 @@ function renderEvent(event: SSEEvent): { content: string; contentColor: string }
   }
 }
 
-export const StreamView: React.FC<StreamViewProps> = React.memo(({
+const StreamViewInner: React.FC<StreamViewProps> = ({
   events,
   allRoleIds,
   streamStatus,
@@ -168,4 +168,6 @@ export const StreamView: React.FC<StreamViewProps> = React.memo(({
       })}
     </Box>
   );
-}));
+};
+
+export const StreamView = React.memo(StreamViewInner);
