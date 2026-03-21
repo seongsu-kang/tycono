@@ -713,10 +713,8 @@ export const App: React.FC = () => {
         </Box>
       );
     }
-    // Cap panel width to prevent yoga OOM on very wide terminals (245+ columns)
-    const panelWidth = Math.min(process.stdout.columns || 120, 160);
     return (
-      <Box flexDirection="column" height={termHeight} width={panelWidth}>
+      <Box flexDirection="column">
         <Box flexGrow={1} flexDirection="column">
           <PanelMode
             tree={orgTree}

@@ -401,7 +401,7 @@ const PanelModeInner: React.FC<PanelModeProps> = ({
         <Text color="gray">{separatorStr}</Text>
 
         {/* Right: Tabbed panel */}
-        <Box flexGrow={1} flexDirection="column" overflow="hidden">
+        <Box flexGrow={1} flexDirection="column">
           {/* Tab bar */}
           <Box paddingX={1} marginBottom={0}>
             {(['stream', 'docs', 'info'] as RightTab[]).map(tab => (
