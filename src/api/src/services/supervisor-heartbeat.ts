@@ -13,6 +13,7 @@
  */
 import { executionManager, type Execution } from './execution-manager.js';
 import { createSession, getSession, listSessions, addMessage, type Message } from './session-store.js';
+import Anthropic from '@anthropic-ai/sdk';
 import { buildOrgTree, getSubordinates } from '../engine/org-tree.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -226,14 +227,15 @@ class SupervisorHeartbeat {
       }
       state.crashCount = 0;
 
-      // Dual Mode: Conversation vs Dispatch (code-level enforcement)
-      // If directive looks like a question/status check → spawn conversation mode
-      // If directive looks like a task → spawn full supervisor with dispatch tools
-      if (this.isConversationDirective(text)) {
-        this.spawnConversation(state, text);
-      } else {
-        this.scheduleRestart(state, 0);
-      }
+      // Dual Mode: Conversation vs Dispatch
+      // AI classifies the directive (Haiku), falls back to regex
+      this.classifyDirective(text).then(isConversation => {
+        if (isConversation) {
+          this.spawnConversation(state, text);
+        } else {
+          this.scheduleRestart(state, 0);
+        }
+      });
     }
 
     return directive;
@@ -321,36 +323,68 @@ class SupervisorHeartbeat {
   /* ─── Internal: Dual Mode ─────────────────── */
 
   /**
-   * Heuristic: is this directive a question/status check (conversation)
+   * Classify: is this directive a question/status check (conversation)
    * or a work task (needs dispatch)?
    *
-   * Conversation signals: question marks, status keywords, short length
-   * Dispatch signals: imperative verbs (만들어, 수정해, 구현해), long directives
+   * Uses Haiku LLM for classification when ANTHROPIC_API_KEY is available.
+   * Falls back to regex heuristic when no API key.
    */
-  private isConversationDirective(text: string): boolean {
+  private async classifyDirective(text: string): Promise<boolean> {
+    // Try AI classification first (fast, accurate, language-agnostic)
+    if (process.env.ANTHROPIC_API_KEY) {
+      try {
+        const result = await this.classifyWithHaiku(text);
+        console.log(`[Supervisor] AI classified "${text.slice(0, 40)}" as ${result ? 'conversation' : 'task'}`);
+        return result;
+      } catch (err) {
+        console.warn(`[Supervisor] AI classification failed, falling back to regex:`, err);
+      }
+    }
+
+    // Fallback: regex heuristic
+    return this.isConversationDirectiveFallback(text);
+  }
+
+  private async classifyWithHaiku(text: string): Promise<boolean> {
+    const client = new Anthropic();
+    const response = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1,
+      system: `You classify user messages to a CEO AI assistant.
+Reply with exactly one character:
+- "Q" if the message is a question, status check, or casual conversation (no action needed)
+- "T" if the message is a task, work instruction, delegation request, or any directive that requires action (creating, building, fixing, assigning work to team members, etc.)
+
+Examples:
+"뭐 했어?" → Q
+"CBO한테 일 줘" → T
+"시장 조사해" → T
+"현재 상태 알려줘" → Q
+"게임 만들어 CTO에게 시켜" → T
+"how's it going?" → Q
+"deploy the app" → T`,
+      messages: [{ role: 'user', content: text }],
+    });
+    const reply = (response.content[0] as { type: 'text'; text: string }).text.trim();
+    return reply === 'Q';
+  }
+
+  private isConversationDirectiveFallback(text: string): boolean {
     const t = text.trim();
 
     // Short messages with question marks → conversation
     if (t.includes('?') && t.length < 100) return true;
 
-    // Task patterns FIRST — action verbs override question patterns
+    // Task patterns — action verbs override
     const taskPatterns = [
       /만들어/, /구현해/, /개발해/, /수정해/, /변경해/, /리팩토링/,
       /설계해/, /작성해/, /배포해/, /테스트해/, /고쳐/, /해줘/, /해봐/,
       /진행시켜/, /진행해/, /시작해/, /실행해/, /돌려/,
       /시켜/, /맡겨/, /일\s*줘/, /지시해/, /분석해/, /조사해/, /검토해/,
-      /에게\s*(시|맡|줘)/, /한테\s*(시|맡|줘)/,  // "CBO에게 시켜", "CTO한테 맡겨"
+      /에게\s*(시|맡|줘)/, /한테\s*(시|맡|줘)/,
       /build/i, /create/i, /implement/i, /develop/i, /fix/i, /deploy/i, /refactor/i,
       /proceed/i, /start/i, /execute/i, /run/i, /do it/i, /go ahead/i,
       /assign/i, /dispatch/i, /delegate/i, /tell.*to/i, /ask.*to/i,
-    ];
-    if (taskPatterns.some(p => p.test(t))) return false;
-
-    // Korean question patterns
-    const questionPatterns = [
-      /확인해/, /알려줘/, /보여줘/, /어때/, /뭐야/, /뭐지/, /뭘까/,
-      /상태/, /상황/, /현재/, /어디/, /얼마/,
-      /what/i, /how.*going/i, /status/i, /check/i, /show/i, /tell/i,
     ];
     if (taskPatterns.some(p => p.test(t))) return false;
 
