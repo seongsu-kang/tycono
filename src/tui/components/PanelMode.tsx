@@ -162,14 +162,40 @@ const PanelModeInner: React.FC<PanelModeProps> = ({
       if (line) rightContentLines.push(line.slice(0, rightWidth));
     }
     if (rightContentLines.length === 0) {
-      rightContentLines.push(waveId ? 'Waiting for events...' : 'No active stream. Type a directive to start.');
+      rightContentLines.push(waveId ? `Waiting... (total ${events.length} events)` : 'No active stream. Type a directive to start.');
     }
   } else if (rightTab === 'info') {
     rightContentLines.push(`Wave: ${focusedWave?.waveId ?? 'none'}`);
     rightContentLines.push(`Directive: ${focusedWave?.directive?.slice(0, rightWidth - 12) || '(idle)'}`);
     rightContentLines.push(`Sessions: ${waveSessionCount}  Events: ${events.length}`);
-  } else {
-    rightContentLines.push('Press h to switch to Stream tab');
+    rightContentLines.push(`Stream: ${streamStatus}`);
+  } else if (rightTab === 'docs') {
+    // Docs: scan .md files from COMPANY_ROOT
+    try {
+      const skip = new Set(['.git', 'node_modules', '.tycono', '.worktrees', 'dist', '.claude', '.obsidian']);
+      const mdFiles: string[] = [];
+      const walk = (dir: string, depth: number) => {
+        if (depth > 3 || mdFiles.length > 50) return;
+        try {
+          for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (skip.has(e.name)) continue;
+            const full = path.join(dir, e.name);
+            if (e.isDirectory()) walk(full, depth + 1);
+            else if (e.name.endsWith('.md')) mdFiles.push(full.replace(companyRoot + '/', ''));
+          }
+        } catch {}
+      };
+      walk(companyRoot, 0);
+      mdFiles.sort();
+      const maxDocs = Math.max(5, termHeight - 12);
+      rightContentLines.push(`${mdFiles.length} documents`);
+      for (const f of mdFiles.slice(0, maxDocs)) {
+        rightContentLines.push(`  ${f.slice(0, rightWidth - 4)}`);
+      }
+      if (mdFiles.length > maxDocs) rightContentLines.push(`  ... +${mdFiles.length - maxDocs} more`);
+    } catch {
+      rightContentLines.push('Cannot scan documents');
+    }
   }
 
   // === Merge left + right, pad to fill terminal height ===
