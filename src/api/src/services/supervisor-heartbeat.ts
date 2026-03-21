@@ -338,8 +338,11 @@ class SupervisorHeartbeat {
       /만들어/, /구현해/, /개발해/, /수정해/, /변경해/, /리팩토링/,
       /설계해/, /작성해/, /배포해/, /테스트해/, /고쳐/, /해줘/, /해봐/,
       /진행시켜/, /진행해/, /시작해/, /실행해/, /돌려/,
+      /시켜/, /맡겨/, /일\s*줘/, /지시해/, /분석해/, /조사해/, /검토해/,
+      /에게\s*(시|맡|줘)/, /한테\s*(시|맡|줘)/,  // "CBO에게 시켜", "CTO한테 맡겨"
       /build/i, /create/i, /implement/i, /develop/i, /fix/i, /deploy/i, /refactor/i,
       /proceed/i, /start/i, /execute/i, /run/i, /do it/i, /go ahead/i,
+      /assign/i, /dispatch/i, /delegate/i, /tell.*to/i, /ask.*to/i,
     ];
     if (taskPatterns.some(p => p.test(t))) return false;
 
