@@ -27,6 +27,9 @@ executionManager.onExecutionCreated((exec) => {
   waveMultiplexer.onExecutionCreated(exec);
 });
 
+// OOM fix: wave recovery runs once, not on every 5s poll
+let waveRecoveryDone = false;
+
 /* ─── Runner — lazy, re-created when engine changes ── */
 
 function getRunner() {
@@ -50,15 +53,15 @@ export function handleExecRequest(req: IncomingMessage, res: ServerResponse): vo
 
   // ── /api/waves/active — restore active waves after refresh ──
   if (method === 'GET' && url === '/api/waves/active') {
-    // Recovery: rebuild wave→session mapping from session-store
-    // Include done sessions (persistent channel model) but limit to CEO sessions
-    const waves = waveMultiplexer.getActiveWaves();
-    if (waves.length === 0) {
+    // Recovery: rebuild wave→session mapping from session-store (ONE TIME ONLY)
+    // Previous bug: recovery ran on EVERY poll (5s) because getActiveWaves()
+    // returns empty for done executions → recovery loop → OOM
+    if (!waveRecoveryDone) {
+      waveRecoveryDone = true;
       const allSessions = listSessions();
       let recovered = 0;
       for (const ses of allSessions) {
         if (!ses.waveId) continue;
-        // Only recover CEO sessions for wave display (team sessions loaded on demand)
         if (ses.roleId !== 'ceo') continue;
         const exec = executionManager.getActiveExecution(ses.id);
         if (exec) {
@@ -67,7 +70,7 @@ export function handleExecRequest(req: IncomingMessage, res: ServerResponse): vo
         }
       }
       if (recovered > 0) {
-        console.log(`[WaveRecovery] Recovered ${recovered} active sessions`);
+        console.log(`[WaveRecovery] Recovered ${recovered} sessions (one-time)`);
       }
     }
     jsonResponse(res, 200, { waves: waveMultiplexer.getActiveWaves() });

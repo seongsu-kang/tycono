@@ -139,26 +139,11 @@ function readFilePreview(filePath: string, maxLines: number): string[] {
   }
 }
 
-// OOM debug: track render count
-let panelRenderCount = 0;
-
 export const PanelMode: React.FC<PanelModeProps> = ({
   tree, flatRoles, events, selectedRoleIndex, selectedRoleId,
   streamStatus, waveId, activeSessions, allSessions, companyRoot, waves,
   focusedWaveId, onMove, onSelect, onEscape, onFocusWave,
 }) => {
-  panelRenderCount++;
-  if (panelRenderCount % 100 === 0) {
-    const mem = process.memoryUsage();
-    console.error(`[PanelMode] render #${panelRenderCount} heap=${Math.round(mem.heapUsed/1024/1024)}MB events=${events.length}`);
-  }
-  if (panelRenderCount > 1000) {
-    console.error(`[PanelMode] ⛔ RENDER LOOP DETECTED: ${panelRenderCount} renders. Bailing out.`);
-    onEscape(); // Force back to command mode
-    panelRenderCount = 0;
-    return null;
-  }
-
   const [termHeight, setTermHeight] = useState(process.stdout.rows || 30);
   const [rightTab, setRightTab] = useState<RightTab>('stream');
   const [docsFilter, setDocsFilter] = useState<DocsFilter>('all');
