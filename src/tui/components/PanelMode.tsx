@@ -383,80 +383,79 @@ const PanelModeInner: React.FC<PanelModeProps> = ({
 
   const leftWidth = 28;
   const termCols = process.stdout.columns || 120;
+  const rightWidth = Math.max(40, termCols - leftWidth - 3);
 
-  // === RADICAL FIX: render entire Panel as ONE pre-formatted Text ===
-  // yoga-layout OOMs on 245+ column terminals with nested Box layout.
-  // Solution: build the entire screen as a string, render as single <Text>.
+  // === Build panel as line arrays, render each line as <Text> ===
+  // yoga-layout OOMs with nested Box on 245+ columns.
+  // Solution: flat list of <Text> elements (1 yoga node per line, no nesting)
 
-  const buildScreen = (): string => {
-    const rightWidth = Math.max(40, termCols - leftWidth - 3);
-    const lines: string[] = [];
+  // Left: OrgTree
+  const ceoIcon = waveScopedStatuses['ceo'] === 'working' ? '\u25CF' : waveScopedStatuses['ceo'] === 'done' ? '\u2713' : '\u25CB';
+  const treeLines = [`${ceoIcon} CEO`, ...flattenTreeForText(waveScopedTree)];
 
-    // Header
-    const waveTitle = `W${focusedWaveIndex} ${focusedWave?.directive?.slice(0, leftWidth - 6) || '(idle)'}`;
-    const tabBar = ['Stream', 'Docs', 'Info'].map(t =>
-      t.toLowerCase() === rightTab ? `[${t}]` : ` ${t} `
-    ).join('  ');
-    lines.push(`${waveTitle.padEnd(leftWidth)} \u2502 ${tabBar}`);
-
-    // Sessions count
-    if (waveSessionCount > 0) {
-      lines.push(`${(waveSessionCount + ' sessions').padEnd(leftWidth)} \u2502`);
+  // Right: Stream/Info content
+  const rightLines: string[] = [];
+  if (rightTab === 'stream') {
+    const maxEv = Math.min(termHeight - 8, 20);
+    const visible = (selectedRoleId ? events.filter(e => e.roleId === selectedRoleId) : events).slice(-maxEv);
+    for (const ev of visible) {
+      const line = eventToOneLiner(ev);
+      if (line) rightLines.push(line.slice(0, rightWidth));
     }
+    if (rightLines.length === 0) rightLines.push(waveId ? 'Waiting for events...' : 'No active stream.');
+  } else if (rightTab === 'info') {
+    rightLines.push(`Wave: ${focusedWave?.waveId ?? 'none'}`);
+    if (wavePreset) rightLines.push(`Preset: ${wavePreset}`);
+    rightLines.push(`Directive: ${focusedWave?.directive?.slice(0, 60) || '(idle)'}`);
+    rightLines.push(`Sessions: ${waveSessionCount}  Events: ${events.length}`);
+  } else {
+    rightLines.push('Docs tab (h/l to switch)');
+  }
 
-    // OrgTree (left) + Stream (right) side by side
-    const ceoIcon = waveScopedStatuses['ceo'] === 'working' ? '\u25CF' : waveScopedStatuses['ceo'] === 'done' ? '\u2713' : '\u25CB';
-    const treeLines = [`\u2500\u2500 Org Tree \u2500\u2500`, `${ceoIcon} CEO`];
-    const flatEntries = flattenTreeForText(waveScopedTree);
-    treeLines.push(...flatEntries);
+  // Merge into display lines
+  const maxRows = Math.max(treeLines.length, rightLines.length);
+  const mergedLines: Array<{ left: string; right: string }> = [];
+  for (let i = 0; i < maxRows; i++) {
+    mergedLines.push({
+      left: (treeLines[i] ?? '').padEnd(leftWidth).slice(0, leftWidth),
+      right: (rightLines[i] ?? ''),
+    });
+  }
 
-    // Stream lines (right side)
-    const streamLines: string[] = [];
-    if (rightTab === 'stream') {
-      const maxEv = Math.min(termHeight - 8, 20);
-      const visible = (selectedRoleId ? events.filter(e => e.roleId === selectedRoleId) : events).slice(-maxEv);
-      for (const ev of visible) {
-        const line = eventToOneLiner(ev);
-        if (line) streamLines.push(line.slice(0, rightWidth));
-      }
-      if (streamLines.length === 0) {
-        streamLines.push(waveId ? 'Waiting for events...' : 'No active stream.');
-      }
-    } else if (rightTab === 'info') {
-      streamLines.push(`Wave: ${focusedWave?.waveId ?? 'none'}`);
-      streamLines.push(`Directive: ${focusedWave?.directive || '(idle)'}`);
-      streamLines.push(`Sessions: ${waveSessionCount}`);
-      streamLines.push(`SSE events: ${events.length}`);
-    } else {
-      streamLines.push('(Docs tab — press h/l to switch)');
-    }
+  // Tab bar
+  const tabLabels = ['Stream', 'Docs', 'Info'];
+  const tabBar = tabLabels.map(t => t.toLowerCase() === rightTab ? `[${t}]` : ` ${t} `).join('  ');
 
-    // Merge left + right
-    const maxLines = Math.max(treeLines.length, streamLines.length);
-    for (let i = 0; i < maxLines; i++) {
-      const left = (treeLines[i] ?? '').padEnd(leftWidth);
-      const right = streamLines[i] ?? '';
-      lines.push(`${left} \u2502 ${right}`);
-    }
-
-    // Wave tabs
-    if (waves.length > 1) {
-      const waveTabs = waves.map((w, i) =>
-        w.waveId === focusedWaveId ? `[${i + 1}]` : ` ${i + 1} `
-      ).join(' ');
-      lines.push('');
-      lines.push(waveTabs);
-    }
-
-    return lines.join('\n');
-  };
-
-  // Render entire panel as single Text to avoid yoga OOM
-  const screen = buildScreen();
+  // Wave tabs
+  const waveTabs = waves.length > 1
+    ? waves.map((w, i) => w.waveId === focusedWaveId ? `[${i + 1}]` : ` ${i + 1} `).join(' ')
+    : '';
 
   return (
     <Box flexDirection="column">
-      <Text wrap="truncate">{screen}</Text>
+      {/* Header */}
+      <Text>
+        <Text color="green" bold>W{focusedWaveIndex}</Text>
+        <Text color="white"> {focusedWave?.directive?.slice(0, leftWidth - 6) || '(idle)'}</Text>
+        <Text color="gray">  \u2502  </Text>
+        <Text color="cyan" bold>{tabBar}</Text>
+      </Text>
+      {waveSessionCount > 0 && <Text color="gray">{waveSessionCount} sessions</Text>}
+      <Text color="gray">\u2500\u2500 Org Tree \u2500\u2500</Text>
+
+      {/* Merged left|right lines — each line = 1 Text = 1 yoga node */}
+      {mergedLines.map((line, i) => (
+        <Text key={i}>
+          <Text color="white">{line.left}</Text>
+          <Text color="gray"> \u2502 </Text>
+          <Text color="white">{line.right}</Text>
+        </Text>
+      ))}
+
+      {/* Wave tabs */}
+      {waveTabs && <Text color="gray">{waveTabs}</Text>}
+
+      {/* Footer */}
       <Text color="gray" dimColor>
         [h/l] tab  [j/k] role  {waves.length > 1 ? '[1-9] wave  ' : ''}[Esc] command
       </Text>
