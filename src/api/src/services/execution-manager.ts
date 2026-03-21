@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { COMPANY_ROOT } from './file-reader.js';
 import { ActivityStream, type ActivityEvent } from './activity-stream.js';
 import { buildOrgTree } from '../engine/org-tree.js';
@@ -116,7 +118,20 @@ class ExecutionManager {
 
   startExecution(params: StartExecutionParams): Execution {
     const execId = `exec-${Date.now()}-${this.nextId++}`;
-    const orgTree = buildOrgTree(COMPANY_ROOT);
+
+    // Resolve preset from wave file for org tree building
+    let presetId: string | undefined;
+    const session = getSession(params.sessionId);
+    if (session?.waveId) {
+      try {
+        const wavePath = path.join(COMPANY_ROOT, 'operations', 'waves', `${session.waveId}.json`);
+        if (fs.existsSync(wavePath)) {
+          const waveData = JSON.parse(fs.readFileSync(wavePath, 'utf-8'));
+          presetId = waveData.preset;
+        }
+      } catch { /* ignore */ }
+    }
+    const orgTree = buildOrgTree(COMPANY_ROOT, presetId);
 
     // Authority gate
     if (params.sourceRole && params.sourceRole !== 'ceo') {
@@ -243,6 +258,7 @@ class ExecutionManager {
         sessionId: params.sessionId,
         teamStatus,
         targetRoles: params.targetRoles,
+        presetId,
         codeRoot: resolveCodeRoot(COMPANY_ROOT),
         attachments: params.attachments,
         env: {
@@ -676,7 +692,18 @@ class ExecutionManager {
     if (runningChildren.length === 0) return;
 
     // Only restart C-Level roles (CTO, CBO etc.)
-    const orgTree = buildOrgTree(COMPANY_ROOT);
+    // Resolve preset from wave file for correct org tree
+    let recoveryPresetId: string | undefined;
+    const deadSession = getSession(deadExecution.sessionId);
+    if (deadSession?.waveId) {
+      try {
+        const wp = path.join(COMPANY_ROOT, 'operations', 'waves', `${deadSession.waveId}.json`);
+        if (fs.existsSync(wp)) {
+          recoveryPresetId = JSON.parse(fs.readFileSync(wp, 'utf-8')).preset;
+        }
+      } catch { /* ignore */ }
+    }
+    const orgTree = buildOrgTree(COMPANY_ROOT, recoveryPresetId);
     const node = orgTree.nodes.get(deadExecution.roleId);
     if (!node || node.level !== 'c-level') return;
 
@@ -697,8 +724,8 @@ Your job: monitor progress, course-correct if needed, wait for completion, then 
     console.log(`[ExecMgr] Supervision recovery: ${deadExecution.roleId} died with ${runningChildren.length} running children. Restarting.`);
 
     // Propagate waveId from the dead session
-    const deadSession = getSession(deadExecution.sessionId);
-    const waveId = deadSession?.waveId;
+    const deadSes = getSession(deadExecution.sessionId);
+    const waveId = deadSes?.waveId;
 
     // Create new session for recovery
     const newSession = createSession(deadExecution.roleId, {
