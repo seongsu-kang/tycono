@@ -16,7 +16,8 @@
  */
 
 import { useCallback } from 'react';
-import { dispatchWave, sendDirective, stopWave, fetchJson, killSession, cleanupSessions, fetchActiveSessions } from '../api';
+import { dispatchWave, sendDirective, stopWave, fetchJson, killSession, cleanupSessions, fetchActiveSessions, fetchPresets } from '../api';
+import type { PresetSummary } from '../api';
 
 export interface WaveInfo {
   waveId: string;
@@ -25,9 +26,10 @@ export interface WaveInfo {
 }
 
 export interface CommandResult {
-  type: 'success' | 'error' | 'info' | 'wave_started' | 'directive_sent' | 'stopped' | 'quit' | 'help' | 'panel' | 'waves_list' | 'focus_changed' | 'agents' | 'ports' | 'sessions' | 'cleanup' | 'docs' | 'read_file' | 'open_file';
+  type: 'success' | 'error' | 'info' | 'wave_started' | 'directive_sent' | 'stopped' | 'quit' | 'help' | 'panel' | 'waves_list' | 'focus_changed' | 'agents' | 'ports' | 'sessions' | 'cleanup' | 'docs' | 'read_file' | 'open_file' | 'preset_list' | 'preset_select';
   message: string;
   waveId?: string;
+  presets?: PresetSummary[];
 }
 
 async function postAssign(roleId: string, task: string): Promise<{ waveId?: string }> {
@@ -80,6 +82,15 @@ export function useCommand(options: UseCommandOptions) {
 
         case 'new': {
           const directive = args || undefined;
+          if (!directive) {
+            // No args → show preset selection UI
+            try {
+              const presets = await fetchPresets();
+              return { type: 'preset_select', message: '', presets };
+            } catch (err) {
+              return { type: 'error', message: `Failed to load presets: ${err instanceof Error ? err.message : 'unknown'}` };
+            }
+          }
           try {
             const result = await dispatchWave(directive);
             onWaveCreated(result.waveId, directive ?? '');
@@ -166,6 +177,19 @@ export function useCommand(options: UseCommandOptions) {
           } catch (err) {
             return { type: 'error', message: `Assign failed: ${err instanceof Error ? err.message : 'unknown'}` };
           }
+        }
+
+        case 'preset': {
+          const subCmd = args.split(/\s+/)[0]?.toLowerCase() || 'list';
+          if (subCmd === 'list' || !subCmd) {
+            try {
+              const presets = await fetchPresets();
+              return { type: 'preset_list', message: '', presets };
+            } catch (err) {
+              return { type: 'error', message: `Failed to load presets: ${err instanceof Error ? err.message : 'unknown'}` };
+            }
+          }
+          return { type: 'error', message: `Unknown preset command: ${subCmd}. Try: /preset list` };
         }
 
         case 'roles':

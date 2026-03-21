@@ -28,6 +28,7 @@ interface SupervisorState {
   directive: string;
   targetRoles?: string[];
   continuous: boolean;
+  preset?: string;
   supervisorSessionId: string | null;
   executionId: string | null;
   status: 'starting' | 'running' | 'restarting' | 'stopped' | 'error';
@@ -66,7 +67,7 @@ class SupervisorHeartbeat {
    * This creates a supervisor session and starts an execution.
    * If the execution dies, it auto-restarts (heartbeat).
    */
-  start(waveId: string, directive: string, targetRoles?: string[], continuous = false): SupervisorState {
+  start(waveId: string, directive: string, targetRoles?: string[], continuous = false, preset?: string): SupervisorState {
     // Check if supervisor already running for this wave
     const existing = this.supervisors.get(waveId);
     if (existing && (existing.status === 'running' || existing.status === 'starting')) {
@@ -79,6 +80,7 @@ class SupervisorHeartbeat {
       directive,
       targetRoles,
       continuous,
+      preset,
       supervisorSessionId: null,
       executionId: null,
       status: 'starting',
@@ -100,7 +102,7 @@ class SupervisorHeartbeat {
     }
 
     // Save wave file immediately so directive persists across restarts
-    this.saveWaveFile(waveId, directive);
+    this.saveWaveFile(waveId, directive, preset);
 
     this.spawnSupervisor(state);
     return state;
@@ -110,20 +112,22 @@ class SupervisorHeartbeat {
    * Save wave file immediately so directive persists across restarts.
    * saveCompletedWave() adds session/role details on completion.
    */
-  private saveWaveFile(waveId: string, directive: string): void {
+  private saveWaveFile(waveId: string, directive: string, preset?: string): void {
     try {
       const wavesDir = path.join(COMPANY_ROOT, 'operations', 'waves');
       if (!fs.existsSync(wavesDir)) fs.mkdirSync(wavesDir, { recursive: true });
       const wavePath = path.join(wavesDir, `${waveId}.json`);
       if (!fs.existsSync(wavePath)) {
-        fs.writeFileSync(wavePath, JSON.stringify({
+        const waveData: Record<string, unknown> = {
           id: waveId,
           waveId,
           directive,
           startedAt: new Date().toISOString(),
           sessionIds: [],
           roles: [],
-        }, null, 2));
+        };
+        if (preset) waveData.preset = preset;
+        fs.writeFileSync(wavePath, JSON.stringify(waveData, null, 2));
         console.log(`[Supervisor] Wave file created: ${wavePath}`);
       }
     } catch (err) {
@@ -168,13 +172,15 @@ class SupervisorHeartbeat {
       const waveSessions = listSessions().filter(s => s.waveId === waveId);
       const ceoSession = waveSessions.find(s => s.roleId === 'ceo') ?? null;
 
-      // Read original directive from wave artifact file
+      // Read original directive + preset from wave artifact file
       let originalDirective = '';
+      let originalPreset: string | undefined;
       try {
         const waveFile = path.join(COMPANY_ROOT, 'operations', 'waves', `${waveId}.json`);
         if (fs.existsSync(waveFile)) {
           const waveData = JSON.parse(fs.readFileSync(waveFile, 'utf-8'));
           originalDirective = waveData.directive ?? '';
+          originalPreset = waveData.preset;
         }
       } catch { /* ignore */ }
 
@@ -184,6 +190,7 @@ class SupervisorHeartbeat {
           waveId,
           directive: originalDirective || text,
           continuous: false,
+          preset: originalPreset,
           supervisorSessionId: ceoSession?.id ?? null,
           executionId: null,
           status: 'stopped',
@@ -510,7 +517,7 @@ Do NOT dispatch anyone. Do NOT create new files. Just answer concisely.`;
   /* ─── Internal: Spawn / Restart ────────────── */
 
   private spawnSupervisor(state: SupervisorState): void {
-    const orgTree = buildOrgTree(COMPANY_ROOT);
+    const orgTree = buildOrgTree(COMPANY_ROOT, state.preset);
     let cLevelRoles = getSubordinates(orgTree, 'ceo');
 
     if (state.targetRoles && state.targetRoles.length > 0) {

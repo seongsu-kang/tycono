@@ -319,7 +319,7 @@ export function scaffold(config: ScaffoldConfig): string[] {
     'operations/decisions', 'operations/activity-streams',
     'operations/sessions', 'operations/cost',
     'knowledge', 'methodologies', '.claude/skills',
-    '.claude/skills/_shared', '.tycono',
+    '.claude/skills/_shared', '.tycono', 'company/presets',
   ];
   for (const dir of dirs) {
     fs.mkdirSync(path.join(root, dir), { recursive: true });

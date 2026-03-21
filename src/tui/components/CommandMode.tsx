@@ -299,6 +299,7 @@ const COMMANDS: Array<{ cmd: string; desc: string }> = [
   { cmd: '/sessions', desc: 'Active sessions' },
   { cmd: '/kill <id>', desc: 'Kill session' },
   { cmd: '/cleanup', desc: 'Remove dead' },
+  { cmd: '/preset list', desc: 'Installed presets' },
   { cmd: '/help', desc: 'Help' },
   { cmd: '/quit', desc: 'Exit' },
 ];

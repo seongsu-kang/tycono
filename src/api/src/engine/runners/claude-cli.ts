@@ -407,7 +407,7 @@ else:
  */
 export class ClaudeCliRunner implements ExecutionRunner {
   execute(config: RunnerConfig, callbacks: RunnerCallbacks): RunnerHandle {
-    const { companyRoot, roleId, task, sourceRole, orgTree, readOnly = false, teamStatus, attachments, targetRoles } = config;
+    const { companyRoot, roleId, task, sourceRole, orgTree, readOnly = false, teamStatus, attachments, targetRoles, presetId } = config;
 
     // Note: Claude CLI doesn't support inline image attachments.
     // Images will be ignored with a warning if passed.
@@ -416,7 +416,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
     }
 
     // 1. Context Assembly
-    const context = assembleContext(companyRoot, roleId, task, sourceRole, orgTree, { teamStatus, targetRoles });
+    const context = assembleContext(companyRoot, roleId, task, sourceRole, orgTree, { teamStatus, targetRoles, presetId });
 
     // Trace: capture assembled prompt for debugging
     callbacks.onPromptAssembled?.(context.systemPrompt, task);

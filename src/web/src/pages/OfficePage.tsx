@@ -12,6 +12,7 @@ import WaveModal from '../components/office/WaveModal';
 import WaveCommandCenter from '../components/office/WaveCommandCenter';
 import WaveCenter from '../components/office/WaveCenter';
 import HireRoleModal from '../components/office/HireRoleModal';
+import CompanyBoard from '../components/office/CompanyBoard';
 import FireRoleModal from '../components/office/FireRoleModal';
 import TerminalPanel from '../components/terminal/TerminalPanel';
 import useSessionStream from '../hooks/useSessionStream';
@@ -98,6 +99,7 @@ export default function OfficePage({ importReq, onImportDone }: { importReq?: Im
   const [roleLevels, setRoleLevels] = useState<RoleLevelData>({});
   const prevRoleLevelsRef = useRef<RoleLevelData>({});
   const [showHireModal, setShowHireModal] = useState(false);
+  const [showCompanyBoard, setShowCompanyBoard] = useState(false);
   const [fireTarget, setFireTarget] = useState<{ roleId: string; roleName: string } | null>(null);
 
   /* Phase 3: Live status */
@@ -1498,6 +1500,7 @@ export default function OfficePage({ importReq, onImportDone }: { importReq?: Im
               getRoleSpeech={ambient.getSpeech}
               getAppearance={getAppearance}
               onHireClick={() => setShowHireModal(true)}
+              onPresetsClick={() => setShowCompanyBoard(true)}
               onMascotClick={() => openPanel({ type: 'quest' })}
               roleLevels={roleLevels}
               language={language}
@@ -2208,6 +2211,11 @@ export default function OfficePage({ importReq, onImportDone }: { importReq?: Im
             roleId: (activeQuest.trigger.condition?.roleId as string) ?? undefined,
           } : undefined}
         />
+      )}
+
+      {/* Company Board (Presets) */}
+      {showCompanyBoard && (
+        <CompanyBoard onClose={() => setShowCompanyBoard(false)} />
       )}
 
       {/* Fire Role Modal */}

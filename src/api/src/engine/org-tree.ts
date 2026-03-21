@@ -85,7 +85,7 @@ interface RawRoleYaml {
 
 /* ─── Build ──────────────────────────────────── */
 
-export function buildOrgTree(companyRoot: string): OrgTree {
+export function buildOrgTree(companyRoot: string, presetId?: string): OrgTree {
   const rolesDir = path.join(companyRoot, 'roles');
   const tree: OrgTree = { root: 'ceo', nodes: new Map() };
 
@@ -102,53 +102,68 @@ export function buildOrgTree(companyRoot: string): OrgTree {
     reports: { daily: '', weekly: '' },
   });
 
-  if (!fs.existsSync(rolesDir)) return tree;
+  // Collect role directories to scan: base roles/ + preset roles/
+  const roleDirs: string[] = [];
+  if (fs.existsSync(rolesDir)) roleDirs.push(rolesDir);
 
-  // Read all role.yaml files
-  const entries = fs.readdirSync(rolesDir, { withFileTypes: true });
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const yamlPath = path.join(rolesDir, entry.name, 'role.yaml');
-    if (!fs.existsSync(yamlPath)) continue;
+  // If preset specified, also scan preset's roles directory
+  if (presetId && presetId !== 'default') {
+    const presetRolesDir = path.join(companyRoot, 'company', 'presets', presetId, 'roles');
+    if (fs.existsSync(presetRolesDir)) roleDirs.push(presetRolesDir);
+  }
 
-    try {
-      const raw = YAML.parse(fs.readFileSync(yamlPath, 'utf-8')) as RawRoleYaml;
-      const node: OrgNode = {
-        id: raw.id || entry.name,
-        name: raw.name || entry.name,
-        level: (raw.level as OrgNode['level']) || 'member',
-        reportsTo: (raw.reports_to || 'ceo').toLowerCase(),
-        children: [],
-        persona: raw.persona || '',
-        authority: {
-          autonomous: raw.authority?.autonomous ?? [],
-          needsApproval: raw.authority?.needs_approval ?? [],
-        },
-        knowledge: {
-          reads: raw.knowledge?.reads ?? [],
-          writes: raw.knowledge?.writes ?? [],
-        },
-        reports: {
-          daily: raw.reports?.daily ?? '',
-          weekly: raw.reports?.weekly ?? '',
-        },
-        skills: raw.skills,
-        model: raw.model,
-        source: raw.source ? {
-          id: raw.source.id || '',
-          sync: (raw.source.sync as RoleSource['sync']) || 'manual',
-          forked_at: raw.source.forked_at,
-          upstream_version: raw.source.upstream_version,
-        } : undefined,
-        heartbeat: raw.heartbeat ? {
-          enabled: raw.heartbeat.enabled ?? false,
-          intervalSec: raw.heartbeat.intervalSec ?? 120,
-          maxTicks: raw.heartbeat.maxTicks ?? 60,
-        } : undefined,
-      };
-      tree.nodes.set(node.id, node);
-    } catch {
-      // Skip malformed YAML
+  // Read all role.yaml files from all role directories
+  for (const dir of roleDirs) {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const yamlPath = path.join(dir, entry.name, 'role.yaml');
+      if (!fs.existsSync(yamlPath)) continue;
+
+      try {
+        const raw = YAML.parse(fs.readFileSync(yamlPath, 'utf-8')) as RawRoleYaml;
+        const nodeId = raw.id || entry.name;
+
+        // Skip if already loaded (base roles take precedence over preset roles)
+        if (tree.nodes.has(nodeId)) continue;
+
+        const node: OrgNode = {
+          id: nodeId,
+          name: raw.name || entry.name,
+          level: (raw.level as OrgNode['level']) || 'member',
+          reportsTo: (raw.reports_to || 'ceo').toLowerCase(),
+          children: [],
+          persona: raw.persona || '',
+          authority: {
+            autonomous: raw.authority?.autonomous ?? [],
+            needsApproval: raw.authority?.needs_approval ?? [],
+          },
+          knowledge: {
+            reads: raw.knowledge?.reads ?? [],
+            writes: raw.knowledge?.writes ?? [],
+          },
+          reports: {
+            daily: raw.reports?.daily ?? '',
+            weekly: raw.reports?.weekly ?? '',
+          },
+          skills: raw.skills,
+          model: raw.model,
+          source: raw.source ? {
+            id: raw.source.id || '',
+            sync: (raw.source.sync as RoleSource['sync']) || 'manual',
+            forked_at: raw.source.forked_at,
+            upstream_version: raw.source.upstream_version,
+          } : undefined,
+          heartbeat: raw.heartbeat ? {
+            enabled: raw.heartbeat.enabled ?? false,
+            intervalSec: raw.heartbeat.intervalSec ?? 120,
+            maxTicks: raw.heartbeat.maxTicks ?? 60,
+          } : undefined,
+        };
+        tree.nodes.set(node.id, node);
+      } catch {
+        // Skip malformed YAML
+      }
     }
   }
 
@@ -231,8 +246,8 @@ export function canConsult(tree: OrgTree, source: string, target: string): boole
 }
 
 /** Refresh tree (re-read all role.yaml files) */
-export function refreshOrgTree(companyRoot: string): OrgTree {
-  return buildOrgTree(companyRoot);
+export function refreshOrgTree(companyRoot: string, presetId?: string): OrgTree {
+  return buildOrgTree(companyRoot, presetId);
 }
 
 /** Get a human-readable org chart string for context injection */

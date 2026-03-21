@@ -47,6 +47,30 @@ export interface CloudCharacterDetail {
   [key: string]: unknown;
 }
 
+export interface CloudPresetSummary {
+  id: string;
+  name: string;
+  version: string;
+  description?: string;
+  tagline?: string;
+  roles: string[];
+  category?: string;
+  tags?: string[];
+  installs: number;
+  upvotes: number;
+  downvotes: number;
+  vote_score: number;
+  my_vote?: number | null;
+  publisher_id?: string | null;
+  author?: { id: string; name: string; verified?: boolean };
+  pricing?: { type: string; price: number };
+  wave_scoped?: {
+    recommended_tasks?: string[];
+    avg_wave_duration?: string;
+    complexity?: string;
+  };
+}
+
 export interface SyncCheckResult {
   updates: Array<{
     sourceId: string;
@@ -99,6 +123,22 @@ export const cloudApi = {
     const qs = publisherId ? `?publisher_id=${encodeURIComponent(publisherId)}` : '';
     return fetch(`${CLOUD_BASE}/api/store/characters/${id}${qs}`, { method: 'DELETE' }).then(r => r.json());
   },
+
+  // Preset Store (Cloud Marketplace)
+  getCloudPresets: (opts?: { sort?: StoreSortOption; instanceId?: string }) => {
+    const params = new URLSearchParams();
+    if (opts?.sort) params.set('sort', opts.sort);
+    if (opts?.instanceId) params.set('instance_id', opts.instanceId);
+    const qs = params.toString();
+    return cloudGet<{ presets: CloudPresetSummary[] }>(`/api/presets${qs ? `?${qs}` : ''}`);
+  },
+  getCloudPreset: (id: string) => cloudGet<CloudPresetSummary>(`/api/presets/${id}`),
+  votePreset: (id: string, instanceId: string, vote: 1 | -1 | 0) =>
+    cloudPost<{ ok: boolean; upvotes: number; downvotes: number }>(`/api/presets/${id}/vote`, { instanceId, vote }),
+  trackPresetInstall: (id: string) =>
+    cloudPost<{ ok: boolean; installs: number }>(`/api/presets/${id}/install`, {}),
+  publishPreset: (data: { id: string; name: string; version?: string; data: Record<string, unknown>; publisherId?: string }) =>
+    cloudPost<{ ok: boolean; id: string; version: string }>('/api/presets/publish', data),
 
   // Telemetry
   uploadTelemetry: (data: {

@@ -51,7 +51,7 @@ export function assembleContext(
   task: string,
   sourceRole: string,
   orgTree: OrgTree,
-  options?: { teamStatus?: TeamStatus; targetRoles?: string[] },
+  options?: { teamStatus?: TeamStatus; targetRoles?: string[]; presetId?: string },
 ): AssembledContext {
   const node = orgTree.nodes.get(roleId);
   if (!node) {
@@ -121,6 +121,14 @@ Use the code repository path for all source code work (reading, writing, buildin
   const preKSection = buildPreKnowledgingSection(companyRoot, task);
   if (preKSection) {
     sections.push(preKSection);
+  }
+
+  // 11. Preset Knowledge (wave-scoped preset docs)
+  if (options?.presetId && options.presetId !== 'default') {
+    const presetKnowledge = loadPresetKnowledge(companyRoot, options.presetId);
+    if (presetKnowledge) {
+      sections.push('# Preset Knowledge\n\n' + presetKnowledge);
+    }
   }
 
   // Task는 별도 필드로 분리
@@ -260,6 +268,27 @@ The following existing documents are related to this task. **Read relevant ones 
 ${docList}
 
 > **Knowledging Rule**: Check these documents first. If your work produces new knowledge, update existing docs or create new ones with cross-links.`;
+}
+
+/**
+ * Load knowledge docs from a preset's knowledge/ directory.
+ * Returns concatenated content (capped at 2000 chars per doc).
+ */
+function loadPresetKnowledge(companyRoot: string, presetId: string): string | null {
+  const knowledgeDir = path.join(companyRoot, 'company', 'presets', presetId, 'knowledge');
+  if (!fs.existsSync(knowledgeDir)) return null;
+
+  const parts: string[] = [];
+  try {
+    const entries = fs.readdirSync(knowledgeDir).filter(f => f.endsWith('.md'));
+    for (const file of entries.slice(0, 10)) { // Cap at 10 docs
+      const content = fs.readFileSync(path.join(knowledgeDir, file), 'utf-8');
+      const preview = content.slice(0, 2000);
+      parts.push(`## ${file}\n\n${preview}${content.length > 2000 ? '\n\n... (truncated)' : ''}`);
+    }
+  } catch { /* ignore */ }
+
+  return parts.length > 0 ? parts.join('\n\n---\n\n') : null;
 }
 
 function loadCompanyRules(companyRoot: string): string | null {

@@ -29,6 +29,7 @@ export interface AgentConfig {
   tokenLedger?: TokenLedger;  // Token usage ledger (optional)
   attachments?: ImageAttachment[];  // Image attachments for vision
   targetRoles?: string[];          // Selective dispatch scope
+  presetId?: string;               // Wave-scoped preset for knowledge injection
   // Callbacks
   onText?: (text: string) => void;
   onToolExec?: (name: string, input: Record<string, unknown>) => void;
@@ -162,7 +163,7 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
   const llm = config.llm ?? new AnthropicProvider();
 
   // 1. Assemble context
-  const context = assembleContext(companyRoot, roleId, task, sourceRole, orgTree, { teamStatus: config.teamStatus, targetRoles: config.targetRoles });
+  const context = assembleContext(companyRoot, roleId, task, sourceRole, orgTree, { teamStatus: config.teamStatus, targetRoles: config.targetRoles, presetId: config.presetId });
 
   // Trace: capture assembled prompt for debugging
   config.onPromptAssembled?.(context.systemPrompt, task);

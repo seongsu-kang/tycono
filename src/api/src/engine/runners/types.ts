@@ -45,6 +45,8 @@ export interface RunnerConfig {
   codeRoot?: string;
   /** PSM-004: Environment variables to inject (e.g., port assignments) */
   env?: Record<string, string>;
+  /** Wave-scoped preset ID for knowledge injection */
+  presetId?: string;
   /** SV-7: Supervision — abort a running session */
   onAbortSession?: (sessionId: string) => boolean;
   /** SV-6: Supervision — amend a running session */

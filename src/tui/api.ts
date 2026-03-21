@@ -136,6 +136,7 @@ export async function fetchExecStatus(): Promise<ExecStatus> {
 export async function dispatchWave(directive?: string, options?: {
   targetRoles?: string[];
   continuous?: boolean;
+  preset?: string;
 }): Promise<WaveResponse> {
   return fetchJson<WaveResponse>('/api/jobs', {
     method: 'POST',
@@ -144,6 +145,7 @@ export async function dispatchWave(directive?: string, options?: {
       directive: directive ?? '',
       targetRoles: options?.targetRoles,
       continuous: options?.continuous ?? false,
+      preset: options?.preset,
     },
   });
 }
@@ -209,6 +211,21 @@ export async function killSession(sessionId: string): Promise<{ ok: boolean }> {
 
 export async function cleanupSessions(): Promise<{ cleaned: number; remaining: number }> {
   return fetchJson<{ cleaned: number; remaining: number }>('/api/active-sessions/cleanup', { method: 'POST' });
+}
+
+/* ─── Presets ─── */
+
+export interface PresetSummary {
+  id: string;
+  name: string;
+  description?: string;
+  rolesCount: number;
+  roles: string[];
+  isDefault: boolean;
+}
+
+export async function fetchPresets(): Promise<PresetSummary[]> {
+  return fetchJson<PresetSummary[]>('/api/presets');
 }
 
 /* ─── Knowledge docs ─── */

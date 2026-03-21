@@ -304,7 +304,16 @@ export function saveCompletedWave(waveId: string, directive: string): { ok: bool
       }
     }
 
-    const waveJson = {
+    // Preserve preset field from existing wave file
+    let existingPreset: string | undefined;
+    if (existing) {
+      try {
+        const existingData = JSON.parse(fs.readFileSync(existing, 'utf-8'));
+        existingPreset = existingData.preset;
+      } catch { /* ignore */ }
+    }
+
+    const waveJson: Record<string, unknown> = {
       id: baseName,
       directive,
       startedAt: startedAt.toISOString(),
@@ -313,6 +322,7 @@ export function saveCompletedWave(waveId: string, directive: string): { ok: bool
       waveId,
       sessionIds: allSessionIds,
     };
+    if (existingPreset) waveJson.preset = existingPreset;
     fs.writeFileSync(jsonPath, JSON.stringify(waveJson, null, 2), 'utf-8');
 
     const relativePath = `operations/waves/${baseName}.json`;

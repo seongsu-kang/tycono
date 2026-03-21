@@ -144,3 +144,81 @@ export function eventTypeToMessageStatus(eventType: ActivityEventType): MessageS
 
 /** TeamStatus — Role별 현재 상태 + 작업 내용 (context-assembler, runner에서 공유) */
 export type TeamStatus = Record<string, { status: RoleStatus; task?: string }>;
+
+/* ═══════════════════════════════════════════════
+ *  Preset — Wave-scoped team configuration
+ * ═══════════════════════════════════════════════ */
+
+/** preset.yaml 스키마 */
+export interface PresetDefinition {
+  /** Spec version (e.g. "preset/v1") */
+  spec: string;
+  /** Unique identifier (directory name) */
+  id: string;
+  /** Display name */
+  name: string;
+  /** Short tagline */
+  tagline?: string;
+  /** Version string */
+  version: string;
+  /** Full description */
+  description?: string;
+  /** Author info */
+  author?: {
+    id: string;
+    name: string;
+    verified?: boolean;
+  };
+  /** Category / classification */
+  category?: string;
+  industry?: string;
+  stage?: string;
+  use_case?: string[];
+  /** Role IDs included in this preset */
+  roles: string[];
+  /** Counts */
+  knowledge_docs?: number;
+  skills_count?: number;
+  /** Pricing */
+  pricing?: {
+    type: 'one-time' | 'subscription';
+    price: number;
+    wave_scoped_tier?: string;
+  };
+  /** Tags for search */
+  tags?: string[];
+  languages?: string[];
+  /** Stats (marketplace) */
+  stats?: {
+    installs: number;
+    rating: number;
+    reviews: number;
+    waves_used: number;
+  };
+  /** Wave-scoped recommendations */
+  wave_scoped?: {
+    recommended_tasks?: string[];
+    task_keywords?: string[];
+    avg_wave_duration?: string;
+    complexity?: string;
+  };
+}
+
+/** Loaded preset with resolved path info */
+export interface LoadedPreset {
+  definition: PresetDefinition;
+  /** Absolute path to preset directory (or null for _default) */
+  path: string | null;
+  /** Whether this is the _default preset */
+  isDefault: boolean;
+}
+
+/** Preset summary for TUI display */
+export interface PresetSummary {
+  id: string;
+  name: string;
+  description?: string;
+  rolesCount: number;
+  roles: string[];
+  isDefault: boolean;
+}

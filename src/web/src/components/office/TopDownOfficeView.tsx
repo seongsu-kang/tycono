@@ -56,6 +56,7 @@ interface TopDownOfficeViewProps {
   getAppearance?: (roleId: string) => CharacterAppearance;
   onCustomize?: (roleId: string) => void;
   onHireClick?: () => void;
+  onPresetsClick?: () => void;
   onMascotClick?: () => void;
   roleLevels?: Record<string, { level: number; totalTokens: number; progress: number }>;
   coinBalance?: number;
@@ -1090,7 +1091,7 @@ function spawnSweat(cx: number, cy: number) {
 export default function TopDownOfficeView({
   roles, projects, roleStatuses, activeExecs,
   onRoleClick, onProjectClick, onBulletinClick, onDecisionsClick, onKnowledgeClick, onSettingsClick, onThemeClick, onStatsClick,
-  getRoleSpeech, getAppearance, onHireClick, onMascotClick, roleLevels,
+  getRoleSpeech, getAppearance, onHireClick, onPresetsClick, onMascotClick, roleLevels,
   coinBalance = 0, onCoinsSpent, onFurniturePlaced,
   purchasedPreset, language = 'en',
 }: TopDownOfficeViewProps) {
@@ -1883,6 +1884,17 @@ export default function TopDownOfficeView({
         <button className="td-hire-btn" data-quest-target="hire-btn" onClick={onHireClick} title="Hire New Role">
           <span className="td-hire-btn__icon">+</span>
           <span className="td-hire-btn__label">HIRE</span>
+        </button>
+      )}
+      {onPresetsClick && (
+        <button
+          className="td-hire-btn"
+          onClick={onPresetsClick}
+          title="Team Presets"
+          style={{ right: 'auto', left: 12 }}
+        >
+          <span className="td-hire-btn__icon">📦</span>
+          <span className="td-hire-btn__label">TEAMS</span>
         </button>
       )}
     </div>

@@ -17,6 +17,7 @@ import { engineRouter } from './routes/engine.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { setupRouter } from './routes/setup.js';
 import { skillsRouter } from './routes/skills.js';
+import { presetsRouter } from './routes/presets.js';
 
 export function createApp() {
   const app = express();
@@ -53,6 +54,7 @@ export function createApp() {
   app.use('/api/engine', engineRouter);
   app.use('/api/sessions', sessionsRouter);
   app.use('/api/skills', skillsRouter);
+  app.use('/api/presets', presetsRouter);
 
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', companyRoot: COMPANY_ROOT });

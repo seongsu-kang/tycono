@@ -77,6 +77,13 @@ export const api = {
   getSkillRegistry: () => get<Array<{ source: string; label: string; skills: Array<{ id: string; name: string; description: string; category: string; url: string; installed: boolean }> }>>('/skills/registry'),
   installRegistrySkill: (skillId: string, url: string) => post<{ ok: boolean; skillId: string }>('/skills/registry/install', { skillId, url }),
 
+  // Presets
+  getPresets: () => get<Array<{ id: string; name: string; description?: string; rolesCount: number; roles: string[]; isDefault: boolean }>>('/presets'),
+  getPreset: (id: string) => get<Record<string, unknown>>(`/presets/${id}`),
+  installPreset: (id: string, preset: Record<string, unknown>, knowledge?: Array<{ filename: string; content: string }>, roleDefinitions?: Array<{ id: string; yaml: string }>) =>
+    post<{ ok: boolean; id: string; path: string }>('/presets/install', { id, preset, knowledge, roleDefinitions }),
+  removePreset: (id: string) => del<{ ok: boolean; id: string }>(`/presets/${id}`),
+
   // Roles (Engine)
   createRole: (input: CreateRoleInput) =>
     post<{ ok: boolean; roleId: string }>('/engine/roles', input),

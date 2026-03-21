@@ -223,6 +223,7 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
 
     const targetRoles = body.targetRoles as string[] | undefined;
     const continuous = body.continuous === true;
+    const preset = body.preset as string | undefined;
 
     // Always use supervisor mode — CEO supervises C-Levels who supervise members
     {
@@ -231,6 +232,7 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
         actualDirective,
         targetRoles && targetRoles.length > 0 ? targetRoles : undefined,
         continuous,
+        preset,
       );
 
       if (state.status === 'error') {
