@@ -237,10 +237,33 @@ class WaveMultiplexer {
     this.registerSession(waveId, execution);
   }
 
-  /** Remove completed wave sessions from memory */
+  /** Remove completed wave sessions from memory.
+   *  Keep SSE clients registered — they persist until connection closes.
+   *  When the wave restarts (new directive), registerSession will resubscribe them. */
   cleanupWave(waveId: string): void {
     this.waveSessions.delete(waveId);
-    this.clients.delete(waveId);
+
+    // Don't delete clients — TUI SSE connections stay open across directives.
+    // Just unsubscribe dead session listeners to prevent stale callbacks.
+    const clients = this.clients.get(waveId);
+    if (clients) {
+      // Remove disconnected clients
+      for (const client of clients) {
+        if (client.closed || client.res.destroyed || client.res.writableEnded) {
+          clearInterval(client.heartbeat);
+          clients.delete(client);
+          continue;
+        }
+        // Unsubscribe old session listeners (execution is done)
+        for (const [, attached] of client.attachedSessions) {
+          attached.unsubscribe();
+        }
+        client.attachedSessions.clear();
+      }
+      if (clients.size === 0) {
+        this.clients.delete(waveId);
+      }
+    }
   }
 
   detach(waveId: string, client: WaveStreamClient): void {
