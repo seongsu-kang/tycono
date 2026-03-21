@@ -124,8 +124,7 @@ export function summarizeEvent(event: SSEEvent, allRoleIds: string[]): StreamLin
       const toolName = (event.data.name as string) ?? 'tool';
       // Only show Write/Edit (file changes) + Bash (commands). Hide Read/Grep/Glob (noise).
       const isWrite = ['Write', 'Edit', 'NotebookEdit'].includes(toolName);
-      const isBash = toolName === 'Bash';
-      if (!isWrite && !isBash) return null; // Hide read-only tools
+      if (!isWrite) return null; // Only show file writes — hide Read/Grep/Glob/Bash
 
       const input = event.data.input;
       let detail = '';
