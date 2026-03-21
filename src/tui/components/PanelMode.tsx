@@ -175,21 +175,24 @@ const PanelModeInner: React.FC<PanelModeProps> = ({
     })),
   ];
 
+  // Derive selectedRoleId from index (more reliable than prop — avoids sync issues)
+  const activeRoleId = flatRoles[selectedRoleIndex] ?? null;
+
   // === Build right column: Stream/Info/Docs ===
   const rightContentLines: string[] = [];
   let selectedDocPath: string | null = null;
   if (rightTab === 'stream') {
-    if (selectedRoleId) rightContentLines.push(`\u25B8 ${selectedRoleId}`);
+    if (activeRoleId) rightContentLines.push(`\u25B8 ${activeRoleId}`);
     const maxEv = Math.max(5, contentHeight - 3);
-    const filtered = selectedRoleId ? events.filter(e => e.roleId === selectedRoleId) : events;
+    const filtered = activeRoleId ? events.filter(e => e.roleId === activeRoleId) : events;
     const visible = filtered.slice(-maxEv);
     for (const ev of visible) {
       const line = eventLine(ev);
       if (line) rightContentLines.push(line.slice(0, rightWidth));
     }
     if (rightContentLines.length === 0) {
-      if (selectedRoleId && events.length > 0) {
-        rightContentLines.push(`No events for ${selectedRoleId} (${events.length} total)`);
+      if (activeRoleId && events.length > 0) {
+        rightContentLines.push(`No events for ${activeRoleId} (${events.length} total)`);
         rightContentLines.push('Press Enter to show all roles');
       } else {
         rightContentLines.push(waveId ? `Waiting for events... (${events.length} in buffer)` : 'No active stream. Type a directive to start.');
