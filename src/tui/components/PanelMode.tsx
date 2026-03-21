@@ -71,7 +71,9 @@ function eventToOneLiner(event: SSEEvent): string | null {
     case 'msg:done': return `${time} ${role} \u2713 Done`;
     case 'msg:error': return `${time} ${role} \u2717 Error`;
     case 'dispatch:start': return `${time} ${role} \u21D2 ${event.data.targetRole as string ?? ''}`;
-    default: return null;
+    case 'tool:result': return `${time} ${role} \u2190 ${(event.data.name as string) ?? 'done'}`;
+    case 'msg:awaiting_input': return `${time} ${role} ? awaiting input`;
+    default: return null; // skip internal: turn-complete, trace, heartbeat
   }
 }
 
