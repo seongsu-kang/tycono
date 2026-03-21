@@ -71,9 +71,16 @@ function eventLine(ev: SSEEvent): string | null {
   const r = (ev.roleId ?? '').padEnd(12);
   switch (ev.type) {
     case 'text': { const x = ((ev.data.text as string) ?? '').replace(/\n/g, ' ').trim(); return x ? `${t} ${r} ${x.slice(0, 120)}` : null; }
-    case 'thinking': { const x = ((ev.data.text as string) ?? '').replace(/\n/g, ' ').trim(); return x ? `${t} ${r} \uD83D\uDCAD ${x.slice(0, 80)}` : null; }
-    case 'tool:start': { const n = (ev.data.name as string) ?? ''; const d = ev.data.input ? (((ev.data.input as any).file_path || (ev.data.input as any).command || (ev.data.input as any).pattern || '') as string).slice(0, 50) : ''; return `${t} ${r} \u2192 ${n} ${d}`; }
-    case 'tool:result': return `${t} ${r} \u2190 ${(ev.data.name as string) ?? ''} done`;
+    case 'thinking': return null; // Hide thinking — noise
+    case 'tool:start': {
+      const n = (ev.data.name as string) ?? '';
+      // Only show Write/Edit/Bash — hide Read/Grep/Glob (noise)
+      if (!['Write', 'Edit', 'NotebookEdit', 'Bash'].includes(n)) return null;
+      const inp = ev.data.input as Record<string, unknown> | undefined;
+      const d = inp ? ((inp.file_path as string)?.split('/').slice(-2).join('/') || (inp.command as string)?.slice(0, 50) || '').slice(0, 50) : '';
+      return `${t} ${r} ${n === 'Bash' ? '\u2192' : '\u{1F4C4}'} ${n} ${d}`;
+    }
+    case 'tool:result': return null; // Hide — start is enough
     case 'msg:start': return `${t} ${r} \u25B6 Started`;
     case 'msg:done': { const turns = ev.data.turns as number | undefined; return `${t} ${r} \u2713 Done${turns ? ` (${turns} turns)` : ''}`; }
     case 'msg:error': return `${t} ${r} \u2717 ${((ev.data.error ?? ev.data.message) as string ?? '').slice(0, 60)}`;
