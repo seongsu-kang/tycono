@@ -25,8 +25,7 @@ export interface StreamLine {
 }
 
 interface CommandModeProps {
-  events: SSEEvent[];
-  allRoleIds: string[];
+  eventLines: StreamLine[];
   systemMessages: StreamLine[];
   userInputs: StreamLine[];
   onUserInput: (line: StreamLine) => void;
@@ -293,8 +292,7 @@ const COMMANDS: Array<{ cmd: string; desc: string }> = [
 ];
 
 export const CommandMode: React.FC<CommandModeProps> = ({
-  events,
-  allRoleIds,
+  eventLines,
   systemMessages,
   userInputs,
   onUserInput,
@@ -308,59 +306,6 @@ export const CommandMode: React.FC<CommandModeProps> = ({
   const [quickBarActive, setQuickBarActive] = useState(false);
   const [quickBarIndex, setQuickBarIndex] = useState(0);
   const [acIndex, setAcIndex] = useState(0);
-
-  // Convert events to stream lines — memoized to prevent <Static> duplication.
-  // Without useMemo, every re-render calls summarizeEvent → new lineCounter IDs
-  // → <Static> treats them as new items → duplicate output in terminal scrollback.
-  const prevEventsLenRef = useRef(0);
-  const eventLinesRef = useRef<StreamLine[]>([]);
-
-  useMemo(() => {
-    // Reset if events array was cleared (wave switch)
-    if (events.length < prevEventsLenRef.current) {
-      eventLinesRef.current = [];
-      prevEventsLenRef.current = 0;
-    }
-
-    // Only process newly added events (events array grows monotonically)
-    const startIdx = prevEventsLenRef.current;
-    if (startIdx >= events.length) return;
-
-    const seenDone = new Set<string>();
-    // Re-scan for msg:done dedup across ALL events (need full context)
-    const doneIndices = new Map<string, number>();
-    for (let i = 0; i < events.length; i++) {
-      if (events[i].type === 'msg:done') {
-        doneIndices.set(events[i].roleId, i);
-      }
-    }
-
-    for (let i = startIdx; i < events.length; i++) {
-      const event = events[i];
-      // Skip consecutive thinking from same role
-      if (event.type === 'thinking' && i + 1 < events.length) {
-        const next = events[i + 1];
-        if (next.type === 'thinking' && next.roleId === event.roleId) continue;
-      }
-      // Dedup msg:done — only show last one per role
-      if (event.type === 'msg:done') {
-        const key = `${event.roleId}:done`;
-        if (seenDone.has(key)) continue;
-        if (doneIndices.get(event.roleId) !== i) continue; // Not the last one
-        seenDone.add(key);
-      }
-      const line = summarizeEvent(event, allRoleIds);
-      if (line) eventLinesRef.current.push(line);
-    }
-    prevEventsLenRef.current = events.length;
-
-    // Cap to prevent unbounded growth
-    if (eventLinesRef.current.length > 60) {
-      eventLinesRef.current = eventLinesRef.current.slice(-60);
-    }
-  }, [events, allRoleIds]);
-
-  const eventLines = eventLinesRef.current;
 
   // Merge lines: system + events go to scrollback, user inputs are pinned in live area.
   // Without pinning, long responses push ━━ > lines into Static scrollback → invisible.
