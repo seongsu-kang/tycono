@@ -36,6 +36,7 @@ interface SupervisorState {
   crashCount: number;
   maxCrashRetries: number;
   restartTimer: ReturnType<typeof setTimeout> | null;
+  cleanupTimer: ReturnType<typeof setTimeout> | null;
   pendingDirectives: PendingDirective[];
   pendingQuestions: PendingQuestion[];
   createdAt: string;
@@ -88,6 +89,7 @@ class SupervisorHeartbeat {
       crashCount: 0,
       maxCrashRetries: 10,
       restartTimer: null,
+      cleanupTimer: null,
       pendingDirectives: [],
       pendingQuestions: [],
       createdAt: new Date().toISOString(),
@@ -198,6 +200,7 @@ class SupervisorHeartbeat {
           crashCount: 0,
           maxCrashRetries: 10,
           restartTimer: null,
+          cleanupTimer: null,
           pendingDirectives: [],
           pendingQuestions: [],
           createdAt: ceoSession?.createdAt ?? new Date().toISOString(),
@@ -531,6 +534,12 @@ Do NOT dispatch anyone. Do NOT create new files. Just answer concisely.`;
 
     state.status = 'running';
 
+    // Cancel pending cleanup timer — wave is active again
+    if (state.cleanupTimer) {
+      clearTimeout(state.cleanupTimer);
+      state.cleanupTimer = null;
+    }
+
     try {
       const exec = executionManager.startExecution({
         type: 'assign',  // assign = no supervisor tools (dispatch/watch/amend)
@@ -744,6 +753,12 @@ ${state.continuous ? `## Continuous Improvement Mode (ON)
     }
     state.status = 'running';
 
+    // Cancel pending cleanup timer — wave is active again
+    if (state.cleanupTimer) {
+      clearTimeout(state.cleanupTimer);
+      state.cleanupTimer = null;
+    }
+
     try {
       const exec = executionManager.startExecution({
         type: 'wave',
@@ -825,11 +840,15 @@ ${state.continuous ? `## Continuous Improvement Mode (ON)
 
       // Delayed cleanup: remove wave sessions from multiplexer + supervisor map
       // (delay allows SSE clients to receive final events)
-      setTimeout(() => {
+      // Cancel previous cleanup timer if exists (new directive may restart wave)
+      if (state.cleanupTimer) clearTimeout(state.cleanupTimer);
+      state.cleanupTimer = setTimeout(() => {
+        state.cleanupTimer = null;
         waveMultiplexer.cleanupWave(state.waveId);
         this.supervisors.delete(state.waveId);
         console.log(`[Supervisor] Cleaned up wave ${state.waveId} from memory`);
-      }, 60_000).unref(); // 1 minute after wave done
+      }, 60_000);
+      state.cleanupTimer.unref();
     }
   }
 
