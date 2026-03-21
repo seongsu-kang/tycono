@@ -70,7 +70,7 @@ function eventLine(ev: SSEEvent): string | null {
   catch { t = '--:--:--'; }
   const r = (ev.roleId ?? '').padEnd(12);
   switch (ev.type) {
-    case 'text': { const x = ((ev.data.text as string) ?? '').replace(/\n/g, ' ').trim(); return x ? `${t} ${r} ${x.slice(0, 120)}` : null; }
+    case 'text': { const x = ((ev.data.text as string) ?? '').trim(); return x ? `${t} ${r} ${x}` : null; } // keep \n — split later
     case 'thinking': return null; // Hide thinking — noise
     case 'tool:start': {
       const n = (ev.data.name as string) ?? '';
@@ -195,7 +195,13 @@ const PanelModeInner: React.FC<PanelModeProps> = ({
     const visible = filtered.slice(-maxEv);
     for (const ev of visible) {
       const line = eventLine(ev);
-      if (line) rightContentLines.push(line.slice(0, rightWidth));
+      if (!line) continue;
+      // Split multi-line text events into separate lines (preserves markdown)
+      const sublines = line.split('\n');
+      for (const sl of sublines) {
+        if (rightContentLines.length >= maxEv) break;
+        rightContentLines.push(sl.slice(0, rightWidth));
+      }
     }
     if (rightContentLines.length === 0) {
       if (activeRoleId && events.length > 0) {
