@@ -20,7 +20,7 @@ import { SetupWizard } from './components/SetupWizard';
 import { useApi } from './hooks/useApi';
 import { useSSE } from './hooks/useSSE';
 import { useCommand, type WaveInfo } from './hooks/useCommand';
-import { dispatchWave } from './api';
+import { dispatchWave, stopWave } from './api';
 import type { ActiveSessionInfo, PresetSummary } from './api';
 import { buildOrgTree, flattenOrgRoleIds } from './store';
 
@@ -630,9 +630,14 @@ export const App: React.FC = () => {
       return;
     }
     if (mode === 'command' && key.tab) {
-      // Clear terminal before Panel Mode (removes Command Mode scrollback)
       process.stdout.write('\x1b[2J\x1b[H');
       setMode('panel');
+    }
+    // Esc in Command Mode → interrupt supervisor (like Claude Code)
+    if (mode === 'command' && key.escape && focusedWaveId && derivedWaveStatus === 'running') {
+      stopWave(focusedWaveId).then(() => {
+        addSystemMessage('\u23F9 Interrupted. Type to continue.', 'yellow');
+      }).catch(() => {});
     }
   });
 

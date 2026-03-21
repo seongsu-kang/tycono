@@ -114,16 +114,16 @@ export function useCommand(options: UseCommandOptions) {
           return { type: 'sessions', message: '__sessions__' };
 
         case 'stop': {
-          // Stop current wave execution
+          // Interrupt supervisor (like Esc) — wave stays alive for new directives
           const targetWaveId = args?.trim() || focusedWaveId;
           if (!targetWaveId) {
-            return { type: 'error', message: 'No wave to stop. Use /stop or focus a wave first.' };
+            return { type: 'error', message: 'No wave focused. Use /stop or focus a wave first.' };
           }
           try {
-            const result = await stopWave(targetWaveId);
-            return { type: 'success', message: `Wave stopped. ${result.abortedSessions} sessions aborted.` };
+            await stopWave(targetWaveId);
+            return { type: 'success', message: '\u23F9 Interrupted. Type to continue.' };
           } catch (err) {
-            return { type: 'error', message: `Stop failed: ${err instanceof Error ? err.message : 'unknown'}` };
+            return { type: 'error', message: `Interrupt failed: ${err instanceof Error ? err.message : 'unknown'}` };
           }
         }
 

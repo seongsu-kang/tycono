@@ -89,18 +89,18 @@ export function handleExecRequest(req: IncomingMessage, res: ServerResponse): vo
     return;
   }
 
-  // ── /api/waves/:waveId/stop — Stop wave execution ──
+  // ── /api/waves/:waveId/stop — Interrupt supervisor (like Claude Code Esc) ──
   const stopMatch = url.match(/^\/api\/waves\/([^/]+)\/stop$/);
   if (method === 'POST' && stopMatch) {
     const waveId = stopMatch[1];
-    supervisorHeartbeat.stop(waveId);
-    // Also abort all running executions for this wave
-    const waveSessions = listSessions().filter(s => s.waveId === waveId && s.status === 'active');
-    let aborted = 0;
-    for (const ses of waveSessions) {
-      if (executionManager.abortSession(ses.id)) aborted++;
+    // Interrupt CEO supervisor only — children keep running naturally
+    // Wave stays alive for new directives (interrupt + redirect)
+    const state = supervisorHeartbeat.getState(waveId);
+    if (state?.supervisorSessionId) {
+      executionManager.abortSession(state.supervisorSessionId);
     }
-    jsonResponse(res, 200, { ok: true, waveId, abortedSessions: aborted });
+    supervisorHeartbeat.stop(waveId);
+    jsonResponse(res, 200, { ok: true, waveId, interrupted: true });
     return;
   }
 
