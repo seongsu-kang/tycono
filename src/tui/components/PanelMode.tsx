@@ -431,34 +431,40 @@ const PanelModeInner: React.FC<PanelModeProps> = ({
     ? waves.map((w, i) => w.waveId === focusedWaveId ? `[${i + 1}]` : ` ${i + 1} `).join(' ')
     : '';
 
+  // Separator line
+  const sep = '\u2500'.repeat(termCols);
+
   return (
     <Box flexDirection="column">
-      {/* Header */}
+      {/* Header: wave title │ tabs */}
       <Text>
-        <Text color="green" bold>W{focusedWaveIndex}</Text>
-        <Text color="white"> {focusedWave?.directive?.slice(0, leftWidth - 6) || '(idle)'}</Text>
-        <Text color="gray">  \u2502  </Text>
+        <Text color="green" bold>{'W' + focusedWaveIndex}</Text>
+        <Text color="white">{' ' + (focusedWave?.directive?.slice(0, 40) || '(idle)')}</Text>
+        <Text color="gray">{'  \u2502  '}</Text>
         <Text color="cyan" bold>{tabBar}</Text>
+        <Text color="gray">{'  ' + (waveSessionCount > 0 ? waveSessionCount + ' sessions' : '')}</Text>
       </Text>
-      {waveSessionCount > 0 && <Text color="gray">{waveSessionCount} sessions</Text>}
-      <Text color="gray">\u2500\u2500 Org Tree \u2500\u2500</Text>
+      <Text color="gray">{sep}</Text>
 
-      {/* Merged left|right lines — each line = 1 Text = 1 yoga node */}
+      {/* Merged: OrgTree (left) │ Stream (right) */}
       {mergedLines.map((line, i) => (
         <Text key={i}>
-          <Text color="white">{line.left}</Text>
-          <Text color="gray"> \u2502 </Text>
+          <Text color={line.left.includes('\u25CF') ? 'green' : line.left.includes('\u2713') ? 'cyan' : 'white'}>{line.left}</Text>
+          <Text color="gray">{' \u2502 '}</Text>
           <Text color="white">{line.right}</Text>
         </Text>
       ))}
 
-      {/* Wave tabs */}
-      {waveTabs && <Text color="gray">{waveTabs}</Text>}
-
-      {/* Footer */}
-      <Text color="gray" dimColor>
-        [h/l] tab  [j/k] role  {waves.length > 1 ? '[1-9] wave  ' : ''}[Esc] command
-      </Text>
+      {/* Separator + wave tabs + footer */}
+      <Text color="gray">{sep}</Text>
+      {waveTabs ? (
+        <Text>
+          <Text color="gray">{waveTabs + '  '}</Text>
+          <Text color="gray" dimColor>{'[h/l] tab  [j/k] role  [1-9] wave  [Esc] back'}</Text>
+        </Text>
+      ) : (
+        <Text color="gray" dimColor>{'[h/l] tab  [j/k] role  [Esc] back'}</Text>
+      )}
     </Box>
   );
 };
