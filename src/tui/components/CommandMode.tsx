@@ -28,6 +28,8 @@ interface CommandModeProps {
   events: SSEEvent[];
   allRoleIds: string[];
   systemMessages: StreamLine[];
+  userInputs: StreamLine[];
+  onUserInput: (line: StreamLine) => void;
   onSubmit: (input: string) => void;
   onQuickAction?: (action: string) => void;
   activeSessions?: ActiveSessionInfo[];
@@ -294,6 +296,8 @@ export const CommandMode: React.FC<CommandModeProps> = ({
   events,
   allRoleIds,
   systemMessages,
+  userInputs,
+  onUserInput,
   onSubmit,
   onQuickAction,
   activeSessions,
@@ -301,7 +305,6 @@ export const CommandMode: React.FC<CommandModeProps> = ({
 }) => {
   const [input, setInput] = useState('');
   const committedRef = useRef(0);
-  const [userInputs, setUserInputs] = useState<StreamLine[]>([]);
   const [quickBarActive, setQuickBarActive] = useState(false);
   const [quickBarIndex, setQuickBarIndex] = useState(0);
   const [acIndex, setAcIndex] = useState(0);
@@ -450,11 +453,11 @@ export const CommandMode: React.FC<CommandModeProps> = ({
     const trimmed = value.trim();
     if (trimmed) {
       // Show user input with visual separator for emphasis
-      setUserInputs(prev => [...prev.slice(-10), {
+      onUserInput({
         id: ++lineCounter,
         text: `\u2501\u2501 > ${trimmed}`,
         color: 'green',
-      }]);
+      });
       onSubmit(trimmed);
     }
     setInput('');

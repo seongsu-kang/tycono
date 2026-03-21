@@ -231,6 +231,9 @@ export const App: React.FC = () => {
   // System messages (command feedback displayed in stream area)
   const [systemMessages, setSystemMessages] = useState<StreamLine[]>([]);
 
+  // User input lines — lifted from CommandMode to survive Panel mode switches
+  const [userInputs, setUserInputs] = useState<StreamLine[]>([]);
+
   // Preset selection state (for /new without args)
   const [pendingPresetSelect, setPendingPresetSelect] = useState<PresetSummary[] | null>(null);
   const selectedPresetRef = useRef<string | null>(null);
@@ -730,6 +733,8 @@ export const App: React.FC = () => {
         events={sse.events}
         allRoleIds={flatRoleIds}
         systemMessages={systemMessages}
+        userInputs={userInputs}
+        onUserInput={(line) => setUserInputs(prev => [...prev.slice(-10), line])}
         onSubmit={handleCommandSubmit}
         onQuickAction={(action) => {
           handleCommandSubmit(`/${action}`);
