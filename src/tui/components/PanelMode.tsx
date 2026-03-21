@@ -179,7 +179,8 @@ const PanelModeInner: React.FC<PanelModeProps> = ({
   const rightContentLines: string[] = [];
   let selectedDocPath: string | null = null;
   if (rightTab === 'stream') {
-    const maxEv = Math.max(5, contentHeight - 2);
+    if (selectedRoleId) rightContentLines.push(`\u25B8 ${selectedRoleId}`);
+    const maxEv = Math.max(5, contentHeight - 3);
     const filtered = selectedRoleId ? events.filter(e => e.roleId === selectedRoleId) : events;
     const visible = filtered.slice(-maxEv);
     for (const ev of visible) {

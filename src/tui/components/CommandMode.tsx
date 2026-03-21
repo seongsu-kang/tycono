@@ -83,16 +83,8 @@ export function summarizeEvent(event: SSEEvent, allRoleIds: string[]): StreamLin
     }
 
     case 'thinking': {
-      const text = ((event.data.text as string) ?? '').slice(0, 120);
-      if (!text.trim()) return null;
-      return {
-        id: ++lineCounter,
-        prefix: isSupervisor ? undefined : event.roleId,
-        prefixColor: roleColor,
-        text: `\uD83D\uDCAD ${text}`,
-        color: 'gray',
-        indent: !isSupervisor,
-      };
+      // Hide thinking by default — internal noise for user
+      return null;
     }
 
     case 'dispatch:start': {
@@ -130,17 +122,19 @@ export function summarizeEvent(event: SSEEvent, allRoleIds: string[]): StreamLin
 
     case 'tool:start': {
       const toolName = (event.data.name as string) ?? 'tool';
+      // Only show Write/Edit (file changes) + Bash (commands). Hide Read/Grep/Glob (noise).
+      const isWrite = ['Write', 'Edit', 'NotebookEdit'].includes(toolName);
+      const isBash = toolName === 'Bash';
+      if (!isWrite && !isBash) return null; // Hide read-only tools
+
       const input = event.data.input;
       let detail = '';
       if (input && typeof input === 'object') {
         const inp = input as Record<string, unknown>;
-        if (inp.file_path) detail = ` ${String(inp.file_path)}`;
-        else if (inp.command) detail = ` ${String(inp.command).slice(0, 80)}`;
-        else if (inp.pattern) detail = ` ${String(inp.pattern)}`;
-        else if (inp.description) detail = ` ${String(inp.description).slice(0, 60)}`;
+        if (inp.file_path) detail = ` ${String(inp.file_path).split('/').slice(-2).join('/')}`;
+        else if (inp.command) detail = ` ${String(inp.command).slice(0, 60)}`;
+        else if (inp.description) detail = ` ${String(inp.description).slice(0, 40)}`;
       }
-      // Highlight file writes
-      const isWrite = ['Write', 'Edit'].includes(toolName);
       return {
         id: ++lineCounter,
         prefix: isSupervisor ? undefined : event.roleId,
@@ -152,15 +146,8 @@ export function summarizeEvent(event: SSEEvent, allRoleIds: string[]): StreamLin
     }
 
     case 'tool:result': {
-      const toolName = (event.data.name as string) ?? 'tool';
-      return {
-        id: ++lineCounter,
-        prefix: isSupervisor ? undefined : event.roleId,
-        prefixColor: roleColor,
-        text: `  \u2190 ${toolName} done`,
-        color: 'gray',
-        indent: !isSupervisor,
-      };
+      // Hide tool results — tool:start is sufficient
+      return null;
     }
 
     case 'msg:start': {
@@ -421,10 +408,10 @@ export const CommandMode: React.FC<CommandModeProps> = ({
   const handleSubmit = useCallback((value: string) => {
     const trimmed = value.trim();
     if (trimmed) {
-      // Show user input immediately in scrollback (before AI responds)
+      // Show user input with visual separator for emphasis
       setUserInputs(prev => [...prev.slice(-10), {
         id: ++lineCounter,
-        text: `> ${trimmed}`,
+        text: `\u2501\u2501 > ${trimmed}`,
         color: 'green',
       }]);
       onSubmit(trimmed);
