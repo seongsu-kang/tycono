@@ -12,7 +12,7 @@ if (!process.env.__TYCONO_HEAP_SET && !process.execArgv.some(a => a.includes('ma
     execFileSync(process.execPath, [
       '--max-old-space-size=8192',
       '--expose-gc',
-      // '--heapsnapshot-near-heap-limit=1', // Enable for OOM diagnosis (creates large files)
+      '--heapsnapshot-near-heap-limit=1',
       ...process.execArgv,
       fileURLToPath(import.meta.url),
       ...process.argv.slice(2),
