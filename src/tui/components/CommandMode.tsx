@@ -362,25 +362,29 @@ export const CommandMode: React.FC<CommandModeProps> = ({
 
   const eventLines = eventLinesRef.current;
 
-  // Merge all lines sorted by ID (chronological) — prevents user input from being sliced off
-  const allLines = [...userInputs, ...systemMessages, ...eventLines]
+  // Merge lines: system + events go to scrollback, user inputs are pinned in live area.
+  // Without pinning, long responses push ━━ > lines into Static scrollback → invisible.
+  const scrollableLines = [...systemMessages, ...eventLines]
     .sort((a, b) => a.id - b.id)
     .slice(-60);
 
-  // Reset committedRef if it exceeds allLines (prevents unbounded growth)
-  if (committedRef.current > allLines.length) {
-    committedRef.current = Math.max(0, allLines.length - 6);
+  // Reset committedRef if it exceeds scrollableLines (prevents unbounded growth)
+  if (committedRef.current > scrollableLines.length) {
+    committedRef.current = Math.max(0, scrollableLines.length - 4);
   }
 
-  // Commit older lines to Static scrollback, keep last 6 as live
-  const newCount = allLines.length - committedRef.current;
-  if (newCount > 6) {
-    committedRef.current = allLines.length - 6;
+  // Commit older lines to Static scrollback, keep last 4 as live
+  const newCount = scrollableLines.length - committedRef.current;
+  if (newCount > 4) {
+    committedRef.current = scrollableLines.length - 4;
   }
 
   // Only send last 20 committed items to Static (prevent Ink memory growth)
-  const committedLines = allLines.slice(Math.max(0, committedRef.current - 20), committedRef.current);
-  const liveLines = allLines.slice(committedRef.current);
+  const committedLines = scrollableLines.slice(Math.max(0, committedRef.current - 20), committedRef.current);
+  // Live area: last user input (pinned) + recent scrollable lines
+  const recentUserInput = userInputs.slice(-1); // Always show last ━━ > line
+  const scrollableLive = scrollableLines.slice(committedRef.current);
+  const liveLines = [...recentUserInput, ...scrollableLive].sort((a, b) => a.id - b.id);
 
   // Autocomplete: filter commands when input starts with /
   const acOpen = input.startsWith('/') && input.length >= 1;
