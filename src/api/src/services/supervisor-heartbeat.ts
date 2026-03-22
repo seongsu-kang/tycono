@@ -425,14 +425,14 @@ Examples:
           // New turn starts — flush accumulated text from previous turn
           if (e.type === 'msg:start') {
             if (currentText.trim()) {
-              exchanges.push({ role: 'supervisor', text: currentText.trim().slice(0, 100) });
+              exchanges.push({ role: 'supervisor', text: currentText.trim().slice(0, 500) });
               currentText = '';
             }
             // Extract CEO directive
             const task = String(e.data.task ?? '');
             const match = task.match(/\[CEO (?:Supervisor|Question)\]\s*(.*?)(?:\n|$)/);
             if (match) {
-              exchanges.push({ role: 'ceo', text: match[1].slice(0, 80) });
+              exchanges.push({ role: 'ceo', text: match[1].slice(0, 200) });
             }
           }
           // Accumulate supervisor response text
@@ -445,27 +445,27 @@ Examples:
           // Turn boundary — flush
           if (e.type === 'msg:done' || e.type === 'msg:awaiting_input' || e.type === 'msg:error') {
             if (currentText.trim()) {
-              exchanges.push({ role: 'supervisor', text: currentText.trim().slice(0, 100) });
+              exchanges.push({ role: 'supervisor', text: currentText.trim().slice(0, 500) });
               currentText = '';
             }
           }
         }
         // Flush any remaining text
         if (currentText.trim()) {
-          exchanges.push({ role: 'supervisor', text: currentText.trim().slice(0, 100) });
+          exchanges.push({ role: 'supervisor', text: currentText.trim().slice(0, 500) });
         }
       }
 
       if (exchanges.length === 0) return '';
 
-      // Keep last 4 exchanges (2 Q&A pairs), cap total at 500 chars
-      const recent = exchanges.slice(-4);
+      // Keep last 10 exchanges (5 Q&A pairs), cap total at 3000 chars
+      const recent = exchanges.slice(-10);
       const formatted = recent.map(e =>
         e.role === 'ceo' ? `CEO: "${e.text}"` : `→ ${e.text}`
       ).join('\n');
 
-      const result = formatted.length > 500
-        ? `\n[Previous conversation]\n${formatted.slice(-500)}\n`
+      const result = formatted.length > 3000
+        ? `\n[Previous conversation]\n${formatted.slice(-3000)}\n`
         : `\n[Previous conversation]\n${formatted}\n`;
       console.log(`[WaveHistory] Result (${result.length} chars): ${result.slice(0, 200)}`);
       return result;
@@ -504,10 +504,10 @@ Examples:
           return `  → ${name} ${String(detail).slice(0, 60)}`;
         }).join('\n');
 
-        const lastText = textEvents.slice(-5).map(e => String(e.data.text ?? '')).join('').slice(-500);
+        const lastText = textEvents.slice(-8).map(e => String(e.data.text ?? '')).join('').slice(-2000);
 
         if (toolSummary || lastText) {
-          lastExecutionSummary = `\n[Previous execution in this wave]\nTools used:\n${toolSummary}\n\nLast response:\n${lastText.slice(0, 500)}\n`;
+          lastExecutionSummary = `\n[Previous execution in this wave]\nTools used:\n${toolSummary}\n\nLast response:\n${lastText.slice(0, 2000)}\n`;
         }
       } catch { /* ignore */ }
     }
@@ -516,9 +516,14 @@ Examples:
 
     const task = `${context ? context + '\n' : ''}[CEO Question] ${directive}
 
-You are the CEO's AI assistant. The above shows what happened previously in this wave.
-Answer the CEO's question based on context. Be specific — reference files, results, and actions from the previous execution.
-Do NOT dispatch anyone. Do NOT create new files. Just answer concisely.`;
+You are the CEO Supervisor responding to the CEO's follow-up question.
+
+## Rules
+1. **READ files before answering.** If the previous execution created reports/docs, open and read them. Don't just list file paths — summarize the actual content.
+2. **Be concrete.** Use data, numbers, quotes from the documents. The CEO wants substance, not metadata.
+3. **Reference previous context.** The conversation history above tells you what happened. Connect your answer to it.
+4. Do NOT dispatch anyone. Do NOT create new files. This is a conversation, not a task.
+5. If you genuinely have no context, say so honestly — but first try reading relevant files in the AKB (operations/waves/, knowledge/, roles/*/journal/).`;
 
     // Reuse session
     let sessionId = state.supervisorSessionId;
