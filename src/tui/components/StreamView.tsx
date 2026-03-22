@@ -24,6 +24,22 @@ function formatTime(ts: string): string {
   } catch { return '--:--:--'; }
 }
 
+/** Filter noise from text events — supervision internals, meta-commentary */
+function isStreamNoise(text: string): boolean {
+  const t = text.trim();
+  if (!t) return true;
+  // Supervision loop noise
+  if (t.includes('$SUPERVISION_CMD') || t.includes('$DISPATCH_CMD')) return true;
+  if (t.includes('supervision loop') || t.includes('supervision watch')) return true;
+  // Meta-commentary (AI thinking out loud)
+  if (/^(Let me |I'll |I need to |Now let me |Now I |Good[,.]|Alright|OK[,.]|Got it)/i.test(t)) return true;
+  if (/^(Both dispatched|Both completed|All done|Session result)/i.test(t)) return true;
+  // System prompt leakage
+  if (t.startsWith('[CEO') || t.startsWith('⛔')) return true;
+  if (t.startsWith('[Previous')) return true;
+  return false;
+}
+
 function eventToLine(event: SSEEvent): string | null {
   const time = formatTime(event.ts);
   const role = event.roleId.padEnd(12);
@@ -31,7 +47,7 @@ function eventToLine(event: SSEEvent): string | null {
   switch (event.type) {
     case 'msg:start': {
       const task = ((event.data.task as string) ?? '').replace(/\u26D4[^\u26D4]*\u26D4[^"]*/g, '').trim().slice(0, 80);
-      return `${time} ${role} \u25B6 Started: ${task}`;
+      return `${time} ${role} \u25B6 ${task || 'Started'}`;
     }
     case 'msg:done': {
       const turns = event.data.turns as number | undefined;
@@ -41,27 +57,26 @@ function eventToLine(event: SSEEvent): string | null {
       return `${time} ${role} \u2717 ${((event.data.error ?? event.data.message) as string ?? '').slice(0, 80)}`;
     case 'text': {
       const text = ((event.data.text as string) ?? '').trim();
-      if (!text) return null;
+      if (isStreamNoise(text)) return null;
       return `${time} ${role} ${text.slice(0, 120)}`;
     }
-    case 'thinking': {
-      const text = ((event.data.text as string) ?? '').trim().slice(0, 100);
-      if (!text) return null;
-      return `${time} ${role} \uD83D\uDCAD ${text}`;
-    }
+    case 'thinking':
+      return null; // Hide thinking — internal noise
     case 'tool:start': {
       const name = (event.data.name as string) ?? 'tool';
-      const input = event.data.input as Record<string, unknown> | undefined;
-      let detail = '';
-      if (input) {
-        if (input.file_path) detail = ` ${String(input.file_path).slice(0, 60)}`;
-        else if (input.command) detail = ` ${String(input.command).slice(0, 60)}`;
-        else if (input.pattern) detail = ` ${String(input.pattern)}`;
+      // Only show file writes — hide Read/Grep/Glob/Bash noise
+      if (['Write', 'Edit', 'NotebookEdit'].includes(name)) {
+        const input = event.data.input as Record<string, unknown> | undefined;
+        const detail = input?.file_path ? ` ${String(input.file_path).split('/').slice(-2).join('/')}` : '';
+        return `${time} ${role}   \uD83D\uDCC4 ${name}${detail}`;
       }
-      return `${time} ${role} \u2192 ${name}${detail}`;
+      return null; // Hide Read, Grep, Glob, Bash
     }
-    case 'dispatch:start':
-      return `${time} ${role} \u21D2 dispatch ${event.data.targetRole as string ?? ''}`;
+    case 'dispatch:start': {
+      const target = (event.data.targetRole as string) ?? '';
+      const task = ((event.data.task as string) ?? '').replace(/\u26D4[^\u26D4]*\u26D4[^"]*/g, '').trim().slice(0, 60);
+      return `${time} ${role} \u21D2 dispatch ${target}${task ? ': ' + task : ''}`;
+    }
     default:
       return null;
   }
