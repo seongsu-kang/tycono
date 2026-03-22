@@ -484,46 +484,53 @@ Examples:
     // If no in-memory history, load from disk (restart case)
     const diskHistory = !directiveHistory ? this.loadWaveHistory(state.waveId) : '';
 
-    // Extract last execution's output from activity stream (what "just happened")
-    let lastExecutionSummary = '';
-    // Try current supervisorSessionId first, then search by waveId
+    // Save last execution's full output to a temp file so conversation CEO can read it.
+    // No truncation — CEO reads the file for full context instead of getting a sliced summary.
+    let contextFilePath = '';
     const sessionIdToCheck = state.supervisorSessionId
       || listSessions().find(s => s.waveId === state.waveId && s.roleId === 'ceo')?.id;
     if (sessionIdToCheck) {
       try {
         const events = ActivityStream.readAll(sessionIdToCheck);
-        // Get last text outputs (the supervisor's final response)
         const textEvents = events.filter(e => e.type === 'text' && e.roleId === 'ceo');
-        const toolEvents = events.filter(e => e.type === 'tool:start' && e.roleId === 'ceo');
-
-        // Summarize: what tools were used + final text
-        const toolSummary = toolEvents.slice(-10).map(e => {
-          const name = (e.data.name as string) ?? '';
-          const inp = e.data.input as Record<string, unknown> | undefined;
-          const detail = inp?.file_path ?? inp?.command ?? '';
-          return `  → ${name} ${String(detail).slice(0, 60)}`;
-        }).join('\n');
-
-        const lastText = textEvents.slice(-8).map(e => String(e.data.text ?? '')).join('').slice(-2000);
-
-        if (toolSummary || lastText) {
-          lastExecutionSummary = `\n[Previous execution in this wave]\nTools used:\n${toolSummary}\n\nLast response:\n${lastText.slice(0, 2000)}\n`;
+        const fullText = textEvents.map(e => String(e.data.text ?? '')).join('\n').trim();
+        if (fullText) {
+          contextFilePath = path.join(COMPANY_ROOT, '.tycono', `conversation-context-${state.waveId}.md`);
+          fs.writeFileSync(contextFilePath, `# Previous CEO Response (Wave ${state.waveId})\n\n${fullText}\n`);
         }
       } catch { /* ignore */ }
     }
 
-    const context = [directiveHistory || diskHistory, lastExecutionSummary].filter(Boolean).join('\n');
+    // Build a compact pointer — what was done, where to look
+    const contextPointer = contextFilePath
+      ? `\n[Previous execution output saved to: ${contextFilePath}]\nRead this file for full context before answering.\n`
+      : '';
+    const context = [directiveHistory || diskHistory, contextPointer].filter(Boolean).join('\n');
 
-    const task = `${context ? context + '\n' : ''}[CEO Question] ${directive}
+    // Also find files created/modified in this wave
+    let waveArtifacts = '';
+    try {
+      const waveFile = path.join(COMPANY_ROOT, 'operations', 'waves', `${state.waveId}.json`);
+      if (fs.existsSync(waveFile)) {
+        const waveData = JSON.parse(fs.readFileSync(waveFile, 'utf-8'));
+        const files = waveData.roles?.flatMap((r: { artifacts?: string[] }) => r.artifacts ?? []) ?? [];
+        if (files.length > 0) {
+          waveArtifacts = `\n[Files created/modified in this wave]:\n${files.slice(0, 20).map((f: string) => `  - ${f}`).join('\n')}\n`;
+        }
+      }
+    } catch { /* ignore */ }
+
+    const task = `${context}${waveArtifacts}
+[CEO Question] ${directive}
 
 You are the CEO Supervisor responding to the CEO's follow-up question.
 
 ## Rules
-1. **READ files before answering.** If the previous execution created reports/docs, open and read them. Don't just list file paths — summarize the actual content.
-2. **Be concrete.** Use data, numbers, quotes from the documents. The CEO wants substance, not metadata.
-3. **Reference previous context.** The conversation history above tells you what happened. Connect your answer to it.
-4. Do NOT dispatch anyone. Do NOT create new files. This is a conversation, not a task.
-5. If you genuinely have no context, say so honestly — but first try reading relevant files in the AKB (operations/waves/, knowledge/, roles/*/journal/).`;
+1. **READ the context file above** before answering. It contains the full previous response — don't guess.
+2. **READ wave artifact files** if they exist — they contain the team's deliverables (reports, analysis).
+3. **Be concrete.** Use actual data, numbers, quotes from the documents. The CEO wants substance, not metadata.
+4. Do NOT dispatch anyone. Do NOT create new files. This is a conversation.
+5. Answer in the same language the CEO used.`;
 
     // Reuse session
     let sessionId = state.supervisorSessionId;
