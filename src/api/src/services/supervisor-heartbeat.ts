@@ -14,7 +14,9 @@
 import { executionManager, type Execution } from './execution-manager.js';
 import { createSession, getSession, listSessions, addMessage, type Message } from './session-store.js';
 import Anthropic from '@anthropic-ai/sdk';
+import { ClaudeCliProvider } from '../engine/llm-adapter.js';
 import { buildOrgTree, getSubordinates } from '../engine/org-tree.js';
+import { readConfig } from './company-config.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { COMPANY_ROOT } from './file-reader.js';
@@ -332,28 +334,7 @@ class SupervisorHeartbeat {
    * Uses Haiku LLM for classification when ANTHROPIC_API_KEY is available.
    * Falls back to regex heuristic when no API key.
    */
-  private async classifyDirective(text: string): Promise<boolean> {
-    // Try AI classification first (fast, accurate, language-agnostic)
-    if (process.env.ANTHROPIC_API_KEY) {
-      try {
-        const result = await this.classifyWithHaiku(text);
-        console.log(`[Supervisor] AI classified "${text.slice(0, 40)}" as ${result ? 'conversation' : 'task'}`);
-        return result;
-      } catch (err) {
-        console.warn(`[Supervisor] AI classification failed, falling back to regex:`, err);
-      }
-    }
-
-    // Fallback: regex heuristic
-    return this.isConversationDirectiveFallback(text);
-  }
-
-  private async classifyWithHaiku(text: string): Promise<boolean> {
-    const client = new Anthropic();
-    const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1,
-      system: `You classify user messages to a CEO AI assistant.
+  private static readonly CLASSIFY_SYSTEM = `You classify user messages to a CEO AI assistant.
 Reply with exactly one character:
 - "Q" if the message is a question, status check, or casual conversation (no action needed)
 - "T" if the message is a task, work instruction, delegation request, or any directive that requires action (creating, building, fixing, assigning work to team members, etc.)
@@ -365,11 +346,45 @@ Examples:
 "현재 상태 알려줘" → Q
 "게임 만들어 CTO에게 시켜" → T
 "how's it going?" → Q
-"deploy the app" → T`,
-      messages: [{ role: 'user', content: text }],
-    });
-    const reply = (response.content[0] as { type: 'text'; text: string }).text.trim();
-    return reply === 'Q';
+"deploy the app" → T`;
+
+  private async classifyDirective(text: string): Promise<boolean> {
+    // Try AI classification (fast, accurate, language-agnostic)
+    try {
+      const config = readConfig(COMPANY_ROOT);
+      const engine = config.engine || process.env.EXECUTION_ENGINE || 'claude-cli';
+
+      let reply: string;
+      if (engine === 'claude-cli') {
+        // Claude CLI (Claude Max) — use claude -p with haiku model
+        const provider = new ClaudeCliProvider({ model: 'claude-haiku-4-5-20251001' });
+        const response = await provider.chat(
+          SupervisorHeartbeat.CLASSIFY_SYSTEM,
+          [{ role: 'user', content: text }],
+        );
+        reply = response.content.find(c => c.type === 'text')?.text?.trim() ?? '';
+      } else if (process.env.ANTHROPIC_API_KEY) {
+        // BYOK — use Anthropic SDK directly
+        const client = new Anthropic();
+        const response = await client.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 1,
+          system: SupervisorHeartbeat.CLASSIFY_SYSTEM,
+          messages: [{ role: 'user', content: text }],
+        });
+        reply = (response.content[0] as { type: 'text'; text: string }).text.trim();
+      } else {
+        // No engine available — regex fallback
+        return this.isConversationDirectiveFallback(text);
+      }
+
+      const isConversation = reply === 'Q';
+      console.log(`[Supervisor] AI classified "${text.slice(0, 40)}" as ${isConversation ? 'conversation' : 'task'} (engine=${engine})`);
+      return isConversation;
+    } catch (err) {
+      console.warn(`[Supervisor] AI classification failed, falling back to regex:`, err);
+      return this.isConversationDirectiveFallback(text);
+    }
   }
 
   private isConversationDirectiveFallback(text: string): boolean {
