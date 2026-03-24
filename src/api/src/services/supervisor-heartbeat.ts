@@ -23,6 +23,7 @@ import { COMPANY_ROOT } from './file-reader.js';
 import { ActivityStream } from './activity-stream.js';
 import { saveCompletedWave } from './wave-tracker.js';
 import { waveMultiplexer } from './wave-multiplexer.js';
+import { appendWaveMessage, buildHistoryPrompt } from './wave-messages.js';
 
 /* ─── Types ──────────────────────────────────── */
 
@@ -108,6 +109,9 @@ class SupervisorHeartbeat {
 
     // Save wave file immediately so directive persists across restarts
     this.saveWaveFile(waveId, directive, preset);
+
+    // Record first directive in wave conversation history (Gap #1 fix)
+    appendWaveMessage(waveId, { role: 'user', content: directive });
 
     this.spawnSupervisor(state);
     return state;
@@ -223,6 +227,9 @@ class SupervisorHeartbeat {
 
     state.pendingDirectives.push(directive);
     console.log(`[Supervisor] Directive queued for wave ${waveId}: ${text.slice(0, 80)}`);
+
+    // Record user message in wave conversation history
+    appendWaveMessage(waveId, { role: 'user', content: text });
 
     // If supervisor is stopped (agent finished or idle wave), wake it up
     if (state.status === 'stopped') {
@@ -490,69 +497,19 @@ Examples:
   }
 
   private spawnConversation(state: SupervisorState, directive: string): void {
-    // Build conversation context: in-memory directives + disk history
-    const deliveredDirectives = state.pendingDirectives.filter(d => d.delivered);
-    const directiveHistory = deliveredDirectives.length > 0
-      ? deliveredDirectives.map(d => `- CEO: "${d.text}"`).join('\n')
-      : '';
+    // Build conversation history from SQLite (all previous turns in this wave)
+    const history = buildHistoryPrompt(state.waveId);
 
-    // If no in-memory history, load from disk (restart case)
-    const diskHistory = !directiveHistory ? this.loadWaveHistory(state.waveId) : '';
+    const task = `${history}
 
-    // Append conversation exchange to context file (cumulative, not overwrite).
-    // Each turn adds: CEO question + AI response → full multi-turn history preserved.
-    let contextFilePath = '';
-    const contextDir = path.join(COMPANY_ROOT, '.tycono');
-    contextFilePath = path.join(contextDir, `conversation-context-${state.waveId}.md`);
-
-    // Append current question
-    try {
-      if (!fs.existsSync(contextDir)) fs.mkdirSync(contextDir, { recursive: true });
-      fs.appendFileSync(contextFilePath, `\n---\n**CEO**: ${directive}\n`);
-    } catch { /* ignore */ }
-
-    // Append last AI response
-    const sessionIdToCheck = state.supervisorSessionId
-      || listSessions().find(s => s.waveId === state.waveId && s.roleId === 'ceo')?.id;
-    if (sessionIdToCheck) {
-      try {
-        const events = ActivityStream.readAll(sessionIdToCheck);
-        const textEvents = events.filter(e => e.type === 'text' && e.roleId === 'ceo');
-        const lastResponse = textEvents.slice(-5).map(e => String(e.data.text ?? '')).join('\n').trim();
-        if (lastResponse) {
-          fs.appendFileSync(contextFilePath, `**AI**: ${lastResponse}\n`);
-        }
-      } catch { /* ignore */ }
-    }
-
-    // Build a compact pointer — what was done, where to look
-    const contextPointer = contextFilePath
-      ? `\n[Previous execution output saved to: ${contextFilePath}]\nRead this file for full context before answering.\n`
-      : '';
-    const context = [directiveHistory || diskHistory, contextPointer].filter(Boolean).join('\n');
-
-    // Also find files created/modified in this wave
-    let waveArtifacts = '';
-    try {
-      const waveFile = path.join(COMPANY_ROOT, 'operations', 'waves', `${state.waveId}.json`);
-      if (fs.existsSync(waveFile)) {
-        const waveData = JSON.parse(fs.readFileSync(waveFile, 'utf-8'));
-        const files = waveData.roles?.flatMap((r: { artifacts?: string[] }) => r.artifacts ?? []) ?? [];
-        if (files.length > 0) {
-          waveArtifacts = `\n[Files created/modified in this wave]:\n${files.slice(0, 20).map((f: string) => `  - ${f}`).join('\n')}\n`;
-        }
-      }
-    } catch { /* ignore */ }
-
-    const task = `${context}${waveArtifacts}
 [CEO Question] ${directive}
 
 You are the CEO Supervisor responding to the CEO's follow-up question.
 
 ## Rules
-1. **READ the context file above** before answering. It contains the full previous response — don't guess.
-2. **READ wave artifact files** if they exist — they contain the team's deliverables (reports, analysis).
-3. **Be concrete.** Use actual data, numbers, quotes from the documents. The CEO wants substance, not metadata.
+1. The conversation history above contains the FULL context of this wave. Use it.
+2. **Be concrete.** Use actual data, numbers, quotes. The CEO wants substance, not metadata.
+3. **READ files** if you need more detail on deliverables (knowledge/, roles/*/journal/).
 4. Do NOT dispatch anyone. Do NOT create new files. This is a conversation.
 5. Answer in the same language the CEO used.`;
 
@@ -632,18 +589,11 @@ You are the CEO Supervisor responding to the CEO's follow-up question.
       ? `\n\n⚠️ [RECOVERY] This is a restart after crash #${state.crashCount}. Check all session states via supervision watch.`
       : '';
 
-    // Build conversation context from previous directives
-    const deliveredDirectives = state.pendingDirectives.filter(d => d.delivered);
-    const conversationHistory = deliveredDirectives.length > 0
-      ? `\n## Previous Conversation in This Wave
-${deliveredDirectives.map((d, i) => `${i + 1}. CEO said: "${d.text}"`).join('\n')}
-
-You are continuing this conversation. The CEO's latest message builds on the above context.
-Do NOT re-analyze from scratch — reference your previous findings.\n`
-      : '';
+    // Build conversation context from wave-messages DB (Gap #2 fix)
+    const conversationHistory = buildHistoryPrompt(state.waveId);
 
     const supervisorTask = `[CEO Supervisor] ${state.directive}
-${conversationHistory}
+${conversationHistory ? '\n' + conversationHistory + '\n' : ''}
 ## Your Role
 You are the CEO Supervisor — the CEO's AI proxy.
 You can answer questions directly OR dispatch C-Level roles for complex work.
@@ -857,6 +807,18 @@ ${state.continuous ? `## Continuous Improvement Mode (ON)
     } else {
       console.log(`[Supervisor] Wave ${state.waveId} complete. All subordinates done.`);
       state.status = 'stopped';
+
+      // Record assistant response in wave conversation history
+      if (state.executionId) {
+        const exec = executionManager.getExecution(state.executionId);
+        if (exec?.result?.output) {
+          appendWaveMessage(state.waveId, {
+            role: 'assistant',
+            content: exec.result.output,
+            executionId: state.executionId,
+          });
+        }
+      }
 
       // Auto-save the completed wave to operations/waves/
       try {
