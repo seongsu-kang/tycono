@@ -499,19 +499,28 @@ Examples:
     // If no in-memory history, load from disk (restart case)
     const diskHistory = !directiveHistory ? this.loadWaveHistory(state.waveId) : '';
 
-    // Save last execution's full output to a temp file so conversation CEO can read it.
-    // No truncation — CEO reads the file for full context instead of getting a sliced summary.
+    // Append conversation exchange to context file (cumulative, not overwrite).
+    // Each turn adds: CEO question + AI response → full multi-turn history preserved.
     let contextFilePath = '';
+    const contextDir = path.join(COMPANY_ROOT, '.tycono');
+    contextFilePath = path.join(contextDir, `conversation-context-${state.waveId}.md`);
+
+    // Append current question
+    try {
+      if (!fs.existsSync(contextDir)) fs.mkdirSync(contextDir, { recursive: true });
+      fs.appendFileSync(contextFilePath, `\n---\n**CEO**: ${directive}\n`);
+    } catch { /* ignore */ }
+
+    // Append last AI response
     const sessionIdToCheck = state.supervisorSessionId
       || listSessions().find(s => s.waveId === state.waveId && s.roleId === 'ceo')?.id;
     if (sessionIdToCheck) {
       try {
         const events = ActivityStream.readAll(sessionIdToCheck);
         const textEvents = events.filter(e => e.type === 'text' && e.roleId === 'ceo');
-        const fullText = textEvents.map(e => String(e.data.text ?? '')).join('\n').trim();
-        if (fullText) {
-          contextFilePath = path.join(COMPANY_ROOT, '.tycono', `conversation-context-${state.waveId}.md`);
-          fs.writeFileSync(contextFilePath, `# Previous CEO Response (Wave ${state.waveId})\n\n${fullText}\n`);
+        const lastResponse = textEvents.slice(-5).map(e => String(e.data.text ?? '')).join('\n').trim();
+        if (lastResponse) {
+          fs.appendFileSync(contextFilePath, `**AI**: ${lastResponse}\n`);
         }
       } catch { /* ignore */ }
     }
