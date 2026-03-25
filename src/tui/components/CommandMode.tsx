@@ -466,7 +466,7 @@ export const CommandMode: React.FC<CommandModeProps> = ({
           onChange={(v) => { setInput(v); setAcIndex(0); }}
           onSubmit={handleSubmit}
           placeholder=""
-          focus={!quickBarActive}
+          focus={isActive && !quickBarActive}
         />
       </Box>
 
