@@ -517,13 +517,15 @@ export class ClaudeCliRunner implements ExecutionRunner {
     }
 
     const modelName = config.model ?? 'claude-opus-4-6';
-    // Use codeRoot as cwd — auto-creates ../{name}-code/ if not configured
     const codeRoot = resolveCodeRoot(companyRoot);
-    const cwd = codeRoot;
+    // Run claude -p inside knowledge/ — CLAUDE.md is there, grep searches knowledge only
+    const knowledgeDir = path.join(companyRoot, 'knowledge');
+    const cwd = fs.existsSync(knowledgeDir) ? knowledgeDir : companyRoot;
 
-    // Inject repo paths so agents never confuse repos
+    // Inject paths so agents can reference code + AKB via absolute paths
     cleanEnv.TYCONO_CODE_ROOT = codeRoot;
     cleanEnv.TYCONO_AKB_ROOT = companyRoot;
+    cleanEnv.TYCONO_KNOWLEDGE_ROOT = knowledgeDir;
     console.log(`[Runner] Spawning claude -p: role=${roleId}, model=${modelName}, maxTurns=${maxTurns}, sessionId=${config.sessionId}, cwd=${cwd}, subordinates=[${subordinates.join(',')}]`);
 
     const proc = spawn('claude', args, {

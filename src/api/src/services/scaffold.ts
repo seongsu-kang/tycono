@@ -326,11 +326,13 @@ export function scaffold(config: ScaffoldConfig): string[] {
     created.push(dir + '/');
   }
 
-  // Write CLAUDE.md (no variable substitution — 100% Tycono managed)
+  // Write CLAUDE.md — both root (interactive claude) and knowledge/ (claude -p agents)
   const claudeTmpl = loadTemplate('CLAUDE.md.tmpl');
   const pkgVersion = getPackageVersion();
-  fs.writeFileSync(path.join(root, 'CLAUDE.md'), claudeTmpl.replaceAll('{{VERSION}}', pkgVersion));
-  created.push('CLAUDE.md');
+  const claudeContent = claudeTmpl.replaceAll('{{VERSION}}', pkgVersion);
+  fs.writeFileSync(path.join(root, 'CLAUDE.md'), claudeContent);
+  fs.writeFileSync(path.join(root, 'knowledge', 'CLAUDE.md'), claudeContent);
+  created.push('CLAUDE.md', 'knowledge/CLAUDE.md');
 
   // Write .tycono/rules-version
   fs.writeFileSync(path.join(root, '.tycono', 'rules-version'), pkgVersion);
