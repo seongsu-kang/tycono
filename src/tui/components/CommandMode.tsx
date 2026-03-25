@@ -342,9 +342,9 @@ export const CommandMode: React.FC<CommandModeProps> = ({
   const acVisible = acOpen && acCandidates.length > 0;
 
   // Quick bar + autocomplete navigation
+  // isActive option: when false, useInput completely deregisters the handler
+  // This prevents CommandMode from stealing key events while Panel is active
   useInput((ch, key) => {
-    // Don't handle input when hidden (Panel mode active) — prevents key event stealing
-    if (!isActive) return;
 
     // Autocomplete mode
     if (acVisible) {
@@ -402,7 +402,7 @@ export const CommandMode: React.FC<CommandModeProps> = ({
         setQuickBarIndex(0);
       }
     }
-  });
+  }, { isActive });
 
   const handleSubmit = useCallback((value: string) => {
     const trimmed = value.trim();
