@@ -458,16 +458,20 @@ export const CommandMode: React.FC<CommandModeProps> = ({
         );
       })()}
 
-      {/* Input */}
+      {/* Input — TextInput only rendered when active (prevents stdin capture in Panel mode) */}
       <Box paddingX={0} marginTop={0}>
         <Text color={quickBarActive ? 'gray' : 'yellow'} bold>&gt; </Text>
-        <TextInput
-          value={input}
-          onChange={(v) => { setInput(v); setAcIndex(0); }}
-          onSubmit={handleSubmit}
-          placeholder=""
-          focus={isActive && !quickBarActive}
-        />
+        {isActive ? (
+          <TextInput
+            value={input}
+            onChange={(v) => { setInput(v); setAcIndex(0); }}
+            onSubmit={handleSubmit}
+            placeholder=""
+            focus={!quickBarActive}
+          />
+        ) : (
+          <Text>{input}</Text>
+        )}
       </Box>
 
       {/* Command autocomplete — shown when typing / */}
