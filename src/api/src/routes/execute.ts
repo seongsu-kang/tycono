@@ -325,7 +325,7 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
     );
 
     // Scan activity-streams for sessions belonging to this wave
-    const streamsDir = path.join(COMPANY_ROOT, 'operations', 'activity-streams');
+    const streamsDir = path.join(COMPANY_ROOT, '.tycono', 'activity-streams');
     if (fs.existsSync(streamsDir)) {
       const waveTimestamp = waveId.replace('wave-', '');
       for (const file of fs.readdirSync(streamsDir)) {
@@ -407,7 +407,7 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
     rolesData.push({ roleId, roleName, sessionId: sid, status, events, childSessions });
   }
 
-  const wavesDir = path.join(COMPANY_ROOT, 'operations', 'waves');
+  const wavesDir = path.join(COMPANY_ROOT, '.tycono', 'waves');
   if (!fs.existsSync(wavesDir)) {
     fs.mkdirSync(wavesDir, { recursive: true });
   }
@@ -477,7 +477,7 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
     } catch { /* non-critical */ }
   }
 
-  jsonResponse(res, 200, { ok: true, path: `operations/waves/${baseName}.json` });
+  jsonResponse(res, 200, { ok: true, path: `.tycono/waves/${baseName}.json` });
 }
 
 /* ─── GET /api/waves/:waveId/stream ── */

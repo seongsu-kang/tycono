@@ -8,13 +8,13 @@
 
 | Task | Read First | Role |
 |------|-----------|------|
-| Product planning | `projects/` | PM |
-| Technical design | `architecture/` | CTO |
-| Implementation | `projects/*/tasks.md` | Engineer |
-| UI/UX Design | `projects/*/design/` | Designer |
-| Testing/QA | `projects/*/tasks.md` | QA |
-| Operations | `operations/` | PM |
-| Business/Revenue | `company/` | CBO |
+| Product planning | `knowledge/projects/` | PM |
+| Technical design | `knowledge/architecture/` | CTO |
+| Implementation | `knowledge/projects/*/tasks.md` | Engineer |
+| UI/UX Design | `knowledge/projects/*/design/` | Designer |
+| Testing/QA | `knowledge/projects/*/tasks.md` | QA |
+| Operations | `.tycono/` | PM |
+| Business/Revenue | `knowledge/company.md` | CBO |
 | Domain knowledge | `knowledge/` | CBO |
 
 ---
@@ -23,7 +23,7 @@
 
 > **AKB** = A file-based knowledge system where AI uses **search (Grep/Glob)** to find and **contextual links** to navigate
 >
-> Full reference: `methodologies/agentic-knowledge-base.md`
+> Full reference: `knowledge/methodologies/agentic-knowledge-base.md`
 
 | Layer | Role | AI Usage |
 |-------|------|----------|
@@ -203,30 +203,30 @@ After completing any task, check:
 |   +-- preferences.json     <- UI preferences (auto-generated)
 |   +-- custom-rules.md      <- Company custom rules (user owned)
 |   +-- rules-version        <- Current CLAUDE.md version
-+-- company/
-|   +-- company.md           <- Mission, vision, company info
-+-- roles/
-|   +-- roles.md             <- Role listing (Hub)
-|   +-- {role-id}/
-|       +-- role.yaml        <- Role definition
-|       +-- profile.md       <- Role profile
-|       +-- journal/         <- Work journal
-+-- projects/
-|   +-- projects.md          <- Project listing (Hub)
-+-- architecture/
-|   +-- architecture.md      <- Technical architecture (Hub)
-+-- operations/
-|   +-- standup/             <- Daily standups
 |   +-- waves/               <- Wave execution logs
-|   +-- decisions/           <- Decision log
-|   +-- activity-streams/    <- SSE activity event logs
 |   +-- sessions/            <- Session state
+|   +-- standup/             <- Daily standups
+|   +-- activity-streams/    <- SSE activity event logs
 |   +-- cost/                <- Token usage ledger
+|   +-- activity/            <- Activity logs
 +-- knowledge/
 |   +-- knowledge.md         <- Domain knowledge (Hub)
-+-- methodologies/
-|   +-- methodologies.md     <- Methodology listing (Hub)
-|   +-- agentic-knowledge-base.md  <- AKB protocol reference
+|   +-- company.md           <- Mission, vision, company info
+|   +-- roles/
+|   |   +-- roles.md         <- Role listing (Hub)
+|   |   +-- {role-id}/
+|   |       +-- role.yaml    <- Role definition
+|   |       +-- profile.md   <- Role profile
+|   |       +-- journal/     <- Work journal
+|   +-- projects/
+|   |   +-- projects.md      <- Project listing (Hub)
+|   +-- architecture/
+|   |   +-- architecture.md  <- Technical architecture (Hub)
+|   +-- decisions/           <- Decision log
+|   +-- presets/             <- Preset configurations
+|   +-- methodologies/
+|       +-- methodologies.md <- Methodology listing (Hub)
+|       +-- agentic-knowledge-base.md  <- AKB protocol reference
 +-- .claude/skills/
     +-- _shared/             <- Shared skill plugins
     +-- {role-id}/SKILL.md   <- Role-specific skill guides

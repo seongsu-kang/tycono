@@ -62,7 +62,7 @@ presetsRouter.post('/install', (req, res) => {
     }
 
     // Create preset directory and write preset.yaml
-    const presetDir = path.join(COMPANY_ROOT, 'company', 'presets', id);
+    const presetDir = path.join(COMPANY_ROOT, 'knowledge', 'presets', id);
     fs.mkdirSync(presetDir, { recursive: true });
 
     // Write preset.yaml
@@ -92,7 +92,7 @@ presetsRouter.post('/install', (req, res) => {
       }
     }
 
-    res.json({ ok: true, id, path: `company/presets/${id}` });
+    res.json({ ok: true, id, path: `knowledge/presets/${id}` });
   } catch (err) {
     res.status(500).json({ error: `Install failed: ${err instanceof Error ? err.message : 'unknown'}` });
   }
@@ -107,7 +107,7 @@ presetsRouter.delete('/:id', (req, res) => {
       return;
     }
 
-    const presetDir = path.join(COMPANY_ROOT, 'company', 'presets', id);
+    const presetDir = path.join(COMPANY_ROOT, 'knowledge', 'presets', id);
     if (!fs.existsSync(presetDir)) {
       res.status(404).json({ error: `Preset not found: ${id}` });
       return;

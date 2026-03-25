@@ -65,7 +65,7 @@ syncRouter.post('/apply', async (req: Request, res: Response, next: NextFunction
 
     // Update source.upstream_version if provided
     if (upstreamVersion) {
-      const yamlPath = path.join(COMPANY_ROOT, 'roles', roleId, 'role.yaml');
+      const yamlPath = path.join(COMPANY_ROOT, 'knowledge', 'roles', roleId, 'role.yaml');
       const raw = YAML.parse(fs.readFileSync(yamlPath, 'utf-8')) as Record<string, unknown>;
       if (raw.source && typeof raw.source === 'object') {
         (raw.source as Record<string, unknown>).upstream_version = upstreamVersion;

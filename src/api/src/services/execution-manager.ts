@@ -124,7 +124,7 @@ class ExecutionManager {
     const session = getSession(params.sessionId);
     if (session?.waveId) {
       try {
-        const wavePath = path.join(COMPANY_ROOT, 'operations', 'waves', `${session.waveId}.json`);
+        const wavePath = path.join(COMPANY_ROOT, '.tycono', 'waves', `${session.waveId}.json`);
         if (fs.existsSync(wavePath)) {
           const waveData = JSON.parse(fs.readFileSync(wavePath, 'utf-8'));
           presetId = waveData.preset;
@@ -698,7 +698,7 @@ class ExecutionManager {
     const deadSession = getSession(deadExecution.sessionId);
     if (deadSession?.waveId) {
       try {
-        const wp = path.join(COMPANY_ROOT, 'operations', 'waves', `${deadSession.waveId}.json`);
+        const wp = path.join(COMPANY_ROOT, '.tycono', 'waves', `${deadSession.waveId}.json`);
         if (fs.existsSync(wp)) {
           recoveryPresetId = JSON.parse(fs.readFileSync(wp, 'utf-8')).preset;
         }

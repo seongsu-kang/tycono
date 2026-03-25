@@ -10,7 +10,7 @@ export const READ_TOOLS: ToolDefinition[] = [
     input_schema: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: 'File path relative to company root (e.g., "roles/cto/role.yaml")' },
+        path: { type: 'string', description: 'File path relative to company root (e.g., "knowledge/roles/cto/role.yaml")' },
       },
       required: ['path'],
     },

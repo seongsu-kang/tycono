@@ -8,7 +8,7 @@ export const rolesRouter = Router();
 // GET /api/roles — Role 목록
 rolesRouter.get('/', (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const content = readFile('roles/roles.md');
+    const content = readFile('knowledge/roles/roles.md');
     const rows = parseMarkdownTable(content);
 
     const roles = rows.map(row => {
@@ -16,7 +16,7 @@ rolesRouter.get('/', (_req: Request, res: Response, next: NextFunction) => {
       let name = row.role ?? row.name ?? '';
 
       // role.yaml의 name이 있으면 우선 사용 (rename 반영)
-      const yamlPath = `roles/${id}/role.yaml`;
+      const yamlPath = `knowledge/roles/${id}/role.yaml`;
       if (id && fileExists(yamlPath)) {
         try {
           const raw = YAML.parse(readFile(yamlPath)) as Record<string, unknown>;
@@ -45,7 +45,7 @@ rolesRouter.get('/:id', (req: Request, res: Response, next: NextFunction) => {
     const { id } = req.params;
 
     // 기본 정보 (roles.md 테이블에서)
-    const listContent = readFile('roles/roles.md');
+    const listContent = readFile('knowledge/roles/roles.md');
     const rows = parseMarkdownTable(listContent);
     const roleRow = rows.find(r => r.id === id);
 
@@ -66,7 +66,7 @@ rolesRouter.get('/:id', (req: Request, res: Response, next: NextFunction) => {
     };
 
     // role.yaml에서 name + persona + authority + skills 읽기
-    const yamlPath = `roles/${id}/role.yaml`;
+    const yamlPath = `knowledge/roles/${id}/role.yaml`;
     if (fileExists(yamlPath)) {
       const raw = YAML.parse(readFile(yamlPath)) as Record<string, unknown>;
       if (raw.name) role.name = raw.name;
@@ -100,7 +100,7 @@ rolesRouter.get('/:id', (req: Request, res: Response, next: NextFunction) => {
 
     // 오늘 저널 읽기
     const today = new Date().toISOString().slice(0, 10);
-    const journalPath = `roles/${id}/journal/${today}.md`;
+    const journalPath = `knowledge/roles/${id}/journal/${today}.md`;
     if (fileExists(journalPath)) {
       role.journal = readFile(journalPath).slice(0, 3000);
     }

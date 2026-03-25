@@ -86,7 +86,7 @@ interface RawRoleYaml {
 /* ─── Build ──────────────────────────────────── */
 
 export function buildOrgTree(companyRoot: string, presetId?: string): OrgTree {
-  const rolesDir = path.join(companyRoot, 'roles');
+  const rolesDir = path.join(companyRoot, 'knowledge', 'roles');
   const tree: OrgTree = { root: 'ceo', nodes: new Map() };
 
   // CEO is implicit (not a role.yaml file)
@@ -108,7 +108,7 @@ export function buildOrgTree(companyRoot: string, presetId?: string): OrgTree {
 
   // If preset specified, also scan preset's roles directory
   if (presetId && presetId !== 'default') {
-    const presetRolesDir = path.join(companyRoot, 'company', 'presets', presetId, 'roles');
+    const presetRolesDir = path.join(companyRoot, 'knowledge', 'presets', presetId, 'roles');
     if (fs.existsSync(presetRolesDir)) roleDirs.push(presetRolesDir);
   }
 

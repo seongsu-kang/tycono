@@ -88,7 +88,7 @@ export function extractKeywords(text: string): string[] {
 export function searchRelatedDocs(companyRoot: string, keywords: string[]): RelatedDoc[] {
   if (keywords.length === 0) return [];
 
-  const searchDirs = ['knowledge', 'architecture', 'projects'];
+  const searchDirs = ['knowledge', 'knowledge/architecture', 'knowledge/projects'];
   const results: RelatedDoc[] = [];
 
   for (const dir of searchDirs) {
@@ -222,7 +222,7 @@ export function postKnowledgingCheck(
 
     // Categorize
     // We can't tell new vs modified from just file list, so check if it's a knowledge/architecture doc
-    if (file.startsWith('knowledge/') || file.startsWith('architecture/') || file.startsWith('projects/')) {
+    if (file.startsWith('knowledge/') || file.startsWith('knowledge/architecture/') || file.startsWith('knowledge/projects/')) {
       modifiedDocs.push(file);
     }
 
@@ -257,7 +257,7 @@ export function postKnowledgingCheck(
 
 /** Scan for orphan docs (not registered in Hub) and broken links */
 export function detectDecay(companyRoot: string): DecayReport {
-  const searchDirs = ['knowledge', 'architecture'];
+  const searchDirs = ['knowledge', 'knowledge/architecture'];
   const orphanDocs: string[] = [];
   const staleDocs: string[] = [];
   const brokenLinks: Array<{ file: string; link: string }> = [];

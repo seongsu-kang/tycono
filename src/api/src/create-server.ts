@@ -185,8 +185,8 @@ export function createExpressApp(): express.Application {
     let companyName: string | null = null;
     if (initialized) {
       try {
-        // Read company name from company/company.md (user-owned data)
-        const companyMdPath = path.join(COMPANY_ROOT, 'company', 'company.md');
+        // Read company name from knowledge/company.md (user-owned data)
+        const companyMdPath = path.join(COMPANY_ROOT, 'knowledge', 'company.md');
         const content = fs.readFileSync(companyMdPath, 'utf-8');
         const match = content.match(/^#\s+(.+)/m);
         if (match) companyName = match[1].trim();

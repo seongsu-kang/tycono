@@ -100,7 +100,7 @@ const AKB_TOOLS: ToolDefinition[] = [
       type: 'object' as const,
       properties: {
         query: { type: 'string', description: 'Search keywords (e.g. "landing deploy", "refactoring decision", "Store Import")' },
-        path: { type: 'string', description: 'Optional subdirectory to search in (e.g. "operations/decisions", "projects", "knowledge"). Defaults to entire AKB.' },
+        path: { type: 'string', description: 'Optional subdirectory to search in (e.g. "knowledge/decisions", "knowledge/projects", "knowledge"). Defaults to entire AKB.' },
       },
       required: ['query'],
     },
@@ -111,18 +111,18 @@ const AKB_TOOLS: ToolDefinition[] = [
     input_schema: {
       type: 'object' as const,
       properties: {
-        path: { type: 'string', description: 'File path relative to AKB root (e.g. "operations/decisions/008-repo-structure.md", "projects/projects.md")' },
+        path: { type: 'string', description: 'File path relative to AKB root (e.g. "knowledge/decisions/008-repo-structure.md", "knowledge/projects/projects.md")' },
       },
       required: ['path'],
     },
   },
   {
     name: 'list_files',
-    description: 'List files in a directory. Useful to discover what exists (e.g. "operations/waves/", "roles/engineer/journal/").',
+    description: 'List files in a directory. Useful to discover what exists (e.g. ".tycono/waves/", "knowledge/roles/engineer/journal/").',
     input_schema: {
       type: 'object' as const,
       properties: {
-        path: { type: 'string', description: 'Directory path relative to AKB root (e.g. "operations/standups", "roles/pm/journal")' },
+        path: { type: 'string', description: 'Directory path relative to AKB root (e.g. ".tycono/standup", "knowledge/roles/pm/journal")' },
         pattern: { type: 'string', description: 'Glob pattern (default: "*.md")' },
       },
       required: ['path'],
@@ -257,7 +257,7 @@ function buildCompanyContext(): string {
 
   // 1. Company info (name, mission)
   try {
-    const companyContent = readFile('company/company.md');
+    const companyContent = readFile('knowledge/company.md');
     const companyName = companyContent.split('\n').find(l => l.startsWith('# '))?.replace(/^#\s+/, '') ?? '';
     const missionMatch = companyContent.match(/^>\s*(.+)/m);
     const mission = missionMatch ? missionMatch[1].trim() : '';
@@ -283,7 +283,7 @@ function buildCompanyContext(): string {
 
   // 3. Active projects + current phase from tasks.md
   try {
-    const projectsContent = readFile('projects/projects.md');
+    const projectsContent = readFile('knowledge/projects/projects.md');
     const rows = parseMarkdownTable(projectsContent);
     const activeProjects = rows
       .filter(r => (r.status ?? r.상태 ?? '').toLowerCase() !== 'archived')
@@ -335,7 +335,7 @@ function buildCompanyContext(): string {
 
   // 5. Recent CEO decisions (max 5)
   try {
-    const decisionsDir = path.join(COMPANY_ROOT, 'operations', 'decisions');
+    const decisionsDir = path.join(COMPANY_ROOT, 'knowledge', 'decisions');
     if (fs.existsSync(decisionsDir)) {
       const files = fs.readdirSync(decisionsDir)
         .filter(f => f.endsWith('.md') && f !== 'decisions.md')
@@ -370,7 +370,7 @@ function buildRoleContext(roleId: string): string {
 
   // 0. Role profile — gives the agent its identity and work context
   try {
-    const profilePath = path.join(COMPANY_ROOT, 'roles', roleId, 'profile.md');
+    const profilePath = path.join(COMPANY_ROOT, 'knowledge', 'roles', roleId, 'profile.md');
     if (fs.existsSync(profilePath)) {
       const content = fs.readFileSync(profilePath, 'utf-8').trim();
       if (content.length > 20) {
@@ -381,7 +381,7 @@ function buildRoleContext(roleId: string): string {
 
   // 1. Role's journal — latest entry only, compact summary (not full header dump)
   try {
-    const journalDir = path.join(COMPANY_ROOT, 'roles', roleId, 'journal');
+    const journalDir = path.join(COMPANY_ROOT, 'knowledge', 'roles', roleId, 'journal');
     if (fs.existsSync(journalDir)) {
       const files = fs.readdirSync(journalDir)
         .filter(f => f.endsWith('.md'))
@@ -399,7 +399,7 @@ function buildRoleContext(roleId: string): string {
 
   // 2. Current tasks assigned to this role (from all project tasks.md files)
   try {
-    const projectsDir = path.join(COMPANY_ROOT, 'projects');
+    const projectsDir = path.join(COMPANY_ROOT, 'knowledge', 'projects');
     if (fs.existsSync(projectsDir)) {
       const taskFiles = glob.sync('**/tasks.md', { cwd: projectsDir, absolute: false });
       const roleTasks: string[] = [];
@@ -425,7 +425,7 @@ function buildRoleContext(roleId: string): string {
 
   // 3. Recent waves — only from last 7 days (stale waves cause repetitive references)
   try {
-    const wavesDir = path.join(COMPANY_ROOT, 'operations', 'waves');
+    const wavesDir = path.join(COMPANY_ROOT, '.tycono', 'waves');
     if (fs.existsSync(wavesDir)) {
       const tree = buildOrgTree(COMPANY_ROOT);
       const node = tree.nodes.get(roleId);
@@ -473,7 +473,7 @@ function buildRoleContext(roleId: string): string {
 
   // 4. Recent standup (latest, this role's section)
   try {
-    const standupDir = path.join(COMPANY_ROOT, 'operations', 'standup');
+    const standupDir = path.join(COMPANY_ROOT, '.tycono', 'standup');
     if (fs.existsSync(standupDir)) {
       const files = fs.readdirSync(standupDir).filter(f => f.endsWith('.md')).sort().slice(-1);
       for (const file of files) {
@@ -489,7 +489,7 @@ function buildRoleContext(roleId: string): string {
 
   // 5. Recent decisions (last 3)
   try {
-    const decisionsDir = path.join(COMPANY_ROOT, 'operations', 'decisions');
+    const decisionsDir = path.join(COMPANY_ROOT, 'knowledge', 'decisions');
     if (fs.existsSync(decisionsDir)) {
       const files = fs.readdirSync(decisionsDir)
         .filter(f => f.endsWith('.md') && f !== 'decisions.md')
@@ -863,7 +863,7 @@ ${companyCtx}
 ${roleCtx}
 
 You have search_akb, read_file, list_files tools. AKB root: ${COMPANY_ROOT}/
-Optionally explore 1-2 for fresh context: operations/waves/, operations/decisions/, roles/${roleId}/journal/
+Optionally explore 1-2 for fresh context: .tycono/waves/, knowledge/decisions/, knowledge/roles/${roleId}/journal/
 
 RULES:
 1. Match the tone and length from the example conversations above. 1-3 sentences MAX.

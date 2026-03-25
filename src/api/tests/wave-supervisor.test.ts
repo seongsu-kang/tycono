@@ -3,7 +3,7 @@
  *
  * Verifies the bugs found in EXP-005:
  * 1. CEO session preservation — supervisor session has messages and persists
- * 2. Wave auto-save on completion — wave JSON saved to operations/waves/
+ * 2. Wave auto-save on completion — wave JSON saved to .tycono/waves/
  * 3. Session hierarchy tracking — parentSessionId chain and waveId propagation
  * 4. ORG PROPAGATION status — active wave role statuses via GET /api/waves/active
  */
@@ -205,7 +205,7 @@ describe('Wave Supervisor System', () => {
   describe('2. Wave Auto-Save on Completion', () => {
     test('wave JSON contains correct structure when saved to disk', async () => {
       await getApp();
-      const wavesDir = path.join(tmpDir, 'operations', 'waves');
+      const wavesDir = path.join(tmpDir, '.tycono', 'waves');
       fs.mkdirSync(wavesDir, { recursive: true });
 
       const waveId = `wave-struct-${Date.now()}`;
@@ -253,7 +253,7 @@ describe('Wave Supervisor System', () => {
     });
 
     test('GET /api/operations/waves/:id returns wave detail', async () => {
-      const wavesDir = path.join(tmpDir, 'operations', 'waves');
+      const wavesDir = path.join(tmpDir, '.tycono', 'waves');
       fs.mkdirSync(wavesDir, { recursive: true });
 
       const waveId = `wave-detail-${Date.now()}`;
@@ -277,7 +277,7 @@ describe('Wave Supervisor System', () => {
     });
 
     test('PATCH /api/operations/waves/:id updates commit info', async () => {
-      const wavesDir = path.join(tmpDir, 'operations', 'waves');
+      const wavesDir = path.join(tmpDir, '.tycono', 'waves');
       fs.mkdirSync(wavesDir, { recursive: true });
 
       const waveId = `wave-patch-${Date.now()}`;
@@ -457,7 +457,7 @@ describe('Wave Supervisor System', () => {
       await getApp();
       const { findWaveFile } = await import('../src/services/wave-tracker.js');
 
-      const wavesDir = path.join(tmpDir, 'operations', 'waves');
+      const wavesDir = path.join(tmpDir, '.tycono', 'waves');
       fs.mkdirSync(wavesDir, { recursive: true });
 
       const waveId = `wave-tracker-${Date.now()}`;
@@ -484,7 +484,7 @@ describe('Wave Supervisor System', () => {
       await getApp();
       const { appendFollowUpToWave } = await import('../src/services/wave-tracker.js');
 
-      const wavesDir = path.join(tmpDir, 'operations', 'waves');
+      const wavesDir = path.join(tmpDir, '.tycono', 'waves');
       fs.mkdirSync(wavesDir, { recursive: true });
 
       const waveId = `wave-followup-${Date.now()}`;
@@ -614,7 +614,7 @@ describe('Wave Supervisor System', () => {
       });
 
       // Check filesystem
-      const sessionFile = path.join(tmpDir, 'operations', 'sessions', `${session.id}.json`);
+      const sessionFile = path.join(tmpDir, '.tycono', 'sessions', `${session.id}.json`);
       expect(fs.existsSync(sessionFile)).toBe(true);
 
       const data = JSON.parse(fs.readFileSync(sessionFile, 'utf-8'));

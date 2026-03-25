@@ -123,7 +123,7 @@ class SupervisorHeartbeat {
    */
   private saveWaveFile(waveId: string, directive: string, preset?: string): void {
     try {
-      const wavesDir = path.join(COMPANY_ROOT, 'operations', 'waves');
+      const wavesDir = path.join(COMPANY_ROOT, '.tycono', 'waves');
       if (!fs.existsSync(wavesDir)) fs.mkdirSync(wavesDir, { recursive: true });
       const wavePath = path.join(wavesDir, `${waveId}.json`);
       if (!fs.existsSync(wavePath)) {
@@ -185,7 +185,7 @@ class SupervisorHeartbeat {
       let originalDirective = '';
       let originalPreset: string | undefined;
       try {
-        const waveFile = path.join(COMPANY_ROOT, 'operations', 'waves', `${waveId}.json`);
+        const waveFile = path.join(COMPANY_ROOT, '.tycono', 'waves', `${waveId}.json`);
         if (fs.existsSync(waveFile)) {
           const waveData = JSON.parse(fs.readFileSync(waveFile, 'utf-8'));
           originalDirective = waveData.directive ?? '';
@@ -820,7 +820,7 @@ ${state.continuous ? `## Continuous Improvement Mode (ON)
         }
       }
 
-      // Auto-save the completed wave to operations/waves/
+      // Auto-save the completed wave to .tycono/waves/
       try {
         const result = saveCompletedWave(state.waveId, state.directive);
         if (result.ok) {

@@ -37,7 +37,7 @@ export class TokenLedger {
   private filePath: string;
 
   constructor(companyRoot: string) {
-    const dir = path.join(companyRoot, 'operations', 'cost');
+    const dir = path.join(companyRoot, '.tycono', 'cost');
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }

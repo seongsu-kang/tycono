@@ -10,7 +10,7 @@ import type { ActivityEventType, ActivityEvent } from '../../../shared/types.js'
 /* ─── Constants ──────────────────────────── */
 
 function streamsDir(): string {
-  return path.join(COMPANY_ROOT, 'operations', 'activity-streams');
+  return path.join(COMPANY_ROOT, '.tycono', 'activity-streams');
 }
 
 function ensureDir(): void {

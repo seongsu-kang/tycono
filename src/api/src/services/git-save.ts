@@ -73,16 +73,7 @@ export interface SyncStatus {
  * See: knowledge/data-persistence-architecture.md §2
  */
 const SAVE_PATHS = [
-  'roles/',
-  'projects/',
   'knowledge/',
-  'architecture/',
-  'company/',
-  'operations/standup/',
-  'operations/waves/',
-  'operations/decisions/',
-  'operations/cost/',
-  'operations/activity-streams/',
   '.claude/skills/',
   '.tycono/',
   'CLAUDE.md',

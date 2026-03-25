@@ -1,8 +1,8 @@
 /**
- * preset-loader.ts — Load presets from company/presets/
+ * preset-loader.ts — Load presets from knowledge/presets/
  *
- * Scans company/presets/ for:
- *   - _default.yaml (auto-generated from existing roles/)
+ * Scans knowledge/presets/ for:
+ *   - _default.yaml (auto-generated from existing knowledge/roles/)
  *   - {name}/preset.yaml (installed presets with roles/skills/knowledge)
  *
  * Returns PresetSummary[] for TUI display and full LoadedPreset for wave creation.
@@ -12,7 +12,7 @@ import path from 'node:path';
 import YAML from 'yaml';
 import type { PresetDefinition, LoadedPreset, PresetSummary } from '../../../shared/types.js';
 
-const PRESETS_DIR = 'company/presets';
+const PRESETS_DIR = 'knowledge/presets';
 const DEFAULT_PRESET_FILE = '_default.yaml';
 
 /**
@@ -20,7 +20,7 @@ const DEFAULT_PRESET_FILE = '_default.yaml';
  * This is generated on-the-fly — no need to persist _default.yaml.
  */
 function buildDefaultPreset(companyRoot: string): LoadedPreset {
-  const rolesDir = path.join(companyRoot, 'roles');
+  const rolesDir = path.join(companyRoot, 'knowledge', 'roles');
   const roles: string[] = [];
 
   if (fs.existsSync(rolesDir)) {

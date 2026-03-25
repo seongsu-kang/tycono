@@ -8,7 +8,7 @@ export const companyRouter = Router();
 // GET /api/company — 회사 기본 정보
 companyRouter.get('/', (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const companyContent = readFile('company/company.md');
+    const companyContent = readFile('knowledge/company.md');
     const kv = extractBoldKeyValues(companyContent);
 
     // blockquote에서 미션 추출
@@ -16,7 +16,7 @@ companyRouter.get('/', (_req: Request, res: Response, next: NextFunction) => {
     const mission = missionMatch ? missionMatch[1].trim() : '';
 
     // Role 목록
-    const rolesContent = readFile('roles/roles.md');
+    const rolesContent = readFile('knowledge/roles/roles.md');
     const roleRows = parseMarkdownTable(rolesContent);
     const roles = roleRows
       .filter(row => (row.id ?? '').toLowerCase() !== 'ceo')
@@ -25,7 +25,7 @@ companyRouter.get('/', (_req: Request, res: Response, next: NextFunction) => {
         let name = row.role ?? row.name ?? '';
 
         // role.yaml의 name이 있으면 우선 사용 (커스텀 이름 반영)
-        const yamlPath = `roles/${id}/role.yaml`;
+        const yamlPath = `knowledge/roles/${id}/role.yaml`;
         if (id && fileExists(yamlPath)) {
           try {
             const raw = YAML.parse(readFile(yamlPath)) as Record<string, unknown>;

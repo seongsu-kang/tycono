@@ -57,7 +57,7 @@ export class RoleLifecycleManager {
    * Create a new Role: role.yaml + SKILL.md + profile.md + journal/
    */
   async createRole(def: RoleDefinition): Promise<void> {
-    const roleDir = path.join(this.companyRoot, 'roles', def.id);
+    const roleDir = path.join(this.companyRoot, 'knowledge', 'roles', def.id);
     const skillDir = path.join(this.companyRoot, '.claude', 'skills', def.id);
     const journalDir = path.join(roleDir, 'journal');
 
@@ -105,7 +105,7 @@ export class RoleLifecycleManager {
    * Update an existing Role's definition
    */
   async updateRole(id: string, changes: Partial<RoleDefinition>): Promise<void> {
-    const yamlPath = path.join(this.companyRoot, 'roles', id, 'role.yaml');
+    const yamlPath = path.join(this.companyRoot, 'knowledge', 'roles', id, 'role.yaml');
     if (!fs.existsSync(yamlPath)) {
       throw new Error(`Role not found: ${id}`);
     }
@@ -145,7 +145,7 @@ export class RoleLifecycleManager {
    * Remove a Role and all its files
    */
   async removeRole(id: string): Promise<void> {
-    const roleDir = path.join(this.companyRoot, 'roles', id);
+    const roleDir = path.join(this.companyRoot, 'knowledge', 'roles', id);
     const skillDir = path.join(this.companyRoot, '.claude', 'skills', id);
 
     if (fs.existsSync(roleDir)) {
@@ -180,7 +180,7 @@ export class RoleLifecycleManager {
   validateRole(id: string): RoleValidationResult {
     const issues: RoleValidationResult['issues'] = [];
 
-    const roleDir = path.join(this.companyRoot, 'roles', id);
+    const roleDir = path.join(this.companyRoot, 'knowledge', 'roles', id);
     const yamlPath = path.join(roleDir, 'role.yaml');
     const profilePath = path.join(roleDir, 'profile.md');
     const journalDir = path.join(roleDir, 'journal');
@@ -223,7 +223,7 @@ export class RoleLifecycleManager {
    */
   validateAll(): Map<string, RoleValidationResult> {
     const results = new Map<string, RoleValidationResult>();
-    const rolesDir = path.join(this.companyRoot, 'roles');
+    const rolesDir = path.join(this.companyRoot, 'knowledge', 'roles');
 
     if (!fs.existsSync(rolesDir)) return results;
 
@@ -319,7 +319,7 @@ ${def.authority.needsApproval.map((a) => `- ${a}`).join('\n')}
   }
 
   private addToRolesHub(def: RoleDefinition): void {
-    const hubPath = path.join(this.companyRoot, 'roles', 'roles.md');
+    const hubPath = path.join(this.companyRoot, 'knowledge', 'roles', 'roles.md');
     if (!fs.existsSync(hubPath)) return;
 
     const content = fs.readFileSync(hubPath, 'utf-8');
@@ -333,7 +333,7 @@ ${def.authority.needsApproval.map((a) => `- ${a}`).join('\n')}
   }
 
   private removeFromRolesHub(id: string): void {
-    const hubPath = path.join(this.companyRoot, 'roles', 'roles.md');
+    const hubPath = path.join(this.companyRoot, 'knowledge', 'roles', 'roles.md');
     if (!fs.existsSync(hubPath)) return;
 
     const content = fs.readFileSync(hubPath, 'utf-8');

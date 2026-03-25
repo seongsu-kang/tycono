@@ -314,12 +314,12 @@ export function scaffold(config: ScaffoldConfig): string[] {
 
   // Create directories
   const dirs = [
-    'company', 'roles', 'projects', 'architecture',
-    'operations', 'operations/standup', 'operations/waves',
-    'operations/decisions', 'operations/activity-streams',
-    'operations/sessions', 'operations/cost',
-    'knowledge', 'methodologies', '.claude/skills',
-    '.claude/skills/_shared', '.tycono', 'company/presets',
+    'knowledge', 'knowledge/roles', 'knowledge/projects',
+    'knowledge/architecture', 'knowledge/methodologies',
+    'knowledge/decisions', 'knowledge/presets',
+    '.tycono/waves', '.tycono/sessions', '.tycono/standup',
+    '.tycono/activity-streams', '.tycono/cost', '.tycono/activity',
+    '.claude/skills', '.claude/skills/_shared', '.tycono',
   ];
   for (const dir of dirs) {
     fs.mkdirSync(path.join(root, dir), { recursive: true });
@@ -343,15 +343,15 @@ export function scaffold(config: ScaffoldConfig): string[] {
     created.push('.tycono/custom-rules.md');
   }
 
-  // Write company/company.md
+  // Write knowledge/company.md
   const companyTmpl = loadTemplate('company.md.tmpl');
-  fs.writeFileSync(path.join(root, 'company', 'company.md'), renderTemplate(companyTmpl, vars));
-  created.push('company/company.md');
+  fs.writeFileSync(path.join(root, 'knowledge', 'company.md'), renderTemplate(companyTmpl, vars));
+  created.push('knowledge/company.md');
 
-  // Write roles/roles.md
+  // Write knowledge/roles/roles.md
   const rolesTmpl = loadTemplate('roles.md.tmpl');
-  fs.writeFileSync(path.join(root, 'roles', 'roles.md'), renderTemplate(rolesTmpl, vars));
-  created.push('roles/roles.md');
+  fs.writeFileSync(path.join(root, 'knowledge', 'roles', 'roles.md'), renderTemplate(rolesTmpl, vars));
+  created.push('knowledge/roles/roles.md');
 
   // Write .gitignore
   const giTmpl = loadTemplate('gitignore.tmpl');
@@ -400,14 +400,14 @@ export function scaffold(config: ScaffoldConfig): string[] {
     // Create roles with skill references
     for (const role of roles) {
       createRole(root, role);
-      created.push(`roles/${role.id}/`);
+      created.push(`knowledge/roles/${role.id}/`);
     }
   }
 
   // Hub files
   const hubs: Record<string, string> = {
-    'projects/projects.md': `# Projects\n\nProject listing for ${config.companyName}.\n\n| Project | Status | Lead |\n|---------|--------|------|\n`,
-    'architecture/architecture.md': `# Architecture\n\nTechnical architecture for ${config.companyName}.\n`,
+    'knowledge/projects/projects.md': `# Projects\n\nProject listing for ${config.companyName}.\n\n| Project | Status | Lead |\n|---------|--------|------|\n`,
+    'knowledge/architecture/architecture.md': `# Architecture\n\nTechnical architecture for ${config.companyName}.\n`,
     'knowledge/knowledge.md': `# Knowledge Base\n\nDomain knowledge for ${config.companyName}.\n`,
   };
   for (const [filePath, content] of Object.entries(hubs)) {
@@ -419,15 +419,15 @@ export function scaffold(config: ScaffoldConfig): string[] {
   }
 
   // Methodology documents
-  const methodologiesHub = path.join(root, 'methodologies', 'methodologies.md');
+  const methodologiesHub = path.join(root, 'knowledge', 'methodologies', 'methodologies.md');
   if (!fs.existsSync(methodologiesHub)) {
     fs.writeFileSync(methodologiesHub, `# Methodologies\n\n> Frameworks and principles that guide how AI agents work in this organization.\n\n## Documents\n\n| Document | Description |\n|----------|-------------|\n| [agentic-knowledge-base.md](./agentic-knowledge-base.md) | AKB — the file-based knowledge protocol for AI agents |\n\n---\n\n*Managed by: All*\n`);
-    created.push('methodologies/methodologies.md');
+    created.push('knowledge/methodologies/methodologies.md');
   }
-  const akbDoc = path.join(root, 'methodologies', 'agentic-knowledge-base.md');
+  const akbDoc = path.join(root, 'knowledge', 'methodologies', 'agentic-knowledge-base.md');
   if (!fs.existsSync(akbDoc)) {
     fs.writeFileSync(akbDoc, AKB_METHODOLOGY_CONTENT);
-    created.push('methodologies/agentic-knowledge-base.md');
+    created.push('knowledge/methodologies/agentic-knowledge-base.md');
   }
 
   // Set default appearances for team roles
@@ -445,14 +445,14 @@ export function scaffold(config: ScaffoldConfig): string[] {
 
   // Brownfield: note existing project path
   if (config.existingProjectPath) {
-    const targetDir = path.join(root, 'projects', 'existing');
+    const targetDir = path.join(root, 'knowledge', 'projects', 'existing');
     if (!fs.existsSync(targetDir)) {
       fs.mkdirSync(targetDir, { recursive: true });
       fs.writeFileSync(
         path.join(targetDir, 'prd.md'),
         `# Existing Project\n\nImported from: ${config.existingProjectPath}\n`
       );
-      created.push('projects/existing/');
+      created.push('knowledge/projects/existing/');
     }
   }
 
@@ -481,7 +481,7 @@ export function scaffold(config: ScaffoldConfig): string[] {
 }
 
 function createRole(root: string, role: TeamRole): void {
-  const roleDir = path.join(root, 'roles', role.id);
+  const roleDir = path.join(root, 'knowledge', 'roles', role.id);
   const skillDir = path.join(root, '.claude', 'skills', role.id);
   const journalDir = path.join(roleDir, 'journal');
 
@@ -533,7 +533,7 @@ function createRole(root: string, role: TeamRole): void {
   fs.writeFileSync(path.join(skillDir, 'SKILL.md'), skill);
 
   // Append to roles.md
-  const rolesHubPath = path.join(root, 'roles', 'roles.md');
+  const rolesHubPath = path.join(root, 'knowledge', 'roles', 'roles.md');
   if (fs.existsSync(rolesHubPath)) {
     const hubContent = fs.readFileSync(rolesHubPath, 'utf-8');
     const row = `| ${role.name} | ${role.id} | ${role.level} | ${role.reportsTo} | Active |`;

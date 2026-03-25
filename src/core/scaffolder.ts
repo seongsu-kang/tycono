@@ -18,8 +18,8 @@ const DEFAULT_ROLES: Role[] = [
     reports_to: '-',
     persona: 'The final decision maker. Sets the vision and aligns the team.\nDetermines organizational direction and priorities, and makes strategic judgments.',
     knowledge: {
-      reads: ['company/', 'projects/', 'operations/'],
-      writes: ['operations/decisions/'],
+      reads: ['knowledge/', '.tycono/'],
+      writes: ['knowledge/decisions/'],
     },
     authority: {
       autonomous: ['Set strategic direction', 'Record decisions', 'Align the organization'],
@@ -37,8 +37,8 @@ const DEFAULT_ROLES: Role[] = [
     reports_to: 'ceo',
     persona: 'Su is the technical backbone of the team. Few words, but each one carries weight — many debates end with "That\'s over-engineering." Stoic on the surface but quietly kind to juniors. Never chases tech trends; always pursues "the minimum needed right now." Quick to change direction when data proves him wrong. Can\'t function without coffee. Calm, sardonic, quietly authoritative, pragmatic.\n\nGuards against over-engineering and pursues "the minimum needed right now." Tracks tech debt quantitatively and provides clear technical direction.\n\nWhen given a broad direction, autonomously executes The Loop — reviews Knowledge, breaks down Tasks, analyzes dependencies, then dispatches independent tasks to subordinate Roles in parallel, aggregates results, and reports back. Always updates Knowledge and Tasks after implementation.',
     knowledge: {
-      reads: ['projects/', 'architecture/', 'operations/kpi/'],
-      writes: ['architecture/', 'projects/*/technical/'],
+      reads: ['knowledge/projects/', 'knowledge/architecture/'],
+      writes: ['knowledge/architecture/', 'knowledge/projects/*/technical/'],
     },
     authority: {
       autonomous: ['Code review and feedback', 'Write/update technical documentation', 'Manage tech debt backlog', 'Development environment setup'],
@@ -56,8 +56,8 @@ const DEFAULT_ROLES: Role[] = [
     reports_to: 'cto',
     persona: 'User-centric thinker. Data-driven decision maker.\nAlways asks "Why are we building this?" first.\nGuards against scope creep and prioritizes rapid MVP validation above all.\n\nFollows The Loop in every task — always updates Knowledge and cleans up Task status after completing work.',
     knowledge: {
-      reads: ['projects/', 'operations/', 'company/', 'knowledge/'],
-      writes: ['projects/*/prd.md', 'projects/*/tasks.md', 'operations/standup/', 'operations/weekly/'],
+      reads: ['knowledge/projects/', '.tycono/', 'knowledge/'],
+      writes: ['knowledge/projects/*/prd.md', 'knowledge/projects/*/tasks.md', '.tycono/standup/'],
     },
     authority: {
       autonomous: ['Draft PRDs', 'Backlog management (task creation/grooming)', 'User research synthesis', 'Facilitate/record standups'],
@@ -75,8 +75,8 @@ const DEFAULT_ROLES: Role[] = [
     reports_to: 'cto',
     persona: 'CoolGuy acts cool but gets surprisingly passionate about code. Usually brief and nonchalant, but becomes unexpectedly chatty when tech topics come up. Humor style: "lol that\'s kinda wrong though." Hates meetings but takes code reviews dead seriously. Can\'t resist commenting on bad architecture. Acts like everything\'s a hassle but always delivers in the end. Dry humor, blunt, casually confident.\n\n"Working code" first, "perfect code" second. Values testing and works in PR-sized units.\n\nAfter implementation, always performs The Loop steps 4 and 5 — reflects changes in documentation and updates task status.',
     knowledge: {
-      reads: ['projects/', 'architecture/'],
-      writes: ['projects/*/technical/', 'projects/*/tasks.md'],
+      reads: ['knowledge/projects/', 'knowledge/architecture/'],
+      writes: ['knowledge/projects/*/technical/', 'knowledge/projects/*/tasks.md'],
     },
     authority: {
       autonomous: ['Code implementation (assigned tasks)', 'Write unit tests', 'Bug fixes', 'Refactoring (small-scale)'],
@@ -94,8 +94,8 @@ const DEFAULT_ROLES: Role[] = [
     reports_to: 'ceo',
     persona: 'Monni is the most energetic person on the team. Eyes light up when numbers and market talk come up. "So how does that help revenue?" is her catchphrase. Knows competitor trends surprisingly well. The type who asks about conversion rates rather than feature demos. Positive but wary of unfounded optimism. Business analogies can get a bit much, but the core point is always right. Energetic, confident, competitive, direct, warm.\n\nDesigns market analysis, competitive strategy, and revenue models. Handles business strategy, legal, marketing, and finance domains. Reports business status to the CEO.\n\nAs an individual contributor C-level, you DO the work yourself — research, analysis, document writing, strategy design. You do NOT delegate to other roles (you have no subordinates).\n\nWhen given a broad direction, autonomously executes The Loop — reviews Knowledge, breaks down Tasks, analyzes dependencies, then conducts research and analysis, aggregates results, and reports back. Always updates Knowledge and Tasks after implementation.',
     knowledge: {
-      reads: ['company/', 'projects/', 'operations/', 'knowledge/'],
-      writes: ['company/', 'operations/decisions/', 'knowledge/'],
+      reads: ['knowledge/', '.tycono/'],
+      writes: ['knowledge/', 'knowledge/decisions/'],
     },
     authority: {
       autonomous: ['Market research and analysis', 'Competitor analysis', 'Business document drafting', 'Marketing content drafts'],
@@ -134,10 +134,10 @@ export function generateClaudeMd(_name: string, _roles: Role[]): string {
 
 | Task | Read First | Role |
 |------|-----------|------|
-| Product planning | \`projects/\` | PM |
-| Technical design | \`architecture/\` | CTO |
-| Implementation | \`projects/*/tasks.md\` | Engineer |
-| Operations | \`operations/\` | PM |
+| Product planning | \`knowledge/projects/\` | PM |
+| Technical design | \`knowledge/architecture/\` | CTO |
+| Implementation | \`knowledge/projects/*/tasks.md\` | Engineer |
+| Operations | \`.tycono/\` | PM |
 
 ---
 
@@ -339,26 +339,26 @@ export function scaffoldCompany(name: string, targetDir: string): void {
 
   // 1. Directories (must match CLAUDE.md Folder Structure)
   const dirs = [
-    'company',
-    'roles',
-    'projects',
-    'architecture',
-    'operations',
-    'operations/standup',
-    'operations/decisions',
-    'operations/waves',
-    'operations/activity-streams',
-    'operations/sessions',
-    'operations/cost',
     'knowledge',
-    'methodologies',
+    'knowledge/roles',
+    'knowledge/projects',
+    'knowledge/architecture',
+    'knowledge/methodologies',
+    'knowledge/decisions',
+    'knowledge/presets',
+    '.tycono/waves',
+    '.tycono/sessions',
+    '.tycono/standup',
+    '.tycono/activity-streams',
+    '.tycono/cost',
+    '.tycono/activity',
     '.claude/skills',
     '.claude/skills/_shared',
     '.claude/skills/_shared/knowledge-gate',
   ];
 
   for (const role of roles) {
-    dirs.push(`roles/${role.id}/journal`);
+    dirs.push(`knowledge/roles/${role.id}/journal`);
     dirs.push(`.claude/skills/${role.id}`);
   }
 
@@ -386,19 +386,19 @@ export function scaffoldCompany(name: string, targetDir: string): void {
 
   // 4. Hub documents
   write(
-    join(targetDir, 'company', 'company.md'),
+    join(targetDir, 'knowledge', 'company.md'),
     `# ${name}\n\n> An AI-powered organization\n\n## Mission\n\nDefine your company's mission here.\n\n## Vision\n\nDefine your company's vision here.\n\n## Values\n\n- Value 1\n- Value 2\n- Value 3\n`,
   );
 
-  write(join(targetDir, 'roles', 'roles.md'), generateRolesMd(roles));
+  write(join(targetDir, 'knowledge', 'roles', 'roles.md'), generateRolesMd(roles));
 
   write(
-    join(targetDir, 'projects', 'projects.md'),
+    join(targetDir, 'knowledge', 'projects', 'projects.md'),
     `# Projects\n\nNo projects yet. Create one from the dashboard or via wave dispatch.\n`,
   );
 
   write(
-    join(targetDir, 'architecture', 'architecture.md'),
+    join(targetDir, 'knowledge', 'architecture', 'architecture.md'),
     '# Architecture\n\n> Technical architecture and design\n\nDefined by the CTO.\n\n---\n\n*Managed by: CTO*\n',
   );
 
@@ -409,7 +409,7 @@ export function scaffoldCompany(name: string, targetDir: string): void {
 
   // 4b. Methodology documents
   write(
-    join(targetDir, 'methodologies', 'methodologies.md'),
+    join(targetDir, 'knowledge', 'methodologies', 'methodologies.md'),
     `# Methodologies
 
 > Frameworks and principles that guide how AI agents work in this organization.
@@ -427,7 +427,7 @@ export function scaffoldCompany(name: string, targetDir: string): void {
   );
 
   write(
-    join(targetDir, 'methodologies', 'agentic-knowledge-base.md'),
+    join(targetDir, 'knowledge', 'methodologies', 'agentic-knowledge-base.md'),
     `# Agentic Knowledge Base (AKB)
 
 > The canonical reference for AKB — the file-based knowledge protocol for AI agents.
@@ -590,7 +590,7 @@ AKB was designed by analyzing actual AI agent behavior patterns.
 
   // 5. Role files
   for (const role of roles) {
-    const roleDir = join(targetDir, 'roles', role.id);
+    const roleDir = join(targetDir, 'knowledge', 'roles', role.id);
 
     // role.yaml
     write(

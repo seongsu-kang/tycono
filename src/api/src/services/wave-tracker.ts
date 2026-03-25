@@ -13,7 +13,7 @@ import { type WaveRoleStatus, eventTypeToMessageStatus } from '../../../shared/t
 /* ─── Find wave file ──────────────────────── */
 
 export function findWaveFile(waveId: string): string | null {
-  const wavesDir = path.join(COMPANY_ROOT, 'operations', 'waves');
+  const wavesDir = path.join(COMPANY_ROOT, '.tycono', 'waves');
   if (!fs.existsSync(wavesDir)) return null;
 
   const direct = path.join(wavesDir, `${waveId}.json`);
@@ -159,7 +159,7 @@ export function updateFollowUpInWave(waveId: string, sessionId: string, roleId: 
   }
 }
 
-/* ─── Save completed wave to operations/waves/ ── */
+/* ─── Save completed wave to .tycono/waves/ ── */
 
 /**
  * Auto-save a completed wave to disk.
@@ -178,7 +178,7 @@ export function saveCompletedWave(waveId: string, directive: string): { ok: bool
     // Scan activity-streams for ALL sessions belonging to this wave.
     // Wave sessions share a traceId chain: CEO → C-Level → subordinates.
     // We find the CEO session (waveId timestamp embedded in its ID), then follow dispatch:start events.
-    const streamsDir = path.join(COMPANY_ROOT, 'operations', 'activity-streams');
+    const streamsDir = path.join(COMPANY_ROOT, '.tycono', 'activity-streams');
     if (fs.existsSync(streamsDir)) {
       // Find all activity stream files and check if they belong to this wave
       const waveTimestamp = waveId.replace('wave-', '');
@@ -260,7 +260,7 @@ export function saveCompletedWave(waveId: string, directive: string): { ok: bool
       rolesData.push({ roleId, roleName, sessionId: sid, status, events, childSessions });
     }
 
-    const wavesDir = path.join(COMPANY_ROOT, 'operations', 'waves');
+    const wavesDir = path.join(COMPANY_ROOT, '.tycono', 'waves');
     if (!fs.existsSync(wavesDir)) {
       fs.mkdirSync(wavesDir, { recursive: true });
     }
@@ -325,7 +325,7 @@ export function saveCompletedWave(waveId: string, directive: string): { ok: bool
     if (existingPreset) waveJson.preset = existingPreset;
     fs.writeFileSync(jsonPath, JSON.stringify(waveJson, null, 2), 'utf-8');
 
-    const relativePath = `operations/waves/${baseName}.json`;
+    const relativePath = `.tycono/waves/${baseName}.json`;
     console.log(`[WaveTracker] Wave saved: ${relativePath} (${rolesData.length} roles)`);
 
     // Earn coins for wave completion (non-critical)

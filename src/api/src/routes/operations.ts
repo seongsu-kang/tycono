@@ -11,12 +11,12 @@ export const operationsRouter = Router();
 // --- Standups ---
 operationsRouter.get('/standups', (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const files = listFiles('operations/standup');
+    const files = listFiles('.tycono/standup');
     const standups = files
       .filter(f => f.endsWith('.md'))
       .map(f => {
         const date = path.basename(f, '.md');
-        const content = readFile(`operations/standup/${f}`);
+        const content = readFile(`.tycono/standup/${f}`);
         return { date, content };
       })
       .sort((a, b) => b.date.localeCompare(a.date));
@@ -30,7 +30,7 @@ operationsRouter.get('/standups', (_req: Request, res: Response, next: NextFunct
 operationsRouter.get('/standups/:date', (req: Request, res: Response, next: NextFunction) => {
   try {
     const { date } = req.params;
-    const filePath = `operations/standup/${date}.md`;
+    const filePath = `.tycono/standup/${date}.md`;
     if (!fileExists(filePath)) {
       res.status(404).json({ error: `Standup not found: ${date}` });
       return;
@@ -45,12 +45,12 @@ operationsRouter.get('/standups/:date', (req: Request, res: Response, next: Next
 // --- Waves (JSON-only) ---
 operationsRouter.get('/waves', (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const files = listFiles('operations/waves', '*.json');
+    const files = listFiles('.tycono/waves', '*.json');
     const waves = files
       .map(f => {
         const id = path.basename(f, '.json');
         try {
-          const data = JSON.parse(readFile(`operations/waves/${f}`));
+          const data = JSON.parse(readFile(`.tycono/waves/${f}`));
           const roles = data.roles ?? [];
           const hasRunning = roles.some((r: { status?: string }) => r.status && isMessageActive(r.status as MessageStatus));
           return {
@@ -78,7 +78,7 @@ operationsRouter.get('/waves', (_req: Request, res: Response, next: NextFunction
 operationsRouter.get('/waves/:id', (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const jsonPath = `operations/waves/${id}.json`;
+    const jsonPath = `.tycono/waves/${id}.json`;
 
     if (!fileExists(jsonPath)) {
       res.status(404).json({ error: `Wave not found: ${id}` });
@@ -96,7 +96,7 @@ operationsRouter.get('/waves/:id', (req: Request, res: Response, next: NextFunct
 operationsRouter.patch('/waves/:id', (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const jsonPath = `operations/waves/${id}.json`;
+    const jsonPath = `.tycono/waves/${id}.json`;
 
     if (!fileExists(jsonPath)) {
       res.status(404).json({ error: `Wave not found: ${id}` });
@@ -119,12 +119,12 @@ operationsRouter.patch('/waves/:id', (req: Request, res: Response, next: NextFun
 // --- Decisions ---
 operationsRouter.get('/decisions', (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const files = listFiles('operations/decisions');
+    const files = listFiles('knowledge/decisions');
     const decisions = files
       .filter(f => f.endsWith('.md'))
       .map(f => {
         const id = path.basename(f, '.md');
-        const content = readFile(`operations/decisions/${f}`);
+        const content = readFile(`knowledge/decisions/${f}`);
         const firstLine = content.split('\n').find(l => l.startsWith('# '));
         const title = firstLine ? firstLine.replace(/^#\s+/, '') : id;
         const kv = extractBoldKeyValues(content);
@@ -146,7 +146,7 @@ operationsRouter.put('/decisions/:id', (req: Request, res: Response, next: NextF
       res.status(400).json({ error: 'content (string) is required' });
       return;
     }
-    const filePath = `operations/decisions/${id}.md`;
+    const filePath = `knowledge/decisions/${id}.md`;
     const absPath = path.resolve(COMPANY_ROOT, filePath);
     // Ensure parent directory exists
     fs.mkdirSync(path.dirname(absPath), { recursive: true });
@@ -165,7 +165,7 @@ operationsRouter.put('/decisions/:id', (req: Request, res: Response, next: NextF
 operationsRouter.delete('/decisions/:id', (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const filePath = `operations/decisions/${id}.md`;
+    const filePath = `knowledge/decisions/${id}.md`;
     const absPath = path.resolve(COMPANY_ROOT, filePath);
     if (!fs.existsSync(absPath)) {
       res.status(404).json({ error: `Decision not found: ${id}` });

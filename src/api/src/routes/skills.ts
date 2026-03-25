@@ -226,7 +226,7 @@ skillsRouter.post('/role/:roleId', (req: Request, res: Response, next: NextFunct
     }
 
     // Add to role.yaml skills array
-    const yamlPath = path.join(COMPANY_ROOT, 'roles', roleId, 'role.yaml');
+    const yamlPath = path.join(COMPANY_ROOT, 'knowledge', 'roles', roleId, 'role.yaml');
     if (!fs.existsSync(yamlPath)) {
       res.status(404).json({ error: `Role not found: ${roleId}` });
       return;
@@ -256,7 +256,7 @@ skillsRouter.delete('/role/:roleId/:skillId', (req: Request, res: Response, next
     const roleId = req.params.roleId as string;
     const skillId = req.params.skillId as string;
 
-    const yamlPath = path.join(COMPANY_ROOT, 'roles', roleId, 'role.yaml');
+    const yamlPath = path.join(COMPANY_ROOT, 'knowledge', 'roles', roleId, 'role.yaml');
     if (!fs.existsSync(yamlPath)) {
       res.status(404).json({ error: `Role not found: ${roleId}` });
       return;
@@ -307,7 +307,7 @@ function installSkillFromTemplate(skillId: string): void {
 }
 
 function getRoleSkills(roleId: string): string[] {
-  const yamlPath = path.join(COMPANY_ROOT, 'roles', roleId, 'role.yaml');
+  const yamlPath = path.join(COMPANY_ROOT, 'knowledge', 'roles', roleId, 'role.yaml');
   if (!fs.existsSync(yamlPath)) return [];
 
   const raw = YAML.parse(fs.readFileSync(yamlPath, 'utf-8')) as Record<string, unknown>;

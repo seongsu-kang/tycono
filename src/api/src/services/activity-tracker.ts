@@ -4,7 +4,7 @@ import { COMPANY_ROOT } from './file-reader.js';
 import type { RoleStatus } from '../../../shared/types.js';
 
 function activityDir(): string {
-  return path.join(COMPANY_ROOT, 'operations', 'activity');
+  return path.join(COMPANY_ROOT, '.tycono', 'activity');
 }
 
 export interface RoleActivity {

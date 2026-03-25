@@ -275,7 +275,7 @@ ${docList}
  * Returns concatenated content (capped at 2000 chars per doc).
  */
 function loadPresetKnowledge(companyRoot: string, presetId: string): string | null {
-  const knowledgeDir = path.join(companyRoot, 'company', 'presets', presetId, 'knowledge');
+  const knowledgeDir = path.join(companyRoot, 'knowledge', 'presets', presetId, 'knowledge');
   if (!fs.existsSync(knowledgeDir)) return null;
 
   const parts: string[] = [];
@@ -309,8 +309,8 @@ function loadCompanyRules(companyRoot: string): string | null {
     }
   }
 
-  // 3. Company info (company/company.md — user owned)
-  const companyMdPath = path.join(companyRoot, 'company', 'company.md');
+  // 3. Company info (knowledge/company.md — user owned)
+  const companyMdPath = path.join(companyRoot, 'knowledge', 'company.md');
   if (fs.existsSync(companyMdPath)) {
     const companyInfo = fs.readFileSync(companyMdPath, 'utf-8').trim();
     if (companyInfo) {
@@ -450,7 +450,7 @@ function loadHubSummaries(companyRoot: string, node: OrgNode): string | null {
 }
 
 function loadCeoDecisions(companyRoot: string): string | null {
-  const decisionsDir = path.join(companyRoot, 'operations', 'decisions');
+  const decisionsDir = path.join(companyRoot, 'knowledge', 'decisions');
   if (!fs.existsSync(decisionsDir)) return null;
 
   const files = fs.readdirSync(decisionsDir)
@@ -834,7 +834,7 @@ function buildKnowledgeManagementSection(roleId: string): string {
   const domainScope = roleId === 'cto'
     ? '`architecture/`, `knowledge/` (technical docs)'
     : roleId === 'cbo'
-      ? '`knowledge/`, `company/` (business docs)'
+      ? '`knowledge/` (business docs)'
       : '`knowledge/` (your domain docs)';
 
   return `# Knowledge Consistency Management (C-Level Responsibility)

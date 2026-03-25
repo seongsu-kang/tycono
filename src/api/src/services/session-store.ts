@@ -65,7 +65,7 @@ export interface Session {
 /* ─── Session directory ─────────────────── */
 
 function sessionsDir(): string {
-  return path.join(COMPANY_ROOT, 'operations', 'sessions');
+  return path.join(COMPANY_ROOT, '.tycono', 'sessions');
 }
 
 function ensureDir(): void {

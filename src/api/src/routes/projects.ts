@@ -7,7 +7,7 @@ export const projectsRouter = Router();
 // GET /api/projects — 프로젝트 목록
 projectsRouter.get('/', (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const content = readFile('projects/projects.md');
+    const content = readFile('knowledge/projects/projects.md');
     const rows = parseMarkdownTable(content);
 
     const projects = rows.map(row => {
@@ -33,7 +33,7 @@ projectsRouter.get('/:id', (req: Request, res: Response, next: NextFunction) => 
     const { id } = req.params;
 
     // 기본 정보
-    const listContent = readFile('projects/projects.md');
+    const listContent = readFile('knowledge/projects/projects.md');
     const rows = parseMarkdownTable(listContent);
     const projectRow = rows.find(r => {
       const name = r.project ?? '';
@@ -56,13 +56,13 @@ projectsRouter.get('/:id', (req: Request, res: Response, next: NextFunction) => 
     };
 
     // PRD 읽기
-    const prdPath = `projects/${id}/prd.md`;
+    const prdPath = `knowledge/projects/${id}/prd.md`;
     if (fileExists(prdPath)) {
       project.prd = readFile(prdPath);
     }
 
     // Tasks 읽기
-    const tasksPath = `projects/${id}/tasks.md`;
+    const tasksPath = `knowledge/projects/${id}/tasks.md`;
     if (fileExists(tasksPath)) {
       const tasksContent = readFile(tasksPath);
       const taskRows = parseMarkdownTable(tasksContent);
