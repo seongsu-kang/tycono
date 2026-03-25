@@ -123,8 +123,7 @@ const PanelModeInner: React.FC<PanelModeProps> = ({
   useInput((input, key) => {
     if (key.escape) {
       if (docsPreview) { setDocsPreview(false); return; }
-      // Panel→Command mode switch handled by app.tsx global handler
-      return;
+      onEscape(); return;
     }
     if (input === 'h' || key.leftArrow) {
       const tabs: RightTab[] = ['stream', 'docs', 'info'];
