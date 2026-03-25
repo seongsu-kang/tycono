@@ -762,7 +762,7 @@ export const App: React.FC = () => {
           />
         </Box>
       )}
-      <Box display={mode === 'panel' ? 'none' : 'flex'} flexDirection="column">
+      {mode !== 'panel' && <Box flexDirection="column">
         <CommandMode
           eventLines={eventLines}
           systemMessages={systemMessages}
@@ -777,7 +777,7 @@ export const App: React.FC = () => {
           activeSessions={api.activeSessions}
           focusedWaveId={focusedWaveId}
         />
-      </Box>
+      </Box>}
       <StatusBar
         companyName={api.company?.name ?? 'Loading...'}
         waveIndex={focusedWaveIndex}
