@@ -667,21 +667,28 @@ export const App: React.FC = () => {
     }
   }, [execute, addSystemMessage, addSystemLines, focusedWaveId, focusedWaveIndex, derivedWaveStatus, api.sessions.length, activeCount, waves, api.activeSessions, api.portSummary, pendingPresetSelect, onWaveCreated]);
 
-  // Global key handler: Tab to toggle mode, Ctrl+C always exits
+  // Global key handler: Tab/Escape mode toggle + Ctrl+C
   useInput((input, key) => {
     if (key.ctrl && input === 'c') {
       exit();
       return;
     }
-    if (mode === 'command' && key.tab) {
-      process.stdout.write('\x1b[2J\x1b[H');
-      setMode('panel');
+    if (key.tab) {
+      if (mode === 'command') {
+        process.stdout.write('\x1b[2J\x1b[H');
+        setMode('panel');
+      }
+      return;
     }
-    // Esc in Command Mode → interrupt supervisor (like Claude Code)
-    // Only when actually streaming (not idle/done) — prevents spam on repeated Esc
-    if (mode === 'command' && key.escape && focusedWaveId
-        && (sse.streamStatus === 'streaming')) {
-      stopWave(focusedWaveId).catch(() => {});
+    if (key.escape) {
+      if (mode === 'panel') {
+        setMode('command');
+        return;
+      }
+      // Esc in Command Mode → interrupt supervisor (like Claude Code)
+      if (mode === 'command' && focusedWaveId && sse.streamStatus === 'streaming') {
+        stopWave(focusedWaveId).catch(() => {});
+      }
     }
   });
 
