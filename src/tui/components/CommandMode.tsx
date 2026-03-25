@@ -29,6 +29,7 @@ interface CommandModeProps {
   systemMessages: StreamLine[];
   userInputs: StreamLine[];
   committedRef: React.MutableRefObject<number>;
+  isActive: boolean; // false when Panel mode is showing (display:none)
   onUserInput: (line: StreamLine) => void;
   onSubmit: (input: string) => void;
   onQuickAction?: (action: string) => void;
@@ -297,6 +298,7 @@ export const CommandMode: React.FC<CommandModeProps> = ({
   systemMessages,
   userInputs,
   committedRef,
+  isActive,
   onUserInput,
   onSubmit,
   onQuickAction,
@@ -341,6 +343,9 @@ export const CommandMode: React.FC<CommandModeProps> = ({
 
   // Quick bar + autocomplete navigation
   useInput((ch, key) => {
+    // Don't handle input when hidden (Panel mode active) — prevents key event stealing
+    if (!isActive) return;
+
     // Autocomplete mode
     if (acVisible) {
       if (key.downArrow) {

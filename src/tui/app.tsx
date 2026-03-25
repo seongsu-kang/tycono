@@ -761,6 +761,7 @@ export const App: React.FC = () => {
           systemMessages={systemMessages}
           userInputs={userInputs}
           committedRef={committedRef}
+          isActive={mode !== 'panel'}
           onUserInput={(line) => setUserInputs(prev => [...prev.slice(-10), line])}
           onSubmit={handleCommandSubmit}
           onQuickAction={(action) => {
