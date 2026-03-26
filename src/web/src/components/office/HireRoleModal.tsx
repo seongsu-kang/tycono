@@ -29,7 +29,7 @@ function defaultsForLevel(level: CreateRoleInput['level']) {
     case 'c-level':
       return {
         authority: { autonomous: ['Strategic decisions within domain', 'Task delegation to reports'], needsApproval: ['Budget over $5K', 'External commitments'] },
-        knowledge: { reads: ['company/', 'operations/', 'projects/'], writes: ['operations/', 'knowledge/'] },
+        knowledge: { reads: ['company.md', 'projects/', 'architecture/'], writes: ['decisions/', 'knowledge/'] },
         reports: { daily: 'standup', weekly: 'summary' },
       };
     default:

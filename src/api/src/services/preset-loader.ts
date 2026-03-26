@@ -90,7 +90,7 @@ function loadPresetFromDir(presetDir: string): LoadedPreset | null {
 }
 
 /**
- * Load all presets from company/presets/ + auto-generated default.
+ * Load all presets from knowledge/presets/ + auto-generated default.
  * Returns [default, ...installed] — default is always first.
  */
 export function loadPresets(companyRoot: string): LoadedPreset[] {
@@ -112,7 +112,7 @@ export function loadPresets(companyRoot: string): LoadedPreset[] {
 
   presets.push(defaultPreset);
 
-  // 2. Installed presets from company/presets/{name}/preset.yaml
+  // 2. Installed presets from knowledge/presets/{name}/preset.yaml
   const presetsDir = path.join(companyRoot, PRESETS_DIR);
   if (fs.existsSync(presetsDir)) {
     const entries = fs.readdirSync(presetsDir, { withFileTypes: true });

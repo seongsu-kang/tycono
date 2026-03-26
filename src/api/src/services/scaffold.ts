@@ -326,13 +326,12 @@ export function scaffold(config: ScaffoldConfig): string[] {
     created.push(dir + '/');
   }
 
-  // Write CLAUDE.md — both root (interactive claude) and knowledge/ (claude -p agents)
+  // Write CLAUDE.md — knowledge/ only (AI agent's cwd)
   const claudeTmpl = loadTemplate('CLAUDE.md.tmpl');
   const pkgVersion = getPackageVersion();
   const claudeContent = claudeTmpl.replaceAll('{{VERSION}}', pkgVersion);
-  fs.writeFileSync(path.join(root, 'CLAUDE.md'), claudeContent);
   fs.writeFileSync(path.join(root, 'knowledge', 'CLAUDE.md'), claudeContent);
-  created.push('CLAUDE.md', 'knowledge/CLAUDE.md');
+  created.push('knowledge/CLAUDE.md');
 
   // Write .tycono/rules-version
   fs.writeFileSync(path.join(root, '.tycono', 'rules-version'), pkgVersion);

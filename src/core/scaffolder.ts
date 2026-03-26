@@ -366,8 +366,8 @@ export function scaffoldCompany(name: string, targetDir: string): void {
     mkdir(join(targetDir, d));
   }
 
-  // 2. CLAUDE.md (reusable generator — 100% Tycono managed)
-  write(join(targetDir, 'CLAUDE.md'), generateClaudeMd(name, roles));
+  // 2. CLAUDE.md — knowledge/ only (AI agent's cwd)
+  write(join(targetDir, 'knowledge', 'CLAUDE.md'), generateClaudeMd(name, roles));
 
   // 2b. .tycono/ config files
   mkdir(join(targetDir, '.tycono'));
