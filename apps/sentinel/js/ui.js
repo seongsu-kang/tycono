@@ -37,20 +37,20 @@
             if (this.game.isGameOver || this.game.isVictory) return;
 
             // 게임 보드 영역
-            if (pos.x < config.gameWidth && pos.y >= config.topBarHeight && pos.y < config.topBarHeight + config.gameHeight) {
-                this.handleGameBoardClick(pos.x, pos.y - config.topBarHeight);
+            if (pos.x < config.gameWidth && pos.y >= config.hudHeight && pos.y < config.hudHeight + config.gameHeight) {
+                this.handleGameBoardClick(pos.x, pos.y - config.hudHeight);
                 return;
             }
 
             // 사이드바 영역
-            if (pos.x >= config.gameWidth && pos.y >= config.topBarHeight && pos.y < config.topBarHeight + config.gameHeight) {
-                this.handleSidebarClick(pos.x - config.gameWidth, pos.y - config.topBarHeight);
+            if (pos.x >= config.gameWidth && pos.y >= config.hudHeight && pos.y < config.hudHeight + config.gameHeight) {
+                this.handleSidebarClick(pos.x - config.gameWidth, pos.y - config.hudHeight);
                 return;
             }
 
             // 하단 바 영역
-            if (pos.y >= config.topBarHeight + config.gameHeight) {
-                this.handleBottomBarClick(pos.x, pos.y - (config.topBarHeight + config.gameHeight));
+            if (pos.y >= config.hudHeight + config.gameHeight) {
+                this.handleBottomBarClick(pos.x, pos.y - (config.hudHeight + config.gameHeight));
                 return;
             }
         }
@@ -146,8 +146,8 @@
             const config = Sentinel.config;
 
             // 게임 보드 위에서 호버
-            if (pos.x < config.gameWidth && pos.y >= config.topBarHeight && pos.y < config.topBarHeight + config.gameHeight) {
-                const boardY = pos.y - config.topBarHeight;
+            if (pos.x < config.gameWidth && pos.y >= config.hudHeight && pos.y < config.hudHeight + config.gameHeight) {
+                const boardY = pos.y - config.hudHeight;
                 const grid = Sentinel.utils.worldToGrid(pos.x, boardY);
 
                 // 타워 배치 모드일 때만 호버 표시

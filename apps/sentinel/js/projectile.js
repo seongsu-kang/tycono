@@ -16,9 +16,32 @@
             this.color = tower.data.projectileColor;
             this.active = true;
             this.size = 4;
+
+            // Sniper instant 레이저
+            this.instant = tower.stats.instant || false;
+            if (this.instant) {
+                this.onHit();
+                this.active = false;
+
+                // 레이저 이펙트
+                if (Sentinel.game) {
+                    Sentinel.game.effects.push({
+                        type: 'laser',
+                        x1: tower.x,
+                        y1: tower.y,
+                        x2: target.x,
+                        y2: target.y,
+                        color: this.color,
+                        duration: 0.15,
+                        elapsed: 0
+                    });
+                }
+            }
         }
 
         update(dt) {
+            if (this.instant) return; // instant는 update 불필요
+
             if (!this.target || !this.target.active) {
                 this.active = false;
                 return;
@@ -63,7 +86,7 @@
                     if (enemy !== this.target && enemy.active) {
                         const dist = Sentinel.utils.distance(this.x, this.y, enemy.x, enemy.y);
                         if (dist <= this.splash) {
-                            enemy.takeDamage(this.damage * 0.5); // 스플래시는 50% 대미지
+                            enemy.takeDamage(this.damage); // 스플래시 100% 대미지
                         }
                     }
                 });
@@ -83,7 +106,7 @@
         }
 
         render(ctx) {
-            if (!this.active) return;
+            if (!this.active || this.instant) return; // instant는 render 불필요
 
             // 투사체 그리기 (원)
             Sentinel.utils.fillCircle(ctx, this.x, this.y, this.size, this.color);

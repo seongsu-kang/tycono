@@ -114,13 +114,14 @@
             const cellSize = Sentinel.config.cellSize;
             const w = Sentinel.config.gridWidth;
             const h = Sentinel.config.gridHeight;
+            const colors = Sentinel.colors;
 
             // 그리드 배경
-            ctx.fillStyle = '#1a1a1a';
+            ctx.fillStyle = colors.darkSlate;
             ctx.fillRect(0, 0, w * cellSize, h * cellSize);
 
             // 그리드 라인
-            ctx.strokeStyle = '#333333';
+            ctx.strokeStyle = colors.steelBlue;
             ctx.lineWidth = 1;
             for (let y = 0; y <= h; y++) {
                 ctx.beginPath();
@@ -136,7 +137,7 @@
             }
 
             // 경로 렌더링
-            ctx.fillStyle = '#654321';
+            ctx.fillStyle = colors.pathStone;
             for (let y = 0; y < h; y++) {
                 for (let x = 0; x < w; x++) {
                     if (this.grid[y][x] === 1) {
@@ -148,11 +149,11 @@
             // 시작점/끝점 표시
             if (this.startPos) {
                 const start = Sentinel.utils.gridToWorld(this.startPos.gridX, this.startPos.gridY);
-                Sentinel.utils.fillCircle(ctx, start.x, start.y, 10, '#00ff00');
+                Sentinel.utils.fillCircle(ctx, start.x, start.y, 10, colors.electricGreen);
             }
             if (this.endPos) {
                 const end = Sentinel.utils.gridToWorld(this.endPos.gridX, this.endPos.gridY);
-                Sentinel.utils.fillCircle(ctx, end.x, end.y, 10, '#ff0000');
+                Sentinel.utils.fillCircle(ctx, end.x, end.y, 10, colors.dangerRed);
             }
         }
     }

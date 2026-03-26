@@ -7,58 +7,58 @@
     Sentinel.data.towers = {
         arrow: {
             name: "Arrow Tower",
-            description: "기본 원거리 타워",
+            description: "빠른 공격 속도, 저렴",
             baseCost: 50,
             levels: [
-                { damage: 10, range: 120, fireRate: 0.8, splash: 0, upgradeCost: 30 },  // Lv1
-                { damage: 18, range: 140, fireRate: 0.6, splash: 0, upgradeCost: 60 },  // Lv2
-                { damage: 30, range: 160, fireRate: 0.4, splash: 0, upgradeCost: 0 }    // Lv3 (max)
+                { damage: 8, range: 144, fireRate: 0.5, splash: 0, upgradeCost: 40 },  // Lv1 (2.0 atk/s)
+                { damage: 12, range: 144, fireRate: 0.454, splash: 0, upgradeCost: 60 },  // Lv2 (2.2 atk/s)
+                { damage: 18, range: 192, fireRate: 0.4, splash: 0, upgradeCost: 0 }    // Lv3 (2.5 atk/s)
             ],
-            color: '#4CAF50',
+            color: '#00ff99',
             projectileSpeed: 300,
-            projectileColor: '#8BC34A'
+            projectileColor: '#ccffee'
         },
 
         cannon: {
             name: "Cannon Tower",
-            description: "강력한 범위 공격",
+            description: "범위 공격, 다수 처리",
             baseCost: 150,
             levels: [
-                { damage: 25, range: 100, fireRate: 1.5, splash: 40, upgradeCost: 100 },
-                { damage: 45, range: 120, fireRate: 1.2, splash: 50, upgradeCost: 150 },
-                { damage: 80, range: 140, fireRate: 1.0, splash: 60, upgradeCost: 0 }
+                { damage: 25, range: 144, fireRate: 1.25, splash: 72, upgradeCost: 120 },  // Lv1 (0.8 atk/s)
+                { damage: 40, range: 144, fireRate: 1.111, splash: 72, upgradeCost: 180 },  // Lv2 (0.9 atk/s)
+                { damage: 60, range: 192, fireRate: 1.0, splash: 96, upgradeCost: 0 }    // Lv3 (1.0 atk/s)
             ],
-            color: '#FF5722',
+            color: '#ff6600',
             projectileSpeed: 200,
-            projectileColor: '#FF9800'
+            projectileColor: '#ffcc99'
         },
 
         slow: {
             name: "Slow Tower",
-            description: "적 속도 감소",
+            description: "적 속도 감소, 지원형",
             baseCost: 100,
             levels: [
-                { damage: 5, range: 110, fireRate: 1.0, splash: 0, slow: 0.5, slowDuration: 2, upgradeCost: 70 },
-                { damage: 8, range: 130, fireRate: 0.8, splash: 0, slow: 0.4, slowDuration: 3, upgradeCost: 100 },
-                { damage: 12, range: 150, fireRate: 0.6, splash: 0, slow: 0.3, slowDuration: 4, upgradeCost: 0 }
+                { damage: 5, range: 144, fireRate: 0.667, splash: 0, slow: 0.5, slowDuration: 2, upgradeCost: 80 },  // Lv1 (1.5 atk/s)
+                { damage: 8, range: 144, fireRate: 0.556, splash: 0, slow: 0.6, slowDuration: 2.5, upgradeCost: 120 },  // Lv2 (1.8 atk/s)
+                { damage: 12, range: 192, fireRate: 0.5, splash: 0, slow: 0.7, slowDuration: 3, upgradeCost: 0 }    // Lv3 (2.0 atk/s)
             ],
-            color: '#2196F3',
+            color: '#00aaff',
             projectileSpeed: 350,
-            projectileColor: '#64B5F6'
+            projectileColor: '#99ddff'
         },
 
         sniper: {
             name: "Sniper Tower",
-            description: "극도로 긴 사거리와 높은 대미지",
+            description: "긴 사거리, 높은 대미지",
             baseCost: 200,
             levels: [
-                { damage: 50, range: 200, fireRate: 2.0, splash: 0, upgradeCost: 150 },
-                { damage: 90, range: 240, fireRate: 1.7, splash: 0, upgradeCost: 200 },
-                { damage: 150, range: 280, fireRate: 1.4, splash: 0, upgradeCost: 0 }
+                { damage: 50, range: 240, fireRate: 1.667, splash: 0, upgradeCost: 160, instant: true },  // Lv1 (0.6 atk/s)
+                { damage: 80, range: 288, fireRate: 1.429, splash: 0, upgradeCost: 240, instant: true },  // Lv2 (0.7 atk/s)
+                { damage: 120, range: 336, fireRate: 1.25, splash: 0, upgradeCost: 0, instant: true }    // Lv3 (0.8 atk/s)
             ],
-            color: '#9C27B0',
-            projectileSpeed: 500,
-            projectileColor: '#BA68C8'
+            color: '#ff00aa',
+            projectileSpeed: 9999,  // instant (레이저)
+            projectileColor: '#ffccee'
         }
     };
 

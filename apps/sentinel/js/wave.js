@@ -67,6 +67,21 @@
                     const spawn = this.spawnQueue.shift();
                     const enemy = new Sentinel.classes.Enemy(spawn.type);
                     Sentinel.game.enemies.push(enemy);
+
+                    // Boss 등장 경고
+                    if (spawn.type === 'boss') {
+                        const config = Sentinel.config;
+                        const colors = Sentinel.colors;
+                        Sentinel.game.effects.push({
+                            type: 'boss-warning',
+                            x: config.gameWidth / 2,
+                            y: config.hudHeight + config.gameHeight / 2,
+                            color: colors.dangerRed,
+                            text: 'BOSS INCOMING!',
+                            duration: 2.0,
+                            elapsed: 0
+                        });
+                    }
                 }
 
                 // 웨이브 완료 체크
@@ -78,7 +93,10 @@
         }
 
         isWaveComplete() {
-            return !this.isSpawning && Sentinel.game.enemies.every(e => !e.active);
+            // 첫 웨이브 시작 전에는 완료가 아님
+            if (this.currentWave === 0) return false;
+            // 적이 모두 제거되면 배열에서 splice로 삭제되므로 length 체크가 더 명확
+            return !this.isSpawning && Sentinel.game.enemies.length === 0;
         }
 
         getCurrentWaveBonus() {

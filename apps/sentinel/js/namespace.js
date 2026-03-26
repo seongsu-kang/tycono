@@ -15,11 +15,41 @@
             gameWidth: 720,
             gameHeight: 480,
             sidebarWidth: 240,
-            topBarHeight: 40,
-            bottomBarHeight: 60,
-            initialGold: 200,
-            initialLives: 20,
+            hudHeight: 60,
+            initialGold: 150,
+            initialLives: 15,
             totalWaves: 10
+        },
+
+        // 색상 팔레트
+        colors: {
+            // 배경
+            deepNight: '#0a0e1a',
+            darkSlate: '#1a2332',
+            steelBlue: '#2a3342',
+            slateGray: '#3a4352',
+            pathStone: '#3d4a5c',
+
+            // 강조
+            neonCyan: '#00d9ff',
+            electricGreen: '#00ff99',
+            neonPink: '#ff00aa',
+            warningOrange: '#ffaa00',
+            dangerRed: '#ff4444',
+            goldYellow: '#ffdd00',
+
+            // 타워
+            towerArrow: '#00ff99',
+            towerCannon: '#ff6600',
+            towerSlow: '#00aaff',
+            towerSniper: '#ff00aa',
+
+            // 적
+            enemyScout: '#aa5555',
+            enemySoldier: '#5555aa',
+            enemyTank: '#55aa55',
+            enemyHealer: '#aaaa55',
+            enemyBoss: '#aa55aa'
         },
 
         // 게임 데이터 (towers.js, enemies.js, waves.js에서 채움)

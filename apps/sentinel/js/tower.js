@@ -45,6 +45,25 @@
         }
 
         findTarget(enemies) {
+            // Sniper는 HP가 가장 높은 적 타겟
+            if (this.type === 'sniper') {
+                let highestHp = null;
+                let maxHp = -1;
+
+                for (const enemy of enemies) {
+                    if (!enemy.active) continue;
+
+                    const dist = Sentinel.utils.distance(this.x, this.y, enemy.x, enemy.y);
+                    if (dist <= this.stats.range && enemy.hp > maxHp) {
+                        highestHp = enemy;
+                        maxHp = enemy.hp;
+                    }
+                }
+
+                return highestHp;
+            }
+
+            // 다른 타워: 가장 앞에 있는 적 우선
             let closest = null;
             let minDist = Infinity;
 
@@ -104,7 +123,7 @@
             for (let i = 0; i < this.level - 1; i++) {
                 total += this.data.levels[i].upgradeCost;
             }
-            return Math.floor(total * 0.6); // 60% 환불
+            return Math.floor(total * 0.75); // 75% 환불
         }
 
         render(ctx) {

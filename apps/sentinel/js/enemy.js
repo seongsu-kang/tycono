@@ -32,6 +32,11 @@
                 this.healTimer = 0;
             }
 
+            // Boss rage 전용
+            if (type === 'boss') {
+                this.isRaging = false;
+            }
+
             // 애니메이션
             this.animTime = Math.random() * Math.PI * 2;
         }
@@ -129,10 +134,34 @@
         }
 
         takeDamage(amount) {
+            // armor 적용 (Tank, Boss)
+            if (this.data.armor) {
+                amount *= (1 - this.data.armor);
+            }
+
             this.hp -= amount;
             if (this.hp <= 0) {
                 this.hp = 0;
                 this.active = false;
+            }
+
+            // Boss rage 체크 (HP 50% 이하)
+            if (this.type === 'boss' && this.data.rage && !this.isRaging && this.hp <= this.maxHp * 0.5) {
+                this.isRaging = true;
+                this.baseSpeed = this.data.speed * this.data.rageSpeedMultiplier;
+
+                // 분노 이펙트 (선택)
+                if (Sentinel.game) {
+                    Sentinel.game.effects.push({
+                        type: 'rage',
+                        x: this.x,
+                        y: this.y,
+                        color: '#ff0000',
+                        text: 'RAGE!',
+                        duration: 1.5,
+                        elapsed: 0
+                    });
+                }
             }
         }
 

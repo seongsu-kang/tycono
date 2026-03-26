@@ -126,21 +126,21 @@
         render() {
             const ctx = this.ctx;
             const config = Sentinel.config;
+            const colors = Sentinel.colors;
 
             // 배경
-            ctx.fillStyle = '#0a0a0a';
+            ctx.fillStyle = colors.deepNight;
             ctx.fillRect(0, 0, config.canvasWidth, config.canvasHeight);
 
             // 게임 보드
             ctx.save();
-            ctx.translate(0, config.topBarHeight);
+            ctx.translate(0, config.hudHeight);
             this.renderGameBoard();
             ctx.restore();
 
             // UI
             this.renderTopBar();
             this.renderSidebar();
-            this.renderBottomBar();
 
             // 게임 오버/승리 화면
             if (this.isGameOver) {
@@ -200,6 +200,7 @@
 
         renderEffects() {
             const ctx = this.ctx;
+            const colors = Sentinel.colors;
 
             this.effects.forEach(effect => {
                 if (effect.type === 'explosion' || effect.type === 'heal') {
@@ -207,18 +208,49 @@
                     const radius = effect.radius * (0.5 + progress * 0.5);
                     const alpha = effect.alpha * (1 - progress);
                     Sentinel.utils.drawCircle(ctx, effect.x, effect.y, radius, effect.color, alpha);
+                } else if (effect.type === 'laser') {
+                    // Sniper 레이저
+                    const progress = effect.elapsed / effect.duration;
+                    const alpha = 1 - progress;
+                    ctx.save();
+                    ctx.globalAlpha = alpha;
+                    ctx.strokeStyle = effect.color;
+                    ctx.lineWidth = 3;
+                    ctx.shadowColor = effect.color;
+                    ctx.shadowBlur = 10;
+                    ctx.beginPath();
+                    ctx.moveTo(effect.x1, effect.y1);
+                    ctx.lineTo(effect.x2, effect.y2);
+                    ctx.stroke();
+                    ctx.restore();
+                } else if (effect.type === 'rage' || effect.type === 'boss-warning') {
+                    // Boss 분노 / 경고 텍스트
+                    const progress = effect.elapsed / effect.duration;
+                    const alpha = 1 - progress;
+                    const y = effect.y - progress * 30;
+                    ctx.save();
+                    ctx.globalAlpha = alpha;
+                    ctx.font = 'bold 20px Arial';
+                    ctx.fillStyle = effect.color;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.shadowColor = effect.color;
+                    ctx.shadowBlur = 15;
+                    ctx.fillText(effect.text, effect.x, y);
+                    ctx.restore();
                 }
             });
         }
 
         renderGoldPopups() {
             const ctx = this.ctx;
+            const colors = Sentinel.colors;
 
             this.goldPopups.forEach(popup => {
                 ctx.save();
                 ctx.globalAlpha = popup.alpha;
                 ctx.font = 'bold 14px Arial';
-                ctx.fillStyle = '#FFD700';
+                ctx.fillStyle = colors.goldYellow;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText('+' + popup.amount, popup.x, popup.y);
@@ -229,46 +261,48 @@
         renderTopBar() {
             const ctx = this.ctx;
             const config = Sentinel.config;
+            const colors = Sentinel.colors;
 
-            ctx.fillStyle = '#1a1a1a';
-            ctx.fillRect(0, 0, config.canvasWidth, config.topBarHeight);
+            ctx.fillStyle = colors.steelBlue;
+            ctx.fillRect(0, 0, config.canvasWidth, config.hudHeight);
 
-            ctx.strokeStyle = '#333333';
+            ctx.strokeStyle = colors.slateGray;
             ctx.lineWidth = 2;
-            ctx.strokeRect(0, 0, config.canvasWidth, config.topBarHeight);
+            ctx.strokeRect(0, 0, config.canvasWidth, config.hudHeight);
 
-            const y = config.topBarHeight / 2;
+            const y = config.hudHeight / 2;
 
             // 웨이브
             let waveText = 'Wave ' + Sentinel.managers.wave.currentWave + '/' + config.totalWaves;
             if (Sentinel.managers.wave.isCountingDown) {
                 waveText += ' (Next in ' + Math.ceil(Sentinel.managers.wave.countdown) + 's)';
             }
-            Sentinel.utils.drawText(ctx, waveText, 120, y, 16, '#ffffff');
+            Sentinel.utils.drawText(ctx, waveText, 100, y, 18, colors.neonCyan);
 
             // 생명
             const livesText = '♥ ' + this.lives;
-            Sentinel.utils.drawText(ctx, livesText, 380, y, 16, '#ff6b6b');
+            Sentinel.utils.drawText(ctx, livesText, 400, y, 18, colors.electricGreen);
 
             // 골드
             const goldText = '💰 ' + this.gold;
-            Sentinel.utils.drawText(ctx, goldText, 580, y, 16, '#FFD700');
+            Sentinel.utils.drawText(ctx, goldText, 780, y, 18, colors.goldYellow);
         }
 
         renderSidebar() {
             const ctx = this.ctx;
             const config = Sentinel.config;
+            const colors = Sentinel.colors;
             const x = config.gameWidth;
-            const y = config.topBarHeight;
+            const y = config.hudHeight;
             const w = config.sidebarWidth;
             const h = config.gameHeight;
 
             // 배경
-            ctx.fillStyle = '#1a1a1a';
+            ctx.fillStyle = colors.deepNight;
             ctx.fillRect(x, y, w, h);
 
-            ctx.strokeStyle = '#333333';
-            ctx.lineWidth = 2;
+            ctx.strokeStyle = colors.steelBlue;
+            ctx.lineWidth = 1;
             ctx.strokeRect(x, y, w, h);
 
             // 타워 선택 UI
@@ -276,18 +310,18 @@
             towers.forEach((type, index) => {
                 const data = Sentinel.data.towers[type];
                 const btnX = x + 20;
-                const btnY = y + 60 + index * 90;
+                const btnY = y + 20 + index * 80;
                 const btnW = w - 40;
-                const btnH = 70;
+                const btnH = 65;
 
                 const canAfford = this.gold >= data.baseCost;
                 const isSelected = this.selectedTowerType === type;
 
                 // 버튼 배경
-                ctx.fillStyle = isSelected ? '#444444' : '#2a2a2a';
+                ctx.fillStyle = isSelected ? colors.slateGray : colors.steelBlue;
                 ctx.fillRect(btnX, btnY, btnW, btnH);
 
-                ctx.strokeStyle = isSelected ? data.color : '#333333';
+                ctx.strokeStyle = isSelected ? data.color : colors.slateGray;
                 ctx.lineWidth = isSelected ? 3 : 2;
                 ctx.strokeRect(btnX, btnY, btnW, btnH);
 
@@ -320,7 +354,7 @@
                 ctx.font = '11px Arial';
                 ctx.fillText(data.description, btnX + 65, btnY + 30);
 
-                ctx.fillStyle = canAfford ? '#FFD700' : '#666666';
+                ctx.fillStyle = canAfford ? colors.goldYellow : '#666666';
                 ctx.font = 'bold 13px Arial';
                 ctx.fillText(data.baseCost + 'G', btnX + 65, btnY + 48);
             });
@@ -330,10 +364,10 @@
                 const tower = this.selectedTower;
                 const infoY = y + h - 180;
 
-                ctx.fillStyle = '#333333';
+                ctx.fillStyle = colors.steelBlue;
                 ctx.fillRect(x + 10, infoY, w - 20, 170);
 
-                ctx.strokeStyle = '#555555';
+                ctx.strokeStyle = colors.slateGray;
                 ctx.lineWidth = 2;
                 ctx.strokeRect(x + 10, infoY, w - 20, 170);
 
@@ -355,10 +389,10 @@
                     const canUpgrade = this.gold >= upgCost;
                     const btnY = infoY + 110;
 
-                    ctx.fillStyle = canUpgrade ? '#4CAF50' : '#555555';
+                    ctx.fillStyle = canUpgrade ? colors.electricGreen : '#555555';
                     ctx.fillRect(x + 20, btnY, w - 40, 25);
 
-                    ctx.strokeStyle = canUpgrade ? '#66BB6A' : '#666666';
+                    ctx.strokeStyle = canUpgrade ? colors.electricGreen : '#666666';
                     ctx.lineWidth = 2;
                     ctx.strokeRect(x + 20, btnY, w - 40, 25);
 
@@ -367,7 +401,7 @@
                     ctx.textAlign = 'center';
                     ctx.fillText('Upgrade (' + upgCost + 'G)', x + w / 2, btnY + 13);
                 } else {
-                    ctx.fillStyle = '#FFD700';
+                    ctx.fillStyle = colors.goldYellow;
                     ctx.font = 'bold 12px Arial';
                     ctx.textAlign = 'center';
                     ctx.fillText('MAX LEVEL', x + w / 2, infoY + 120);
@@ -377,10 +411,10 @@
                 const sellValue = tower.getSellValue();
                 const sellBtnY = infoY + 142;
 
-                ctx.fillStyle = '#d32f2f';
+                ctx.fillStyle = colors.dangerRed;
                 ctx.fillRect(x + 20, sellBtnY, w - 40, 25);
 
-                ctx.strokeStyle = '#f44336';
+                ctx.strokeStyle = colors.dangerRed;
                 ctx.lineWidth = 2;
                 ctx.strokeRect(x + 20, sellBtnY, w - 40, 25);
 
