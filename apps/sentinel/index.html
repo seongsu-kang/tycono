@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinel - Tower Defense</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="gameContainer">
+        <h1>SENTINEL</h1>
+        <p class="subtitle">Tower Defense</p>
+
+        <canvas id="gameCanvas"></canvas>
+
+        <div class="info">
+            <p><strong>목표:</strong> 10개 웨이브를 막아내세요. 적이 끝점에 도달하면 생명이 감소합니다.</p>
+            <p><strong>조작:</strong> 사이드바에서 타워 선택 → 맵에 클릭해서 배치 → Start Wave로 웨이브 시작</p>
+            <p><strong>팁:</strong> 타워를 클릭하면 업그레이드/판매 가능. 우클릭으로 선택 취소.</p>
+            <div class="controls">
+                <span class="key">좌클릭: 배치/선택</span>
+                <span class="key">우클릭: 취소</span>
+                <span class="key">배속: 1x/2x/3x</span>
+                <span class="key">일시정지 가능</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script 로드 순서 중요 (의존성 관리) -->
+
+    <!-- 1. Namespace -->
+    <script src="js/namespace.js"></script>
+
+    <!-- 2. Data -->
+    <script src="data/towers.js"></script>
+    <script src="data/enemies.js"></script>
+    <script src="data/waves.js"></script>
+
+    <!-- 3. Utilities -->
+    <script src="js/utils.js"></script>
+
+    <!-- 4. Core Systems -->
+    <script src="js/path.js"></script>
+    <script src="js/audio.js"></script>
+
+    <!-- 5. Game Objects -->
+    <script src="js/projectile.js"></script>
+    <script src="js/enemy.js"></script>
+    <script src="js/tower.js"></script>
+
+    <!-- 6. Managers -->
+    <script src="js/wave.js"></script>
+    <script src="js/game.js"></script>
+    <script src="js/ui.js"></script>
+
+    <!-- 7. Entry Point -->
+    <script src="js/main.js"></script>
+</body>
+</html>
