@@ -18,6 +18,27 @@
                 this.handleRightClick(e);
             });
 
+            // Touch events (mobile support)
+            this.canvas.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                const touch = e.touches[0];
+                const mouseEvent = new MouseEvent('click', {
+                    clientX: touch.clientX,
+                    clientY: touch.clientY
+                });
+                this.handleClick(mouseEvent);
+            });
+
+            this.canvas.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                const touch = e.touches[0];
+                const mouseEvent = new MouseEvent('mousemove', {
+                    clientX: touch.clientX,
+                    clientY: touch.clientY
+                });
+                this.handleMouseMove(mouseEvent);
+            });
+
             console.log('[UIManager] Event listeners attached');
         }
 
@@ -78,9 +99,9 @@
             const towers = ['arrow', 'cannon', 'slow', 'sniper'];
             towers.forEach((type, index) => {
                 const btnX = 20;
-                const btnY = 60 + index * 90;
+                const btnY = 20 + index * 80;
                 const btnW = w - 40;
-                const btnH = 70;
+                const btnH = 65;
 
                 if (x >= btnX && x <= btnX + btnW && y >= btnY && y <= btnY + btnH) {
                     const data = Sentinel.data.towers[type];

@@ -141,6 +141,7 @@
             // UI
             this.renderTopBar();
             this.renderSidebar();
+            this.renderBottomBar();
 
             // 게임 오버/승리 화면
             if (this.isGameOver) {
@@ -428,7 +429,7 @@
         renderBottomBar() {
             const ctx = this.ctx;
             const config = Sentinel.config;
-            const y = config.topBarHeight + config.gameHeight;
+            const y = config.hudHeight + config.gameHeight;
 
             ctx.fillStyle = '#1a1a1a';
             ctx.fillRect(0, y, config.canvasWidth, config.bottomBarHeight);

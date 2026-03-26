@@ -11,13 +11,14 @@
             gridHeight: 10,
             cellSize: 48,
             canvasWidth: 960,
-            canvasHeight: 540,
+            canvasHeight: 590,
             gameWidth: 720,
             gameHeight: 480,
             sidebarWidth: 240,
             hudHeight: 60,
-            initialGold: 150,
-            initialLives: 15,
+            bottomBarHeight: 50,
+            initialGold: 250,
+            initialLives: 20,
             totalWaves: 10
         },
 

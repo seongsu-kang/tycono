@@ -9,6 +9,8 @@
             this.context = null;
             this.enabled = true;
             this.masterVolume = 0.3;
+            this.bgmOscillator = null;
+            this.bgmGain = null;
             this.init();
         }
 
@@ -82,6 +84,30 @@
             setTimeout(() => this.playTone(700, 0.2, 'sine', 0.35), 150);
             setTimeout(() => this.playTone(900, 0.2, 'sine', 0.3), 300);
             setTimeout(() => this.playTone(1200, 0.4, 'sine', 0.35), 450);
+        }
+
+        startBGM() {
+            if (!this.enabled || !this.context || this.bgmOscillator) return;
+
+            // 간단한 ambient BGM (저주파 드론)
+            this.bgmOscillator = this.context.createOscillator();
+            this.bgmGain = this.context.createGain();
+
+            this.bgmOscillator.type = 'sine';
+            this.bgmOscillator.frequency.value = 55; // Low A
+            this.bgmGain.gain.value = 0.05;
+
+            this.bgmOscillator.connect(this.bgmGain);
+            this.bgmGain.connect(this.context.destination);
+            this.bgmOscillator.start();
+        }
+
+        stopBGM() {
+            if (this.bgmOscillator) {
+                this.bgmOscillator.stop();
+                this.bgmOscillator = null;
+                this.bgmGain = null;
+            }
         }
 
         toggle() {
