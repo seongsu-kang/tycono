@@ -52,11 +52,13 @@
 
         startGame(difficultyKey) {
             this.difficulty = Sentinel.difficulties[difficultyKey];
+            this.currentDifficultyKey = difficultyKey;
             this.gold = this.difficulty.gold;
             this.lives = this.difficulty.lives;
             this.speed = 1;
             this.speedIndex = 0;
             this.isPaused = false;
+            this.playTime = 0;
             this.towers = [];
             this.enemies = [];
             this.projectiles = [];
@@ -69,6 +71,9 @@
             this.waveCompleteMsg = null;
             this.bossWarning = null;
             this.stats = { enemiesKilled: 0, towersBuilt: 0, totalDamage: 0, goldEarned: 0 };
+            this.pauseMenuBtns = null;
+            this.gameOverBtns = null;
+            this.victoryBtns = null;
 
             Sentinel.managers.path = new Sentinel.classes.PathManager();
             Sentinel.managers.wave = new Sentinel.classes.WaveManager();
@@ -101,6 +106,7 @@
             if (this.gameState !== 'playing') return;
             if (this.isPaused) return;
 
+            this.playTime += dt;
             Sentinel.managers.wave.update(dt);
 
             // 카운트다운 비주얼
@@ -210,6 +216,9 @@
             if (this.waveCompleteMsg) this.renderWaveCompleteMessage();
             if (this.bossWarning) this.renderBossWarningOverlay();
 
+            // 일시정지 메뉴
+            if (this.isPaused && this.gameState === 'playing') this.renderPauseMenu();
+
             // 게임 오버/승리
             if (this.gameState === 'gameover') this.renderGameOver();
             else if (this.gameState === 'victory') this.renderVictory();
@@ -243,11 +252,11 @@
             }
             ctx.restore();
 
-            // 타이틀 (Orbitron)
+            // 타이틀
             ctx.save();
             ctx.shadowColor = colors.neonCyan;
             ctx.shadowBlur = 20;
-            ctx.font = 'bold 48px Orbitron, Arial';
+            ctx.font = 'bold 48px Arial, Helvetica, sans-serif';
             ctx.fillStyle = colors.neonCyan;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
@@ -841,7 +850,7 @@
             ctx.globalAlpha = alpha;
 
             ctx.fillStyle = '#00ff99';
-            ctx.font = 'bold 24px Orbitron, Arial';
+            ctx.font = 'bold 24px Arial, Helvetica, sans-serif';
             ctx.textAlign = 'center';
             ctx.shadowColor = '#00ff99';
             ctx.shadowBlur = 15;
@@ -872,13 +881,84 @@
             ctx.save();
             ctx.globalAlpha = alpha;
             ctx.fillStyle = '#ff4444';
-            ctx.font = 'bold 36px Orbitron, Arial';
+            ctx.font = 'bold 36px Arial, Helvetica, sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.shadowColor = '#ff4444';
             ctx.shadowBlur = 20;
             ctx.fillText('BOSS INCOMING!', config.gameWidth / 2, config.hudHeight + config.gameHeight / 2);
             ctx.restore();
+        }
+
+        // ═══════════════════════════════════════════════════
+        // 일시정지 메뉴
+        // ═══════════════════════════════════════════════════
+
+        renderPauseMenu() {
+            var ctx = this.ctx;
+            var config = Sentinel.config;
+            var cx = config.canvasWidth / 2;
+            var cy = config.canvasHeight / 2;
+
+            // 오버레이
+            ctx.fillStyle = '#00000099';
+            ctx.fillRect(0, 0, config.canvasWidth, config.canvasHeight);
+
+            // 모달
+            var mw = 300, mh = 280;
+            var mx = cx - mw / 2, my = cy - mh / 2;
+
+            ctx.fillStyle = '#1a2332';
+            this.roundRect(ctx, mx, my, mw, mh, 12);
+            ctx.fill();
+            ctx.strokeStyle = '#00d9ff';
+            ctx.lineWidth = 2;
+            this.roundRect(ctx, mx, my, mw, mh, 12);
+            ctx.stroke();
+
+            // 제목
+            ctx.fillStyle = '#00d9ff';
+            ctx.font = 'bold 28px Arial, Helvetica, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('PAUSED', cx, my + 50);
+
+            // 버튼 3개
+            var btnW = 200, btnH = 45;
+            var btnX = cx - btnW / 2;
+            var btnStartY = my + 90;
+            var btnGap = 12;
+
+            var buttons = [
+                { label: '\u25B6  Resume', border: '#00ff99', key: 'resume' },
+                { label: '\u21BB  Restart', border: '#ffaa00', key: 'restart' },
+                { label: '\u2302  Main Menu', border: '#3a4352', key: 'mainMenu' }
+            ];
+
+            this.pauseMenuBtns = {};
+
+            for (var i = 0; i < buttons.length; i++) {
+                var btn = buttons[i];
+                var btnY = btnStartY + i * (btnH + btnGap);
+
+                ctx.fillStyle = '#1a2332';
+                this.roundRect(ctx, btnX, btnY, btnW, btnH, 8);
+                ctx.fill();
+                ctx.strokeStyle = btn.border;
+                ctx.lineWidth = 2;
+                this.roundRect(ctx, btnX, btnY, btnW, btnH, 8);
+                ctx.stroke();
+
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 16px Arial, Helvetica, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(btn.label, cx, btnY + btnH / 2);
+
+                this.pauseMenuBtns[btn.key] = { x: btnX, y: btnY, w: btnW, h: btnH };
+            }
+
+            ctx.textBaseline = 'alphabetic';
         }
 
         // ═══════════════════════════════════════════════════
@@ -894,7 +974,7 @@
             ctx.fillStyle = '#000000cc';
             ctx.fillRect(0, 0, config.canvasWidth, config.canvasHeight);
 
-            var mw = 400, mh = 300;
+            var mw = 400, mh = 340;
             var mx = (config.canvasWidth - mw) / 2, my = (config.canvasHeight - mh) / 2;
 
             ctx.fillStyle = colors.darkSlate;
@@ -905,22 +985,55 @@
 
             ctx.save();
             ctx.fillStyle = colors.dangerRed;
-            ctx.font = 'bold 32px Orbitron, Arial';
+            ctx.font = 'bold 32px Arial, Helvetica, sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
             ctx.shadowColor = colors.dangerRed;
             ctx.shadowBlur = 10;
-            ctx.fillText('Game Over!', cx, my + 40);
+            ctx.fillText('Game Over!', cx, my + 30);
             ctx.restore();
 
             ctx.fillStyle = '#ffffff';
             ctx.font = '16px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('\uC6E8\uC774\uBE0C: ' + Sentinel.managers.wave.currentWave + '/10', cx, my + 100);
-            ctx.fillText('\uC801 \uCC98\uCE58: ' + this.stats.enemiesKilled + '\uB9C8\uB9AC', cx, my + 130);
-            ctx.fillText('\uD0C0\uC6CC \uAC74\uC124: ' + this.stats.towersBuilt + '\uAC1C', cx, my + 160);
+            ctx.fillText('\uC6E8\uC774\uBE0C: ' + Sentinel.managers.wave.currentWave + '/10', cx, my + 90);
+            ctx.fillText('\uC801 \uCC98\uCE58: ' + this.stats.enemiesKilled + '\uB9C8\uB9AC', cx, my + 120);
+            ctx.fillText('\uD0C0\uC6CC \uAC74\uC124: ' + this.stats.towersBuilt + '\uAC1C', cx, my + 150);
 
-            this.renderPlayAgainButton(ctx, cx, my + mh - 60);
+            // Retry + Main Menu 버튼 2개
+            var btnW = 200, btnH = 45, btnGap = 12;
+            var btnX = cx - btnW / 2;
+            var retryY = my + mh - 120;
+            var menuY = retryY + btnH + btnGap;
+
+            // Retry 버튼
+            ctx.fillStyle = '#1a2a3a';
+            this.roundRect(ctx, btnX, retryY, btnW, btnH, 8);
+            ctx.fill();
+            ctx.strokeStyle = '#00d9ff';
+            ctx.lineWidth = 2;
+            this.roundRect(ctx, btnX, retryY, btnW, btnH, 8);
+            ctx.stroke();
+            ctx.save();
+            ctx.shadowColor = '#00d9ff';
+            ctx.shadowBlur = 10;
+            Sentinel.utils.drawText(ctx, '\u21BB  Retry', cx, retryY + btnH / 2, 16, '#ffffff');
+            ctx.restore();
+
+            // Main Menu 버튼
+            ctx.fillStyle = '#1a2a3a';
+            this.roundRect(ctx, btnX, menuY, btnW, btnH, 8);
+            ctx.fill();
+            ctx.strokeStyle = '#3a4352';
+            ctx.lineWidth = 2;
+            this.roundRect(ctx, btnX, menuY, btnW, btnH, 8);
+            ctx.stroke();
+            Sentinel.utils.drawText(ctx, '\u2302  Main Menu', cx, menuY + btnH / 2, 16, '#ffffff');
+
+            this.gameOverBtns = {
+                retry: { x: btnX, y: retryY, w: btnW, h: btnH },
+                mainMenu: { x: btnX, y: menuY, w: btnW, h: btnH }
+            };
         }
 
         renderVictory() {
@@ -932,7 +1045,7 @@
             ctx.fillStyle = '#000000cc';
             ctx.fillRect(0, 0, config.canvasWidth, config.canvasHeight);
 
-            var mw = 400, mh = 300;
+            var mw = 400, mh = 420;
             var mx = (config.canvasWidth - mw) / 2, my = (config.canvasHeight - mh) / 2;
 
             ctx.fillStyle = colors.darkSlate;
@@ -943,23 +1056,77 @@
 
             ctx.save();
             ctx.fillStyle = colors.electricGreen;
-            ctx.font = 'bold 32px Orbitron, Arial';
+            ctx.font = 'bold 32px Arial, Helvetica, sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
             ctx.shadowColor = colors.electricGreen;
             ctx.shadowBlur = 10;
-            ctx.fillText('Victory!', cx, my + 40);
+            ctx.fillText('Victory!', cx, my + 25);
             ctx.restore();
 
-            ctx.fillStyle = '#ffffff';
+            // Final Score
+            var finalScore = this.lives * 100 + this.stats.goldEarned;
+            ctx.save();
+            ctx.fillStyle = '#ffdd00';
+            ctx.font = 'bold 24px Arial, Helvetica, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.shadowColor = '#ffdd00';
+            ctx.shadowBlur = 8;
+            ctx.fillText('Final Score: ' + finalScore, cx, my + 80);
+            ctx.restore();
+
+            // Play Time (MM:SS)
+            var totalSec = Math.floor(this.playTime);
+            var mins = Math.floor(totalSec / 60);
+            var secs = totalSec % 60;
+            var timeStr = (mins < 10 ? '0' : '') + mins + ':' + (secs < 10 ? '0' : '') + secs;
+            ctx.fillStyle = '#aaaaaa';
             ctx.font = '16px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('10\uC6E8\uC774\uBE0C \uC644\uB8CC!', cx, my + 100);
-            ctx.fillText('\uC801 \uCC98\uCE58: ' + this.stats.enemiesKilled + '\uB9C8\uB9AC', cx, my + 130);
-            ctx.fillText('\uD0C0\uC6CC \uAC74\uC124: ' + this.stats.towersBuilt + '\uAC1C', cx, my + 160);
-            ctx.fillText('\uB0A8\uC740 \uC0DD\uBA85: ' + this.lives, cx, my + 190);
+            ctx.fillText('Play Time: ' + timeStr, cx, my + 115);
 
-            this.renderPlayAgainButton(ctx, cx, my + mh - 60);
+            // 스탯
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '16px Arial';
+            ctx.fillText('10\uC6E8\uC774\uBE0C \uC644\uB8CC!', cx, my + 150);
+            ctx.fillText('\uC801 \uCC98\uCE58: ' + this.stats.enemiesKilled + '\uB9C8\uB9AC', cx, my + 180);
+            ctx.fillText('\uD0C0\uC6CC \uAC74\uC124: ' + this.stats.towersBuilt + '\uAC1C', cx, my + 210);
+            ctx.fillText('\uB0A8\uC740 \uC0DD\uBA85: ' + this.lives, cx, my + 240);
+
+            // Play Again + Main Menu 버튼 2개
+            var btnW = 200, btnH = 45, btnGap = 12;
+            var btnX = cx - btnW / 2;
+            var playAgainY = my + mh - 120;
+            var menuY = playAgainY + btnH + btnGap;
+
+            // Play Again 버튼
+            ctx.fillStyle = '#1a2a3a';
+            this.roundRect(ctx, btnX, playAgainY, btnW, btnH, 8);
+            ctx.fill();
+            ctx.strokeStyle = '#00d9ff';
+            ctx.lineWidth = 2;
+            this.roundRect(ctx, btnX, playAgainY, btnW, btnH, 8);
+            ctx.stroke();
+            ctx.save();
+            ctx.shadowColor = '#00d9ff';
+            ctx.shadowBlur = 10;
+            Sentinel.utils.drawText(ctx, '\u21BB  Play Again', cx, playAgainY + btnH / 2, 16, '#ffffff');
+            ctx.restore();
+
+            // Main Menu 버튼
+            ctx.fillStyle = '#1a2a3a';
+            this.roundRect(ctx, btnX, menuY, btnW, btnH, 8);
+            ctx.fill();
+            ctx.strokeStyle = '#3a4352';
+            ctx.lineWidth = 2;
+            this.roundRect(ctx, btnX, menuY, btnW, btnH, 8);
+            ctx.stroke();
+            Sentinel.utils.drawText(ctx, '\u2302  Main Menu', cx, menuY + btnH / 2, 16, '#ffffff');
+
+            this.victoryBtns = {
+                playAgain: { x: btnX, y: playAgainY, w: btnW, h: btnH },
+                mainMenu: { x: btnX, y: menuY, w: btnW, h: btnH }
+            };
         }
 
         renderPlayAgainButton(ctx, cx, btnCenterY) {

@@ -40,6 +40,15 @@
                 });
                 self.handleMouseMove(mouseEvent);
             });
+
+            // ESC 키 → 일시정지 토글
+            window.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    if (self.game.gameState === 'playing') {
+                        self.game.togglePause();
+                    }
+                }
+            });
         }
 
         getCanvasPos(e) {
@@ -76,14 +85,45 @@
                 return;
             }
 
-            // 게임 오버 / 승리 — Play Again
-            if (game.gameState === 'gameover' || game.gameState === 'victory') {
-                if (game.playAgainBtn) {
-                    var btn = game.playAgainBtn;
-                    if (pos.x >= btn.x && pos.x <= btn.x + btn.w &&
-                        pos.y >= btn.y && pos.y <= btn.y + btn.h) {
+            // 일시정지 메뉴 클릭
+            if (game.isPaused && game.gameState === 'playing' && game.pauseMenuBtns) {
+                var pmBtns = game.pauseMenuBtns;
+                if (pmBtns.resume && this.hitTest(pos, pmBtns.resume)) {
+                    game.togglePause();
+                    Sentinel.managers.audio.playTone(400, 0.05, 'sine', 0.15);
+                } else if (pmBtns.restart && this.hitTest(pos, pmBtns.restart)) {
+                    game.startGame(game.currentDifficultyKey);
+                    Sentinel.managers.audio.playWaveStart();
+                } else if (pmBtns.mainMenu && this.hitTest(pos, pmBtns.mainMenu)) {
+                    game.restart();
+                    Sentinel.managers.audio.playTone(300, 0.05, 'sine', 0.15);
+                }
+                return;
+            }
+
+            // 게임 오버
+            if (game.gameState === 'gameover') {
+                if (game.gameOverBtns) {
+                    if (this.hitTest(pos, game.gameOverBtns.retry)) {
+                        game.startGame(game.currentDifficultyKey);
+                        Sentinel.managers.audio.playWaveStart();
+                    } else if (this.hitTest(pos, game.gameOverBtns.mainMenu)) {
                         game.restart();
-                        Sentinel.managers.audio.playTowerPlace();
+                        Sentinel.managers.audio.playTone(300, 0.05, 'sine', 0.15);
+                    }
+                }
+                return;
+            }
+
+            // 승리
+            if (game.gameState === 'victory') {
+                if (game.victoryBtns) {
+                    if (this.hitTest(pos, game.victoryBtns.playAgain)) {
+                        game.startGame(game.currentDifficultyKey);
+                        Sentinel.managers.audio.playWaveStart();
+                    } else if (this.hitTest(pos, game.victoryBtns.mainMenu)) {
+                        game.restart();
+                        Sentinel.managers.audio.playTone(300, 0.05, 'sine', 0.15);
                     }
                 }
                 return;
@@ -265,6 +305,11 @@
             this.game.selectedTowerType = null;
             this.game.selectedTower = null;
             this.game.towers.forEach(function(t) { t.selected = false; });
+        }
+
+        hitTest(pos, rect) {
+            return pos.x >= rect.x && pos.x <= rect.x + rect.w &&
+                   pos.y >= rect.y && pos.y <= rect.y + rect.h;
         }
 
         getTowerAt(x, y) {
