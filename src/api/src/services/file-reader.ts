@@ -5,10 +5,10 @@ import { glob } from 'glob';
 
 function findCompanyRoot(): string {
   if (process.env.COMPANY_ROOT) return process.env.COMPANY_ROOT;
-  // Walk up from cwd to find CLAUDE.md (repo root marker)
+  // Walk up from cwd to find knowledge/CLAUDE.md (project root marker)
   let dir = process.cwd();
   while (dir !== path.dirname(dir)) {
-    if (fs.existsSync(path.join(dir, 'CLAUDE.md'))) return dir;
+    if (fs.existsSync(path.join(dir, 'knowledge', 'CLAUDE.md'))) return dir;
     dir = path.dirname(dir);
   }
   return process.cwd();

@@ -262,13 +262,13 @@ function renderTemplate(template: string, vars: Record<string, string>): string 
 }
 
 /**
- * Copy a skill from templates/skills/ to the target AKB's .claude/skills/_shared/
+ * Copy a skill from templates/skills/ to the target AKB's knowledge/.claude/skills/_shared/
  */
 function installSkill(root: string, skillId: string): boolean {
   const srcDir = path.join(TEMPLATES_DIR, 'skills', skillId);
   if (!fs.existsSync(srcDir)) return false;
 
-  const destDir = path.join(root, '.claude', 'skills', '_shared', skillId);
+  const destDir = path.join(root, 'knowledge', '.claude', 'skills', '_shared', skillId);
   fs.mkdirSync(destDir, { recursive: true });
 
   // Copy SKILL.md
@@ -317,9 +317,11 @@ export function scaffold(config: ScaffoldConfig): string[] {
     'knowledge', 'knowledge/roles', 'knowledge/projects',
     'knowledge/architecture', 'knowledge/methodologies',
     'knowledge/decisions', 'knowledge/presets',
+    'knowledge/.claude/skills', 'knowledge/.claude/skills/_shared',
     '.tycono/waves', '.tycono/sessions', '.tycono/standup',
     '.tycono/activity-streams', '.tycono/cost', '.tycono/activity',
-    '.claude/skills', '.claude/skills/_shared', '.tycono',
+    '.tycono',
+    'apps',
   ];
   for (const dir of dirs) {
     fs.mkdirSync(path.join(root, dir), { recursive: true });
@@ -364,7 +366,7 @@ export function scaffold(config: ScaffoldConfig): string[] {
 
   // Write .tycono/config.json (engine + API key + codeRoot)
   const slug = config.companyName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'my-company';
-  const defaultCodeRoot = path.join(path.dirname(root), `${slug}-code`);
+  const defaultCodeRoot = path.join(root, 'apps');
   if (config.apiKey) {
     const companyConfig: CompanyConfig = {
       engine: 'direct-api',
@@ -483,7 +485,7 @@ export function scaffold(config: ScaffoldConfig): string[] {
 
 function createRole(root: string, role: TeamRole): void {
   const roleDir = path.join(root, 'knowledge', 'roles', role.id);
-  const skillDir = path.join(root, '.claude', 'skills', role.id);
+  const skillDir = path.join(root, 'knowledge', '.claude', 'skills', role.id);
   const journalDir = path.join(roleDir, 'journal');
 
   fs.mkdirSync(roleDir, { recursive: true });

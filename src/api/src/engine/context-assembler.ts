@@ -401,7 +401,7 @@ domain: tech|market|process|strategy|financial|competitor|general
 }
 
 function loadSkillMd(companyRoot: string, roleId: string): string | null {
-  const skillPath = path.join(companyRoot, '.claude', 'skills', roleId, 'SKILL.md');
+  const skillPath = path.join(companyRoot, 'knowledge', '.claude', 'skills', roleId, 'SKILL.md');
   if (!fs.existsSync(skillPath)) return null;
   return fs.readFileSync(skillPath, 'utf-8');
 }
@@ -411,7 +411,7 @@ function loadSharedSkills(companyRoot: string, skillIds?: string[]): string | nu
 
   const sections: string[] = [];
   for (const skillId of skillIds) {
-    const skillPath = path.join(companyRoot, '.claude', 'skills', '_shared', skillId, 'SKILL.md');
+    const skillPath = path.join(companyRoot, 'knowledge', '.claude', 'skills', '_shared', skillId, 'SKILL.md');
     if (!fs.existsSync(skillPath)) continue;
     const content = fs.readFileSync(skillPath, 'utf-8');
     // Extract just the key sections (skip frontmatter)

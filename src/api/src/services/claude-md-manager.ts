@@ -47,7 +47,7 @@ function generateClaudeMd(version: string): string {
 export function ensureClaudeMd(companyRoot: string): void {
   const tyconoDir = path.join(companyRoot, '.tycono');
   const rulesVersionPath = path.join(tyconoDir, 'rules-version');
-  const claudeMdPath = path.join(companyRoot, 'CLAUDE.md');
+  const claudeMdPath = path.join(companyRoot, 'knowledge', 'CLAUDE.md');
   const knowledgeDir = path.join(companyRoot, 'knowledge');
   const customRulesPath = path.join(knowledgeDir, 'custom-rules.md');
   const backupPath = path.join(tyconoDir, 'CLAUDE.md.backup');

@@ -353,14 +353,14 @@ export function scaffoldCompany(name: string, targetDir: string): void {
     '.tycono/activity-streams',
     '.tycono/cost',
     '.tycono/activity',
-    '.claude/skills',
-    '.claude/skills/_shared',
-    '.claude/skills/_shared/knowledge-gate',
+    'knowledge/.claude/skills',
+    'knowledge/.claude/skills/_shared',
+    'knowledge/.claude/skills/_shared/knowledge-gate',
   ];
 
   for (const role of roles) {
     dirs.push(`knowledge/roles/${role.id}/journal`);
-    dirs.push(`.claude/skills/${role.id}`);
+    dirs.push(`knowledge/.claude/skills/${role.id}`);
   }
 
   for (const d of dirs) {
@@ -607,14 +607,14 @@ AKB was designed by analyzing actual AI agent behavior patterns.
 
     // SKILL.md (reusable generator)
     write(
-      join(targetDir, '.claude', 'skills', role.id, 'SKILL.md'),
+      join(targetDir, 'knowledge', '.claude', 'skills', role.id, 'SKILL.md'),
       generateSkillMd(role, name),
     );
   }
 
   // 6. Shared skills
   write(
-    join(targetDir, '.claude', 'skills', '_shared', 'knowledge-gate', 'SKILL.md'),
+    join(targetDir, 'knowledge', '.claude', 'skills', '_shared', 'knowledge-gate', 'SKILL.md'),
     KNOWLEDGE_GATE_SKILL,
   );
 }

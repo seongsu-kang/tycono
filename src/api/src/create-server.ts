@@ -94,7 +94,7 @@ function handleImportKnowledge(req: http.IncomingMessage, res: http.ServerRespon
 
 export function createHttpServer(): http.Server {
   // Only cleanup/ensure if a company is already initialized (avoid creating dirs in CWD)
-  if (COMPANY_ROOT && fs.existsSync(path.join(COMPANY_ROOT, 'CLAUDE.md'))) {
+  if (COMPANY_ROOT && fs.existsSync(path.join(COMPANY_ROOT, 'knowledge', 'CLAUDE.md'))) {
     ensureClaudeMd(COMPANY_ROOT);
   }
 
