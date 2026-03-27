@@ -1,4 +1,4 @@
-// Sentinel - UI Event Handler
+// Sentinel - UI Event Handler (폴리싱 버전)
 
 (function() {
     'use strict';
@@ -11,51 +11,77 @@
         }
 
         init() {
-            this.canvas.addEventListener('click', (e) => this.handleClick(e));
-            this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
-            this.canvas.addEventListener('contextmenu', (e) => {
+            var self = this;
+
+            this.canvas.addEventListener('click', function(e) { self.handleClick(e); });
+            this.canvas.addEventListener('mousemove', function(e) { self.handleMouseMove(e); });
+            this.canvas.addEventListener('contextmenu', function(e) {
                 e.preventDefault();
-                this.handleRightClick(e);
+                self.handleRightClick(e);
             });
 
-            // Touch events (mobile support)
-            this.canvas.addEventListener('touchstart', (e) => {
+            // Touch events
+            this.canvas.addEventListener('touchstart', function(e) {
                 e.preventDefault();
-                const touch = e.touches[0];
-                const mouseEvent = new MouseEvent('click', {
+                var touch = e.touches[0];
+                var mouseEvent = new MouseEvent('click', {
                     clientX: touch.clientX,
                     clientY: touch.clientY
                 });
-                this.handleClick(mouseEvent);
+                self.handleClick(mouseEvent);
             });
 
-            this.canvas.addEventListener('touchmove', (e) => {
+            this.canvas.addEventListener('touchmove', function(e) {
                 e.preventDefault();
-                const touch = e.touches[0];
-                const mouseEvent = new MouseEvent('mousemove', {
+                var touch = e.touches[0];
+                var mouseEvent = new MouseEvent('mousemove', {
                     clientX: touch.clientX,
                     clientY: touch.clientY
                 });
-                this.handleMouseMove(mouseEvent);
+                self.handleMouseMove(mouseEvent);
             });
-
-            console.log('[UIManager] Event listeners attached');
         }
 
-        getMousePos(e) {
-            const rect = this.canvas.getBoundingClientRect();
+        getCanvasPos(e) {
+            var rect = this.canvas.getBoundingClientRect();
+            var scaleX = this.canvas.width / rect.width;
+            var scaleY = this.canvas.height / rect.height;
             return {
-                x: e.clientX - rect.left,
-                y: e.clientY - rect.top
+                x: (e.clientX - rect.left) * scaleX,
+                y: (e.clientY - rect.top) * scaleY
             };
         }
 
         handleClick(e) {
-            const pos = this.getMousePos(e);
-            const config = Sentinel.config;
+            var pos = this.getCanvasPos(e);
+            var game = this.game;
+            var config = Sentinel.config;
 
-            // 게임 오버/승리 시 클릭 무시
-            if (this.game.isGameOver || this.game.isVictory) return;
+            // 메인 메뉴
+            if (game.gameState === 'menu') {
+                if (game.menuPlayBtn) {
+                    var btn = game.menuPlayBtn;
+                    if (pos.x >= btn.x && pos.x <= btn.x + btn.w &&
+                        pos.y >= btn.y && pos.y <= btn.y + btn.h) {
+                        game.startGame();
+                        Sentinel.managers.audio.playWaveStart();
+                    }
+                }
+                return;
+            }
+
+            // 게임 오버 / 승리 — Play Again
+            if (game.gameState === 'gameover' || game.gameState === 'victory') {
+                if (game.playAgainBtn) {
+                    var btn = game.playAgainBtn;
+                    if (pos.x >= btn.x && pos.x <= btn.x + btn.w &&
+                        pos.y >= btn.y && pos.y <= btn.y + btn.h) {
+                        game.restart();
+                        Sentinel.managers.audio.playTowerPlace();
+                    }
+                }
+                return;
+            }
 
             // 게임 보드 영역
             if (pos.x < config.gameWidth && pos.y >= config.hudHeight && pos.y < config.hudHeight + config.gameHeight) {
@@ -77,129 +103,143 @@
         }
 
         handleGameBoardClick(x, y) {
-            // 타워 선택 타입이 있으면 배치
-            if (this.game.selectedTowerType) {
-                const grid = Sentinel.utils.worldToGrid(x, y);
-                if (this.game.placeTower(this.game.selectedTowerType, grid.gridX, grid.gridY)) {
-                    // 배치 성공
-                    this.game.selectedTowerType = null;
+            var game = this.game;
+
+            if (game.selectedTowerType) {
+                var grid = Sentinel.utils.worldToGrid(x, y);
+                if (game.placeTower(game.selectedTowerType, grid.gridX, grid.gridY)) {
+                    // 배치 성공 — 같은 타워 타입 유지 (연속 배치)
+                    var data = Sentinel.data.towers[game.selectedTowerType];
+                    if (game.gold < data.baseCost) {
+                        game.selectedTowerType = null;
+                    }
                 }
             } else {
-                // 타워 선택
-                const clicked = this.getTowerAt(x, y);
-                this.game.selectTower(clicked);
+                var clicked = this.getTowerAt(x, y);
+                game.selectTower(clicked);
             }
         }
 
         handleSidebarClick(x, y) {
-            const config = Sentinel.config;
-            const w = config.sidebarWidth;
+            var game = this.game;
+            var config = Sentinel.config;
+            var w = config.sidebarWidth;
 
             // 타워 선택 버튼
-            const towers = ['arrow', 'cannon', 'slow', 'sniper'];
-            towers.forEach((type, index) => {
-                const btnX = 20;
-                const btnY = 20 + index * 80;
-                const btnW = w - 40;
-                const btnH = 65;
+            var towers = ['arrow', 'cannon', 'slow', 'sniper'];
+            for (var i = 0; i < towers.length; i++) {
+                var type = towers[i];
+                var btnX = 10;
+                var btnY = 10 + i * 75;
+                var btnW = w - 20;
+                var btnH = 65;
 
                 if (x >= btnX && x <= btnX + btnW && y >= btnY && y <= btnY + btnH) {
-                    const data = Sentinel.data.towers[type];
-                    if (this.game.gold >= data.baseCost) {
-                        this.game.selectedTowerType = type;
-                        this.game.selectTower(null);
-                        console.log('[UI] Tower type selected:', type);
+                    var data = Sentinel.data.towers[type];
+                    if (game.gold >= data.baseCost) {
+                        game.selectedTowerType = type;
+                        game.selectedTower = null; game.towers.forEach(function(t) { t.selected = false; });
+                        Sentinel.managers.audio.playTone(400, 0.05, 'sine', 0.15);
                     }
+                    return;
                 }
-            });
+            }
 
             // 선택된 타워 업그레이드/판매 버튼
-            if (this.game.selectedTower) {
-                const tower = this.game.selectedTower;
-                const infoY = config.gameHeight - 180;
+            if (game.selectedTower) {
+                var tower = game.selectedTower;
+                var infoY = config.gameHeight - 180;
 
-                // 업그레이드 버튼
                 if (tower.level < 3) {
-                    const upgBtnY = infoY + 110;
+                    var upgBtnY = infoY + 105;
                     if (x >= 20 && x <= w - 20 && y >= upgBtnY && y <= upgBtnY + 25) {
-                        this.game.upgradeTower(tower);
+                        game.upgradeTower(tower);
+                        return;
                     }
                 }
 
-                // 판매 버튼
-                const sellBtnY = infoY + 142;
+                var sellBtnY = infoY + 140;
                 if (x >= 20 && x <= w - 20 && y >= sellBtnY && y <= sellBtnY + 25) {
-                    this.game.sellTower(tower);
+                    game.sellTower(tower);
+                    return;
                 }
             }
         }
 
         handleBottomBarClick(x, y) {
-            const btnY = 15;
-            const btnH = 30;
+            var game = this.game;
+            var btnY = 10;
+            var btnH = 30;
 
-            // Start Wave 버튼
-            if (x >= 20 && x <= 140 && y >= btnY && y <= btnY + btnH) {
-                if (!Sentinel.managers.wave.isSpawning && !Sentinel.managers.wave.isCountingDown) {
-                    this.game.startNextWave();
+            // Start Wave
+            if (x >= 20 && x <= 150 && y >= btnY && y <= btnY + btnH) {
+                var wm = Sentinel.managers.wave;
+                if (!wm.isSpawning && !wm.isCountingDown && wm.hasNextWave()) {
+                    game.startNextWave();
+                }
+                return;
+            }
+
+            // Pause
+            if (x >= 170 && x <= 270 && y >= btnY && y <= btnY + btnH) {
+                game.togglePause();
+                return;
+            }
+
+            // Speed (1x, 2x, 3x)
+            for (var i = 0; i < 3; i++) {
+                var btnX = 290 + i * 55;
+                if (x >= btnX && x <= btnX + 50 && y >= btnY && y <= btnY + btnH) {
+                    game.speed = i + 1;
+                    return;
                 }
             }
 
-            // Pause 버튼
-            const pauseBtnX = 160;
-            if (x >= pauseBtnX && x <= pauseBtnX + 100 && y >= btnY && y <= btnY + btnH) {
-                this.game.togglePause();
-            }
-
-            // Speed 버튼
-            const speedBtnX = 280;
-            for (let i = 0; i < 3; i++) {
-                const btnX = speedBtnX + i * 60;
-                if (x >= btnX && x <= btnX + 55 && y >= btnY && y <= btnY + btnH) {
-                    this.game.speed = i + 1;
-                    console.log('[UI] Speed changed to', this.game.speed + 'x');
-                }
+            // 뮤트
+            if (x >= 480 && x <= 520 && y >= btnY && y <= btnY + btnH) {
+                Sentinel.managers.audio.toggle();
+                return;
             }
         }
 
         handleMouseMove(e) {
-            const pos = this.getMousePos(e);
-            const config = Sentinel.config;
+            var pos = this.getCanvasPos(e);
+            var config = Sentinel.config;
+            var game = this.game;
 
-            // 게임 보드 위에서 호버
+            if (game.gameState !== 'playing') {
+                game.hoverCell = null;
+                return;
+            }
+
             if (pos.x < config.gameWidth && pos.y >= config.hudHeight && pos.y < config.hudHeight + config.gameHeight) {
-                const boardY = pos.y - config.hudHeight;
-                const grid = Sentinel.utils.worldToGrid(pos.x, boardY);
-
-                // 타워 배치 모드일 때만 호버 표시
-                if (this.game.selectedTowerType) {
-                    this.game.hoverCell = grid;
+                var boardY = pos.y - config.hudHeight;
+                var grid = Sentinel.utils.worldToGrid(pos.x, boardY);
+                if (game.selectedTowerType) {
+                    game.hoverCell = grid;
                 } else {
-                    this.game.hoverCell = null;
+                    game.hoverCell = null;
                 }
             } else {
-                this.game.hoverCell = null;
+                game.hoverCell = null;
             }
         }
 
         handleRightClick(e) {
-            // 우클릭으로 선택/배치 모드 취소
             this.game.selectedTowerType = null;
-            this.game.selectTower(null);
+            this.game.selectedTower = null; game.towers.forEach(function(t) { t.selected = false; });
         }
 
         getTowerAt(x, y) {
-            const clickRadius = 20;
-            for (const tower of this.game.towers) {
-                const dist = Sentinel.utils.distance(x, y, tower.x, tower.y);
-                if (dist <= clickRadius) {
-                    return tower;
-                }
+            var clickRadius = Sentinel.config.cellSize * 0.5;
+            for (var i = 0; i < this.game.towers.length; i++) {
+                var tower = this.game.towers[i];
+                var dist = Sentinel.utils.distance(x, y, tower.x, tower.y);
+                if (dist <= clickRadius) return tower;
             }
             return null;
         }
     }
 
     Sentinel.classes.UIManager = UIManager;
-    console.log('[Sentinel] UIManager loaded');
 })();

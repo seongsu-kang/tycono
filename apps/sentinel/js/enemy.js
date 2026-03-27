@@ -1,4 +1,4 @@
-// Sentinel - Enemy Class
+// Sentinel - Enemy Class (폴리싱 버전 — 유형별 비주얼)
 
 (function() {
     'use strict';
@@ -17,22 +17,24 @@
             this.active = true;
             this.reached = false;
 
-            // 경로 따라가기
+            // 경로
             this.path = Sentinel.managers.path.path;
             this.pathIndex = 0;
             this.x = this.path[0].x;
             this.y = this.path[0].y;
-            this.distToNext = 0;
 
             // 효과
             this.effects = [];
 
-            // Healer 전용
+            // 피격 플래시
+            this.hitFlash = 0;
+
+            // Healer
             if (type === 'healer') {
                 this.healTimer = 0;
             }
 
-            // Boss rage 전용
+            // Boss rage
             if (type === 'boss') {
                 this.isRaging = false;
             }
@@ -45,42 +47,36 @@
             if (!this.active) return;
 
             this.animTime += dt * 5;
+            if (this.hitFlash > 0) this.hitFlash -= dt;
 
-            // 효과 업데이트
             this.updateEffects(dt);
 
-            // Healer 로직
             if (this.type === 'healer') {
                 this.updateHealing(dt);
             }
 
-            // 이동
             this.move(dt);
         }
 
         move(dt) {
             if (this.pathIndex >= this.path.length - 1) {
-                // 끝점 도달
                 this.reached = true;
                 this.active = false;
                 return;
             }
 
-            const target = this.path[this.pathIndex + 1];
-            const dx = target.x - this.x;
-            const dy = target.y - this.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-
-            const moveDistance = this.speed * dt;
+            var target = this.path[this.pathIndex + 1];
+            var dx = target.x - this.x;
+            var dy = target.y - this.y;
+            var dist = Math.sqrt(dx * dx + dy * dy);
+            var moveDistance = this.speed * dt;
 
             if (dist <= moveDistance) {
-                // 다음 웨이포인트로
                 this.x = target.x;
                 this.y = target.y;
                 this.pathIndex++;
             } else {
-                // 이동
-                const ratio = moveDistance / dist;
+                var ratio = moveDistance / dist;
                 this.x += dx * ratio;
                 this.y += dy * ratio;
             }
@@ -89,8 +85,8 @@
         updateEffects(dt) {
             this.speed = this.baseSpeed;
 
-            for (let i = this.effects.length - 1; i >= 0; i--) {
-                const effect = this.effects[i];
+            for (var i = this.effects.length - 1; i >= 0; i--) {
+                var effect = this.effects[i];
                 effect.duration -= dt;
 
                 if (effect.duration <= 0) {
@@ -108,58 +104,48 @@
             if (this.healTimer >= this.data.healInterval) {
                 this.healTimer = 0;
 
-                // 주변 적 회복
-                const game = Sentinel.game;
-                game.enemies.forEach(enemy => {
-                    if (enemy !== this && enemy.active) {
-                        const dist = Sentinel.utils.distance(this.x, this.y, enemy.x, enemy.y);
-                        if (dist <= this.data.healRadius) {
-                            enemy.heal(this.data.healRate);
+                var self = this;
+                var game = Sentinel.game;
+                game.enemies.forEach(function(enemy) {
+                    if (enemy !== self && enemy.active) {
+                        var dist = Sentinel.utils.distance(self.x, self.y, enemy.x, enemy.y);
+                        if (dist <= self.data.healRadius) {
+                            enemy.heal(self.data.healRate);
                         }
                     }
                 });
 
-                // 힐 이펙트
                 game.effects.push({
-                    type: 'heal',
-                    x: this.x,
-                    y: this.y,
-                    radius: this.data.healRadius,
-                    color: this.color,
-                    alpha: 0.3,
-                    duration: 0.5,
-                    elapsed: 0
+                    type: 'heal', x: this.x, y: this.y,
+                    radius: this.data.healRadius, color: '#66ff66',
+                    alpha: 0.3, duration: 0.5, elapsed: 0
                 });
             }
         }
 
         takeDamage(amount) {
-            // armor 적용 (Tank, Boss)
             if (this.data.armor) {
                 amount *= (1 - this.data.armor);
             }
 
             this.hp -= amount;
+            this.hitFlash = 0.1;
+
             if (this.hp <= 0) {
                 this.hp = 0;
                 this.active = false;
             }
 
-            // Boss rage 체크 (HP 50% 이하)
+            // Boss rage (HP 50%)
             if (this.type === 'boss' && this.data.rage && !this.isRaging && this.hp <= this.maxHp * 0.5) {
                 this.isRaging = true;
                 this.baseSpeed = this.data.speed * this.data.rageSpeedMultiplier;
 
-                // 분노 이펙트 (선택)
                 if (Sentinel.game) {
                     Sentinel.game.effects.push({
-                        type: 'rage',
-                        x: this.x,
-                        y: this.y,
-                        color: '#ff0000',
-                        text: 'RAGE!',
-                        duration: 1.5,
-                        elapsed: 0
+                        type: 'rage', x: this.x, y: this.y,
+                        color: '#ff0000', text: 'RAGE!',
+                        duration: 1.5, elapsed: 0
                     });
                 }
             }
@@ -170,48 +156,128 @@
         }
 
         applyEffect(effect) {
-            // 기존 같은 타입 효과 제거
-            this.effects = this.effects.filter(e => e.type !== effect.type);
+            this.effects = this.effects.filter(function(e) { return e.type !== effect.type; });
             this.effects.push(effect);
         }
 
         render(ctx) {
             if (!this.active) return;
 
-            // 적 본체 (원)
-            const pulseSize = this.size + Math.sin(this.animTime) * 1;
-            Sentinel.utils.fillCircle(ctx, this.x, this.y, pulseSize, this.color);
+            var x = this.x;
+            var y = this.y;
+            var size = this.size + Math.sin(this.animTime) * 1;
 
-            // 테두리
+            // 피격 플래시
+            var color = this.hitFlash > 0 ? '#ffffff' : this.color;
+
+            // 유형별 형태
             ctx.save();
+            ctx.fillStyle = color;
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, pulseSize, 0, Math.PI * 2);
-            ctx.stroke();
+
+            switch (this.type) {
+                case 'scout':
+                    // 삼각형 (빠름)
+                    ctx.beginPath();
+                    ctx.moveTo(x, y - size);
+                    ctx.lineTo(x - size * 0.8, y + size * 0.6);
+                    ctx.lineTo(x + size * 0.8, y + size * 0.6);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                    break;
+
+                case 'soldier':
+                    // 사각형 (안정)
+                    var half = size * 0.7;
+                    ctx.fillRect(x - half, y - half, half * 2, half * 2);
+                    ctx.strokeRect(x - half, y - half, half * 2, half * 2);
+                    break;
+
+                case 'tank':
+                    // 팔각형 (큰, 두꺼운)
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    for (var i = 0; i < 8; i++) {
+                        var angle = (Math.PI / 4) * i - Math.PI / 8;
+                        var px = x + Math.cos(angle) * size;
+                        var py = y + Math.sin(angle) * size;
+                        if (i === 0) ctx.moveTo(px, py);
+                        else ctx.lineTo(px, py);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                    break;
+
+                case 'healer':
+                    // 원 + 십자가
+                    ctx.beginPath();
+                    ctx.arc(x, y, size, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // 십자가 마크
+                    ctx.fillStyle = '#ffffff';
+                    var cw = size * 0.3;
+                    var ch = size * 0.8;
+                    ctx.fillRect(x - cw / 2, y - ch / 2, cw, ch);
+                    ctx.fillRect(x - ch / 2, y - cw / 2, ch, cw);
+                    break;
+
+                case 'boss':
+                    // 별 모양
+                    var spikes = 5;
+                    var outerR = size;
+                    var innerR = size * 0.5;
+
+                    // rage 시 글로우
+                    if (this.isRaging) {
+                        ctx.shadowColor = '#ff0000';
+                        ctx.shadowBlur = 20;
+                    }
+
+                    ctx.beginPath();
+                    for (var i = 0; i < spikes * 2; i++) {
+                        var r = i % 2 === 0 ? outerR : innerR;
+                        var angle = (Math.PI / spikes) * i - Math.PI / 2;
+                        var px = x + Math.cos(angle) * r;
+                        var py = y + Math.sin(angle) * r;
+                        if (i === 0) ctx.moveTo(px, py);
+                        else ctx.lineTo(px, py);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                    break;
+
+                default:
+                    // 원 (기본)
+                    ctx.beginPath();
+                    ctx.arc(x, y, size, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+            }
             ctx.restore();
 
             // HP 바
-            const hpBarWidth = this.size * 2.5;
-            const hpBarHeight = 4;
-            const hpBarY = this.y - this.size - 8;
-            Sentinel.utils.drawHealthBar(ctx, this.x, hpBarY, hpBarWidth, hpBarHeight, this.hp, this.maxHp);
+            var hpBarWidth = this.size * 2.5;
+            var hpBarHeight = 4;
+            var hpBarY = y - this.size - 10;
+            Sentinel.utils.drawHealthBar(ctx, x, hpBarY, hpBarWidth, hpBarHeight, this.hp, this.maxHp);
 
-            // 효과 표시
+            // 슬로우 효과 표시
             if (this.effects.length > 0) {
-                const effect = this.effects[0];
-                if (effect.type === 'slow') {
-                    Sentinel.utils.fillCircle(ctx, this.x, this.y + this.size + 6, 3, '#64B5F6', 0.8);
+                for (var i = 0; i < this.effects.length; i++) {
+                    if (this.effects[i].type === 'slow') {
+                        Sentinel.utils.fillCircle(ctx, x, y + this.size + 6, 3, '#64B5F6', 0.8);
+                        break;
+                    }
                 }
-            }
-
-            // Healer 힐 범위 표시 (선택)
-            if (this.type === 'healer' && Sentinel.game.debugMode) {
-                Sentinel.utils.drawCircle(ctx, this.x, this.y, this.data.healRadius, this.color, 0.2);
             }
         }
     }
 
     Sentinel.classes.Enemy = Enemy;
-    console.log('[Sentinel] Enemy loaded');
 })();

@@ -1,4 +1,4 @@
-// Sentinel - Wave Manager
+// Sentinel - Wave Manager (폴리싱 버전 — 카운트다운 비주얼)
 
 (function() {
     'use strict';
@@ -12,6 +12,7 @@
             this.spawnTimer = 0;
             this.countdown = 0;
             this.isCountingDown = false;
+            this.lastCountdownSecond = 0;
         }
 
         startWave() {
@@ -24,78 +25,85 @@
             this.spawnQueue = [];
             this.spawnTimer = 0;
 
-            // 웨이브 데이터를 스폰 큐로 변환
-            const wave = this.waveData[this.currentWave - 1];
-            wave.enemies.forEach(group => {
-                for (let i = 0; i < group.count; i++) {
+            var wave = this.waveData[this.currentWave - 1];
+            wave.enemies.forEach(function(group) {
+                for (var i = 0; i < group.count; i++) {
                     this.spawnQueue.push({
                         type: group.type,
                         delay: i * group.interval
                     });
                 }
-            });
+            }.bind(this));
 
-            // 타임 순서대로 정렬
-            this.spawnQueue.sort((a, b) => a.delay - b.delay);
-
-            console.log('[WaveManager] Wave', this.currentWave, 'started:', this.spawnQueue.length, 'enemies');
+            this.spawnQueue.sort(function(a, b) { return a.delay - b.delay; });
             return true;
         }
 
         startCountdown(duration) {
             this.countdown = duration;
             this.isCountingDown = true;
+            this.lastCountdownSecond = Math.ceil(duration);
+
+            // 첫 번째 카운트다운 숫자 표시
+            if (Sentinel.game) {
+                Sentinel.game.showCountdownNumber(String(this.lastCountdownSecond));
+            }
         }
 
         update(dt) {
-            // 카운트다운
             if (this.isCountingDown) {
                 this.countdown -= dt;
+
+                // 매 초마다 카운트다운 숫자 표시
+                var currentSecond = Math.ceil(this.countdown);
+                if (currentSecond > 0 && currentSecond < this.lastCountdownSecond) {
+                    this.lastCountdownSecond = currentSecond;
+                    if (Sentinel.game) {
+                        Sentinel.game.showCountdownNumber(String(currentSecond));
+                        Sentinel.managers.audio.playTone(300 + currentSecond * 100, 0.1, 'sine', 0.2);
+                    }
+                }
+
                 if (this.countdown <= 0) {
                     this.isCountingDown = false;
+                    if (Sentinel.game) {
+                        Sentinel.game.showCountdownNumber('GO!');
+                    }
                     this.startWave();
                 }
                 return;
             }
 
-            // 스폰
             if (this.isSpawning) {
                 this.spawnTimer += dt;
 
-                // 스폰 큐에서 적 생성
                 while (this.spawnQueue.length > 0 && this.spawnQueue[0].delay <= this.spawnTimer) {
-                    const spawn = this.spawnQueue.shift();
-                    const enemy = new Sentinel.classes.Enemy(spawn.type);
+                    var spawn = this.spawnQueue.shift();
+                    var enemy = new Sentinel.classes.Enemy(spawn.type);
                     Sentinel.game.enemies.push(enemy);
 
-                    // Boss 등장 경고
                     if (spawn.type === 'boss') {
-                        const config = Sentinel.config;
-                        const colors = Sentinel.colors;
+                        var config = Sentinel.config;
                         Sentinel.game.effects.push({
                             type: 'boss-warning',
                             x: config.gameWidth / 2,
-                            y: config.hudHeight + config.gameHeight / 2,
-                            color: colors.dangerRed,
-                            text: 'BOSS INCOMING!',
+                            y: config.gameHeight / 2,
+                            color: Sentinel.colors.dangerRed,
+                            text: '⚠ BOSS INCOMING!',
                             duration: 2.0,
                             elapsed: 0
                         });
                     }
                 }
 
-                // 웨이브 완료 체크
                 if (this.spawnQueue.length === 0) {
                     this.isSpawning = false;
-                    console.log('[WaveManager] Wave', this.currentWave, 'spawning complete');
                 }
             }
         }
 
         isWaveComplete() {
-            // 첫 웨이브 시작 전에는 완료가 아님
             if (this.currentWave === 0) return false;
-            // 적이 모두 제거되면 배열에서 splice로 삭제되므로 length 체크가 더 명확
             return !this.isSpawning && Sentinel.game.enemies.length === 0;
         }
 
@@ -112,12 +120,11 @@
 
         getWaveProgress() {
             if (!this.isSpawning) return 1;
-            const totalEnemies = this.waveData[this.currentWave - 1].enemies.reduce((sum, g) => sum + g.count, 0);
-            const remaining = this.spawnQueue.length;
+            var totalEnemies = this.waveData[this.currentWave - 1].enemies.reduce(function(sum, g) { return sum + g.count; }, 0);
+            var remaining = this.spawnQueue.length;
             return (totalEnemies - remaining) / totalEnemies;
         }
     }
 
     Sentinel.classes.WaveManager = WaveManager;
-    console.log('[Sentinel] WaveManager loaded');
 })();

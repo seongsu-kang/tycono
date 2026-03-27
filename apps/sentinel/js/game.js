@@ -1,4 +1,4 @@
-// Sentinel - Game Class
+// Sentinel - Game Class (폴리싱 버전)
 
 (function() {
     'use strict';
@@ -8,13 +8,14 @@
             this.canvas = canvas;
             this.ctx = canvas.getContext('2d');
 
-            // 게임 상태
-            this.gold = Sentinel.config.initialGold;
-            this.lives = Sentinel.config.initialLives;
+            // 게임 상태 머신
+            this.gameState = 'menu'; // 'menu' | 'playing' | 'gameover' | 'victory'
+
+            // 게임 데이터
+            this.gold = 0;
+            this.lives = 0;
             this.speed = 1;
             this.isPaused = false;
-            this.isGameOver = false;
-            this.isVictory = false;
 
             // 컬렉션
             this.towers = [];
@@ -28,6 +29,9 @@
             this.hoverCell = null;
             this.goldPopups = [];
 
+            // 카운트다운 비주얼
+            this.countdownDisplay = null; // {text, alpha, scale, elapsed, duration}
+
             // 통계
             this.stats = {
                 enemiesKilled: 0,
@@ -36,8 +40,8 @@
                 goldEarned: 0
             };
 
-            // 디버그
-            this.debugMode = false;
+            // 메뉴 애니메이션
+            this.menuTime = 0;
 
             this.init();
         }
@@ -46,16 +50,60 @@
             console.log('[Game] Initialized');
         }
 
+        startGame() {
+            // 게임 상태 초기화
+            this.gold = Sentinel.config.initialGold;
+            this.lives = Sentinel.config.initialLives;
+            this.speed = 1;
+            this.isPaused = false;
+            this.towers = [];
+            this.enemies = [];
+            this.projectiles = [];
+            this.effects = [];
+            this.goldPopups = [];
+            this.selectedTower = null;
+            this.selectedTowerType = null;
+            this.hoverCell = null;
+            this.countdownDisplay = null;
+            this.stats = { enemiesKilled: 0, towersBuilt: 0, totalDamage: 0, goldEarned: 0 };
+
+            // 매니저 리셋
+            Sentinel.managers.path = new Sentinel.classes.PathManager();
+            Sentinel.managers.wave = new Sentinel.classes.WaveManager();
+
+            // BGM 시작
+            Sentinel.managers.audio.startBGM();
+
+            this.gameState = 'playing';
+            console.log('[Game] Game started!');
+        }
+
+        restart() {
+            Sentinel.managers.audio.stopBGM();
+            this.gameState = 'menu';
+        }
+
         update(dt) {
+            if (this.gameState !== 'playing') return;
+            if (this.isPaused) return;
+
             // 웨이브 매니저
             Sentinel.managers.wave.update(dt);
 
+            // 카운트다운 비주얼 업데이트
+            if (this.countdownDisplay) {
+                this.countdownDisplay.elapsed += dt;
+                if (this.countdownDisplay.elapsed >= this.countdownDisplay.duration) {
+                    this.countdownDisplay = null;
+                }
+            }
+
             // 타워
-            this.towers.forEach(tower => tower.update(dt, this.enemies));
+            this.towers.forEach(function(tower) { tower.update(dt, Sentinel.game.enemies); });
 
             // 투사체
-            for (let i = this.projectiles.length - 1; i >= 0; i--) {
-                const proj = this.projectiles[i];
+            for (var i = this.projectiles.length - 1; i >= 0; i--) {
+                var proj = this.projectiles[i];
                 proj.update(dt);
                 if (!proj.active) {
                     this.projectiles.splice(i, 1);
@@ -63,19 +111,18 @@
             }
 
             // 적
-            for (let i = this.enemies.length - 1; i >= 0; i--) {
-                const enemy = this.enemies[i];
+            for (var i = this.enemies.length - 1; i >= 0; i--) {
+                var enemy = this.enemies[i];
                 enemy.update(dt);
 
                 if (!enemy.active) {
                     if (enemy.reached) {
-                        // 베이스 도달
-                        this.lives--;
+                        this.lives -= (enemy.data.liveDamage || 1);
                         if (this.lives <= 0) {
+                            this.lives = 0;
                             this.gameOver();
                         }
                     } else {
-                        // 처치됨
                         this.gold += enemy.reward;
                         this.stats.enemiesKilled++;
                         this.stats.goldEarned += enemy.reward;
@@ -87,8 +134,8 @@
             }
 
             // 이펙트
-            for (let i = this.effects.length - 1; i >= 0; i--) {
-                const effect = this.effects[i];
+            for (var i = this.effects.length - 1; i >= 0; i--) {
+                var effect = this.effects[i];
                 effect.elapsed += dt;
                 if (effect.elapsed >= effect.duration) {
                     this.effects.splice(i, 1);
@@ -96,8 +143,8 @@
             }
 
             // 골드 팝업
-            for (let i = this.goldPopups.length - 1; i >= 0; i--) {
-                const popup = this.goldPopups[i];
+            for (var i = this.goldPopups.length - 1; i >= 0; i--) {
+                var popup = this.goldPopups[i];
                 popup.elapsed += dt;
                 popup.y -= 30 * dt;
                 popup.alpha = 1 - (popup.elapsed / popup.duration);
@@ -107,30 +154,33 @@
             }
 
             // 웨이브 완료 체크
-            if (Sentinel.managers.wave.isWaveComplete() && !Sentinel.managers.wave.isCountingDown) {
-                if (Sentinel.managers.wave.hasNextWave()) {
-                    // 웨이브 보너스
-                    const bonus = Sentinel.managers.wave.getCurrentWaveBonus();
+            var wm = Sentinel.managers.wave;
+            if (wm.isWaveComplete() && !wm.isCountingDown) {
+                if (wm.hasNextWave()) {
+                    var bonus = wm.getCurrentWaveBonus();
                     this.gold += bonus;
                     this.stats.goldEarned += bonus;
-
-                    // 다음 웨이브 카운트다운 (3초)
-                    Sentinel.managers.wave.startCountdown(3);
-                } else {
-                    // 승리!
+                    this.addGoldPopup(Sentinel.config.gameWidth / 2, Sentinel.config.gameHeight / 2, bonus);
+                    wm.startCountdown(3);
+                } else if (this.enemies.length === 0) {
                     this.victory();
                 }
             }
         }
 
         render() {
-            const ctx = this.ctx;
-            const config = Sentinel.config;
-            const colors = Sentinel.colors;
+            var ctx = this.ctx;
+            var config = Sentinel.config;
+            var colors = Sentinel.colors;
 
             // 배경
             ctx.fillStyle = colors.deepNight;
             ctx.fillRect(0, 0, config.canvasWidth, config.canvasHeight);
+
+            if (this.gameState === 'menu') {
+                this.renderMenu();
+                return;
+            }
 
             // 게임 보드
             ctx.save();
@@ -143,54 +193,153 @@
             this.renderSidebar();
             this.renderBottomBar();
 
+            // 카운트다운 오버레이
+            this.renderCountdown();
+
             // 게임 오버/승리 화면
-            if (this.isGameOver) {
+            if (this.gameState === 'gameover') {
                 this.renderGameOver();
-            } else if (this.isVictory) {
+            } else if (this.gameState === 'victory') {
                 this.renderVictory();
             }
         }
 
-        renderGameBoard() {
-            const ctx = this.ctx;
+        // ═══════════════════════════════════════════════════
+        // 메인 메뉴
+        // ═══════════════════════════════════════════════════
 
-            // 맵
+        renderMenu() {
+            var ctx = this.ctx;
+            var config = Sentinel.config;
+            var colors = Sentinel.colors;
+            var cx = config.canvasWidth / 2;
+
+            this.menuTime += 0.016;
+
+            // 배경 그라디언트
+            var grad = ctx.createLinearGradient(0, 0, 0, config.canvasHeight);
+            grad.addColorStop(0, '#0a0e1a');
+            grad.addColorStop(1, '#1a2332');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, config.canvasWidth, config.canvasHeight);
+
+            // 장식 파티클 (간단한 별)
+            ctx.save();
+            for (var i = 0; i < 30; i++) {
+                var px = ((i * 137.5) % config.canvasWidth);
+                var py = ((i * 73.3 + this.menuTime * 10) % config.canvasHeight);
+                var alpha = 0.3 + 0.3 * Math.sin(this.menuTime * 2 + i);
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(px, py, 2, 2);
+            }
+            ctx.restore();
+
+            // 타이틀
+            ctx.save();
+            var titleScale = 1 + Math.sin(this.menuTime * 1.5) * 0.02;
+            ctx.translate(cx, 180);
+            ctx.scale(titleScale, titleScale);
+
+            // 글로우
+            ctx.shadowColor = colors.goldYellow;
+            ctx.shadowBlur = 30;
+            ctx.font = 'bold 64px Arial';
+            ctx.fillStyle = colors.goldYellow;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('SENTINEL', 0, 0);
+            ctx.shadowBlur = 0;
+            ctx.restore();
+
+            // 서브타이틀
+            Sentinel.utils.drawText(ctx, 'TOWER DEFENSE', cx, 230, 18, colors.neonCyan);
+
+            // PLAY 버튼
+            var btnW = 200;
+            var btnH = 50;
+            var btnX = cx - btnW / 2;
+            var btnY = 310;
+            var pulse = 0.8 + 0.2 * Math.sin(this.menuTime * 3);
+
+            ctx.save();
+            ctx.globalAlpha = pulse;
+            ctx.fillStyle = '#2a5a2a';
+            ctx.strokeStyle = colors.electricGreen;
+            ctx.lineWidth = 3;
+            this.roundRect(ctx, btnX, btnY, btnW, btnH, 8);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+
+            ctx.save();
+            ctx.shadowColor = colors.electricGreen;
+            ctx.shadowBlur = 15;
+            Sentinel.utils.drawText(ctx, '▶  PLAY', cx, btnY + btnH / 2, 24, '#ffffff');
+            ctx.restore();
+
+            // 저장 — 버튼 영역 (UI 클릭용)
+            this.menuPlayBtn = { x: btnX, y: btnY, w: btnW, h: btnH };
+
+            // 조작법
+            var infoY = 420;
+            ctx.fillStyle = 'rgba(255,255,255,0.6)';
+            ctx.font = '13px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('사이드바에서 타워 선택 → 맵에 클릭하여 배치', cx, infoY);
+            ctx.fillText('Start Wave로 웨이브 시작 | 타워 클릭 → 업그레이드/판매', cx, infoY + 22);
+            ctx.fillText('우클릭: 선택 취소 | 배속: 1x/2x/3x', cx, infoY + 44);
+
+            // 바닥
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            ctx.font = '11px Arial';
+            ctx.fillText('Sentinel Tower Defense — Built with Canvas 2D', cx, config.canvasHeight - 20);
+        }
+
+        // ═══════════════════════════════════════════════════
+        // 게임 보드
+        // ═══════════════════════════════════════════════════
+
+        renderGameBoard() {
+            var ctx = this.ctx;
+
             Sentinel.managers.path.render(ctx);
 
-            // 호버 셀 (타워 배치 시)
+            // 호버 셀
             if (this.selectedTowerType && this.hoverCell) {
-                const cellSize = Sentinel.config.cellSize;
-                const canPlace = Sentinel.managers.path.canPlaceTower(this.hoverCell.gridX, this.hoverCell.gridY);
-                const towerData = Sentinel.data.towers[this.selectedTowerType];
-                const canAfford = this.gold >= towerData.baseCost;
+                var cellSize = Sentinel.config.cellSize;
+                var canPlace = Sentinel.managers.path.canPlaceTower(this.hoverCell.gridX, this.hoverCell.gridY);
+                var hasTower = this.towers.some(function(t) {
+                    return t.gridX === Sentinel.game.hoverCell.gridX && t.gridY === Sentinel.game.hoverCell.gridY;
+                });
+                var towerData = Sentinel.data.towers[this.selectedTowerType];
+                var canAfford = this.gold >= towerData.baseCost;
 
                 ctx.save();
                 ctx.globalAlpha = 0.5;
-                ctx.fillStyle = canPlace && canAfford ? '#00ff00' : '#ff0000';
+                ctx.fillStyle = (canPlace && canAfford && !hasTower) ? '#00ff00' : '#ff0000';
                 ctx.fillRect(
                     this.hoverCell.gridX * cellSize,
                     this.hoverCell.gridY * cellSize,
-                    cellSize,
-                    cellSize
+                    cellSize, cellSize
                 );
                 ctx.restore();
 
-                // 사거리 미리보기
-                if (canPlace && canAfford) {
-                    const pos = Sentinel.utils.gridToWorld(this.hoverCell.gridX, this.hoverCell.gridY);
-                    const range = towerData.levels[0].range;
+                if (canPlace && canAfford && !hasTower) {
+                    var pos = Sentinel.utils.gridToWorld(this.hoverCell.gridX, this.hoverCell.gridY);
+                    var range = towerData.levels[0].range;
                     Sentinel.utils.drawCircle(ctx, pos.x, pos.y, range, towerData.color, 0.3);
                 }
             }
 
             // 타워
-            this.towers.forEach(tower => tower.render(ctx));
+            this.towers.forEach(function(tower) { tower.render(ctx); });
 
             // 적
-            this.enemies.forEach(enemy => enemy.render(ctx));
+            this.enemies.forEach(function(enemy) { enemy.render(ctx); });
 
             // 투사체
-            this.projectiles.forEach(proj => proj.render(ctx));
+            this.projectiles.forEach(function(proj) { proj.render(ctx); });
 
             // 이펙트
             this.renderEffects();
@@ -200,19 +349,18 @@
         }
 
         renderEffects() {
-            const ctx = this.ctx;
-            const colors = Sentinel.colors;
+            var ctx = this.ctx;
+            var self = this;
 
-            this.effects.forEach(effect => {
+            this.effects.forEach(function(effect) {
+                var progress = effect.elapsed / effect.duration;
+
                 if (effect.type === 'explosion' || effect.type === 'heal') {
-                    const progress = effect.elapsed / effect.duration;
-                    const radius = effect.radius * (0.5 + progress * 0.5);
-                    const alpha = effect.alpha * (1 - progress);
+                    var radius = effect.radius * (0.5 + progress * 0.5);
+                    var alpha = effect.alpha * (1 - progress);
                     Sentinel.utils.drawCircle(ctx, effect.x, effect.y, radius, effect.color, alpha);
                 } else if (effect.type === 'laser') {
-                    // Sniper 레이저
-                    const progress = effect.elapsed / effect.duration;
-                    const alpha = 1 - progress;
+                    var alpha = 1 - progress;
                     ctx.save();
                     ctx.globalAlpha = alpha;
                     ctx.strokeStyle = effect.color;
@@ -225,10 +373,8 @@
                     ctx.stroke();
                     ctx.restore();
                 } else if (effect.type === 'rage' || effect.type === 'boss-warning') {
-                    // Boss 분노 / 경고 텍스트
-                    const progress = effect.elapsed / effect.duration;
-                    const alpha = 1 - progress;
-                    const y = effect.y - progress * 30;
+                    var alpha = 1 - progress;
+                    var y = effect.y - progress * 30;
                     ctx.save();
                     ctx.globalAlpha = alpha;
                     ctx.font = 'bold 20px Arial';
@@ -244,317 +390,414 @@
         }
 
         renderGoldPopups() {
-            const ctx = this.ctx;
-            const colors = Sentinel.colors;
+            var ctx = this.ctx;
+            var colors = Sentinel.colors;
 
-            this.goldPopups.forEach(popup => {
+            this.goldPopups.forEach(function(popup) {
                 ctx.save();
                 ctx.globalAlpha = popup.alpha;
                 ctx.font = 'bold 14px Arial';
                 ctx.fillStyle = colors.goldYellow;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.fillText('+' + popup.amount, popup.x, popup.y);
+                ctx.shadowColor = colors.goldYellow;
+                ctx.shadowBlur = 5;
+                ctx.fillText('+' + popup.amount + 'G', popup.x, popup.y);
                 ctx.restore();
             });
         }
 
+        // ═══════════════════════════════════════════════════
+        // HUD (상단 바)
+        // ═══════════════════════════════════════════════════
+
         renderTopBar() {
-            const ctx = this.ctx;
-            const config = Sentinel.config;
-            const colors = Sentinel.colors;
+            var ctx = this.ctx;
+            var config = Sentinel.config;
+            var colors = Sentinel.colors;
 
             ctx.fillStyle = colors.steelBlue;
             ctx.fillRect(0, 0, config.canvasWidth, config.hudHeight);
-
             ctx.strokeStyle = colors.slateGray;
             ctx.lineWidth = 2;
             ctx.strokeRect(0, 0, config.canvasWidth, config.hudHeight);
 
-            const y = config.hudHeight / 2;
+            var y = config.hudHeight / 2;
+            var wm = Sentinel.managers.wave;
 
             // 웨이브
-            let waveText = 'Wave ' + Sentinel.managers.wave.currentWave + '/' + config.totalWaves;
-            if (Sentinel.managers.wave.isCountingDown) {
-                waveText += ' (Next in ' + Math.ceil(Sentinel.managers.wave.countdown) + 's)';
+            var waveText = 'Wave ' + wm.currentWave + '/' + config.totalWaves;
+            Sentinel.utils.drawText(ctx, waveText, 70, y, 18, colors.neonCyan);
+
+            // 웨이브 진행 바
+            if (wm.isSpawning || (wm.currentWave > 0 && this.enemies.length > 0)) {
+                var barX = 140;
+                var barY = y - 6;
+                var barW = 120;
+                var barH = 12;
+                var totalInWave = 0;
+                if (wm.currentWave > 0 && wm.currentWave <= Sentinel.data.waves.length) {
+                    var wd = Sentinel.data.waves[wm.currentWave - 1];
+                    for (var i = 0; i < wd.enemies.length; i++) totalInWave += wd.enemies[i].count;
+                }
+                var remaining = wm.spawnQueue.length + this.enemies.length;
+                var progress = totalInWave > 0 ? 1 - (remaining / totalInWave) : 1;
+
+                ctx.fillStyle = '#333333';
+                ctx.fillRect(barX, barY, barW, barH);
+                ctx.fillStyle = colors.neonCyan;
+                ctx.fillRect(barX, barY, barW * progress, barH);
+                ctx.strokeStyle = '#555555';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(barX, barY, barW, barH);
             }
-            Sentinel.utils.drawText(ctx, waveText, 100, y, 18, colors.neonCyan);
 
             // 생명
-            const livesText = '♥ ' + this.lives;
-            Sentinel.utils.drawText(ctx, livesText, 400, y, 18, colors.electricGreen);
+            var livesColor = this.lives > 10 ? colors.electricGreen : (this.lives > 5 ? colors.warningOrange : colors.dangerRed);
+            Sentinel.utils.drawText(ctx, '\u2665 ' + this.lives, 400, y, 18, livesColor);
 
             // 골드
-            const goldText = '💰 ' + this.gold;
-            Sentinel.utils.drawText(ctx, goldText, 780, y, 18, colors.goldYellow);
+            Sentinel.utils.drawText(ctx, '\u26C1 ' + this.gold + 'G', 560, y, 18, colors.goldYellow);
+
+            // 카운트다운 텍스트 (HUD)
+            if (wm.isCountingDown) {
+                Sentinel.utils.drawText(ctx, 'Next: ' + Math.ceil(wm.countdown) + 's', 750, y, 14, '#aaaaaa');
+            }
         }
 
-        renderSidebar() {
-            const ctx = this.ctx;
-            const config = Sentinel.config;
-            const colors = Sentinel.colors;
-            const x = config.gameWidth;
-            const y = config.hudHeight;
-            const w = config.sidebarWidth;
-            const h = config.gameHeight;
+        // ═══════════════════════════════════════════════════
+        // 사이드바
+        // ═══════════════════════════════════════════════════
 
-            // 배경
+        renderSidebar() {
+            var ctx = this.ctx;
+            var config = Sentinel.config;
+            var colors = Sentinel.colors;
+            var x = config.gameWidth;
+            var y = config.hudHeight;
+            var w = config.sidebarWidth;
+            var h = config.gameHeight;
+
             ctx.fillStyle = colors.deepNight;
             ctx.fillRect(x, y, w, h);
-
             ctx.strokeStyle = colors.steelBlue;
             ctx.lineWidth = 1;
             ctx.strokeRect(x, y, w, h);
 
             // 타워 선택 UI
-            const towers = ['arrow', 'cannon', 'slow', 'sniper'];
-            towers.forEach((type, index) => {
-                const data = Sentinel.data.towers[type];
-                const btnX = x + 20;
-                const btnY = y + 20 + index * 80;
-                const btnW = w - 40;
-                const btnH = 65;
+            var towers = ['arrow', 'cannon', 'slow', 'sniper'];
+            var self = this;
+            towers.forEach(function(type, index) {
+                var data = Sentinel.data.towers[type];
+                var btnX = x + 10;
+                var btnY = y + 10 + index * 75;
+                var btnW = w - 20;
+                var btnH = 65;
 
-                const canAfford = this.gold >= data.baseCost;
-                const isSelected = this.selectedTowerType === type;
+                var canAfford = self.gold >= data.baseCost;
+                var isSelected = self.selectedTowerType === type;
 
-                // 버튼 배경
                 ctx.fillStyle = isSelected ? colors.slateGray : colors.steelBlue;
                 ctx.fillRect(btnX, btnY, btnW, btnH);
 
                 ctx.strokeStyle = isSelected ? data.color : colors.slateGray;
-                ctx.lineWidth = isSelected ? 3 : 2;
+                ctx.lineWidth = isSelected ? 3 : 1;
                 ctx.strokeRect(btnX, btnY, btnW, btnH);
 
-                // 타워 아이콘 (작은 육각형)
-                const iconSize = 20;
-                const iconX = btnX + 30;
-                const iconY = btnY + btnH / 2;
-                ctx.save();
-                ctx.fillStyle = data.color;
-                ctx.translate(iconX, iconY);
+                // 타워 아이콘 (작은 색상 원)
+                Sentinel.utils.fillCircle(ctx, btnX + 25, btnY + btnH / 2, 15, data.color, canAfford ? 1 : 0.4);
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
                 ctx.beginPath();
-                for (let i = 0; i < 6; i++) {
-                    const angle = (Math.PI / 3) * i;
-                    const px = Math.cos(angle) * iconSize;
-                    const py = Math.sin(angle) * iconSize;
-                    if (i === 0) ctx.moveTo(px, py);
-                    else ctx.lineTo(px, py);
-                }
-                ctx.closePath();
-                ctx.fill();
-                ctx.restore();
+                ctx.arc(btnX + 25, btnY + btnH / 2, 15, 0, Math.PI * 2);
+                ctx.stroke();
 
                 // 텍스트
                 ctx.fillStyle = canAfford ? '#ffffff' : '#666666';
-                ctx.font = 'bold 14px Arial';
+                ctx.font = 'bold 13px Arial';
                 ctx.textAlign = 'left';
                 ctx.textBaseline = 'top';
-                ctx.fillText(data.name, btnX + 65, btnY + 10);
+                ctx.fillText(data.name, btnX + 50, btnY + 8);
 
-                ctx.font = '11px Arial';
-                ctx.fillText(data.description, btnX + 65, btnY + 30);
+                ctx.font = '10px Arial';
+                ctx.fillStyle = canAfford ? '#aaaaaa' : '#555555';
+                ctx.fillText(data.description, btnX + 50, btnY + 26);
 
                 ctx.fillStyle = canAfford ? colors.goldYellow : '#666666';
-                ctx.font = 'bold 13px Arial';
-                ctx.fillText(data.baseCost + 'G', btnX + 65, btnY + 48);
+                ctx.font = 'bold 12px Arial';
+                ctx.fillText(data.baseCost + 'G', btnX + 50, btnY + 44);
             });
 
             // 선택된 타워 정보
             if (this.selectedTower) {
-                const tower = this.selectedTower;
-                const infoY = y + h - 180;
+                var tower = this.selectedTower;
+                var infoY = y + h - 180;
 
                 ctx.fillStyle = colors.steelBlue;
                 ctx.fillRect(x + 10, infoY, w - 20, 170);
-
-                ctx.strokeStyle = colors.slateGray;
+                ctx.strokeStyle = tower.data.color;
                 ctx.lineWidth = 2;
                 ctx.strokeRect(x + 10, infoY, w - 20, 170);
 
-                ctx.fillStyle = '#ffffff';
+                ctx.fillStyle = tower.data.color;
                 ctx.font = 'bold 14px Arial';
                 ctx.textAlign = 'center';
-                ctx.fillText(tower.data.name, x + w / 2, infoY + 15);
+                ctx.fillText(tower.data.name, x + w / 2, infoY + 18);
 
                 ctx.font = '12px Arial';
                 ctx.textAlign = 'left';
+                ctx.fillStyle = '#cccccc';
                 ctx.fillText('Level: ' + tower.level + '/3', x + 20, infoY + 40);
-                ctx.fillText('Damage: ' + tower.stats.damage, x + 20, infoY + 60);
-                ctx.fillText('Range: ' + tower.stats.range, x + 20, infoY + 75);
-                ctx.fillText('Rate: ' + tower.stats.fireRate.toFixed(1) + 's', x + 20, infoY + 90);
+                ctx.fillText('Damage: ' + tower.stats.damage, x + 20, infoY + 58);
+                ctx.fillText('Range: ' + Math.round(tower.stats.range), x + 20, infoY + 73);
+                ctx.fillText('Rate: ' + tower.stats.fireRate.toFixed(2) + 's', x + 20, infoY + 88);
 
                 // 업그레이드 버튼
                 if (tower.level < 3) {
-                    const upgCost = tower.stats.upgradeCost;
-                    const canUpgrade = this.gold >= upgCost;
-                    const btnY = infoY + 110;
+                    var upgCost = tower.stats.upgradeCost;
+                    var canUpgrade = this.gold >= upgCost;
+                    var ubtnY = infoY + 105;
 
-                    ctx.fillStyle = canUpgrade ? colors.electricGreen : '#555555';
-                    ctx.fillRect(x + 20, btnY, w - 40, 25);
-
-                    ctx.strokeStyle = canUpgrade ? colors.electricGreen : '#666666';
+                    ctx.fillStyle = canUpgrade ? '#2a5a2a' : '#333333';
+                    ctx.fillRect(x + 20, ubtnY, w - 40, 25);
+                    ctx.strokeStyle = canUpgrade ? colors.electricGreen : '#555555';
                     ctx.lineWidth = 2;
-                    ctx.strokeRect(x + 20, btnY, w - 40, 25);
+                    ctx.strokeRect(x + 20, ubtnY, w - 40, 25);
 
-                    ctx.fillStyle = '#ffffff';
-                    ctx.font = 'bold 12px Arial';
+                    ctx.fillStyle = canUpgrade ? '#ffffff' : '#666666';
+                    ctx.font = 'bold 11px Arial';
                     ctx.textAlign = 'center';
-                    ctx.fillText('Upgrade (' + upgCost + 'G)', x + w / 2, btnY + 13);
+                    ctx.fillText('Upgrade (' + upgCost + 'G)', x + w / 2, ubtnY + 13);
                 } else {
                     ctx.fillStyle = colors.goldYellow;
                     ctx.font = 'bold 12px Arial';
                     ctx.textAlign = 'center';
-                    ctx.fillText('MAX LEVEL', x + w / 2, infoY + 120);
+                    ctx.fillText('★ MAX LEVEL ★', x + w / 2, infoY + 118);
                 }
 
                 // 판매 버튼
-                const sellValue = tower.getSellValue();
-                const sellBtnY = infoY + 142;
+                var sellValue = tower.getSellValue();
+                var sbtnY = infoY + 140;
 
-                ctx.fillStyle = colors.dangerRed;
-                ctx.fillRect(x + 20, sellBtnY, w - 40, 25);
-
+                ctx.fillStyle = '#5a2a2a';
+                ctx.fillRect(x + 20, sbtnY, w - 40, 25);
                 ctx.strokeStyle = colors.dangerRed;
                 ctx.lineWidth = 2;
-                ctx.strokeRect(x + 20, sellBtnY, w - 40, 25);
+                ctx.strokeRect(x + 20, sbtnY, w - 40, 25);
 
                 ctx.fillStyle = '#ffffff';
-                ctx.font = 'bold 12px Arial';
+                ctx.font = 'bold 11px Arial';
                 ctx.textAlign = 'center';
-                ctx.fillText('Sell (' + sellValue + 'G)', x + w / 2, sellBtnY + 13);
+                ctx.fillText('Sell (' + sellValue + 'G)', x + w / 2, sbtnY + 13);
             }
         }
 
+        // ═══════════════════════════════════════════════════
+        // 하단 바
+        // ═══════════════════════════════════════════════════
+
         renderBottomBar() {
-            const ctx = this.ctx;
-            const config = Sentinel.config;
-            const y = config.hudHeight + config.gameHeight;
+            var ctx = this.ctx;
+            var config = Sentinel.config;
+            var colors = Sentinel.colors;
+            var y = config.hudHeight + config.gameHeight;
 
-            ctx.fillStyle = '#1a1a1a';
+            ctx.fillStyle = '#151520';
             ctx.fillRect(0, y, config.canvasWidth, config.bottomBarHeight);
-
             ctx.strokeStyle = '#333333';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 1;
             ctx.strokeRect(0, y, config.canvasWidth, config.bottomBarHeight);
 
-            const btnY = y + 15;
-            const btnH = 30;
+            var btnY = y + 10;
+            var btnH = 30;
+            var wm = Sentinel.managers.wave;
 
             // Start Wave 버튼
-            if (!Sentinel.managers.wave.isSpawning && !Sentinel.managers.wave.isCountingDown) {
-                ctx.fillStyle = '#4CAF50';
-                ctx.fillRect(20, btnY, 120, btnH);
-                ctx.strokeStyle = '#66BB6A';
+            if (!wm.isSpawning && !wm.isCountingDown && wm.hasNextWave()) {
+                ctx.fillStyle = '#2a5a2a';
+                ctx.fillRect(20, btnY, 130, btnH);
+                ctx.strokeStyle = colors.electricGreen;
                 ctx.lineWidth = 2;
-                ctx.strokeRect(20, btnY, 120, btnH);
-                Sentinel.utils.drawText(ctx, '▶ Start Wave', 80, btnY + btnH / 2, 14, '#ffffff');
+                ctx.strokeRect(20, btnY, 130, btnH);
+                Sentinel.utils.drawText(ctx, '▶ Start Wave', 85, btnY + btnH / 2, 14, '#ffffff');
+            } else if (wm.isSpawning) {
+                ctx.fillStyle = '#333333';
+                ctx.fillRect(20, btnY, 130, btnH);
+                Sentinel.utils.drawText(ctx, 'Wave Active...', 85, btnY + btnH / 2, 13, '#888888');
             }
 
             // Pause 버튼
-            const pauseBtnX = 160;
-            ctx.fillStyle = this.isPaused ? '#FF9800' : '#555555';
-            ctx.fillRect(pauseBtnX, btnY, 100, btnH);
-            ctx.strokeStyle = this.isPaused ? '#FFB74D' : '#666666';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(pauseBtnX, btnY, 100, btnH);
-            Sentinel.utils.drawText(ctx, this.isPaused ? '▶ Resume' : '⏸ Pause', pauseBtnX + 50, btnY + btnH / 2, 14, '#ffffff');
+            var pauseX = 170;
+            ctx.fillStyle = this.isPaused ? '#5a4a0a' : '#333333';
+            ctx.fillRect(pauseX, btnY, 100, btnH);
+            ctx.strokeStyle = this.isPaused ? colors.warningOrange : '#555555';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(pauseX, btnY, 100, btnH);
+            Sentinel.utils.drawText(ctx, this.isPaused ? '▶ Resume' : '⏸ Pause', pauseX + 50, btnY + btnH / 2, 13, '#ffffff');
 
             // Speed 버튼
-            const speedBtnX = 280;
-            const speeds = ['1x', '2x', '3x'];
-            speeds.forEach((label, i) => {
-                const isActive = this.speed === (i + 1);
-                const x = speedBtnX + i * 60;
+            var speedX = 290;
+            for (var i = 0; i < 3; i++) {
+                var isActive = this.speed === (i + 1);
+                var bx = speedX + i * 55;
+                ctx.fillStyle = isActive ? '#0a3a5a' : '#333333';
+                ctx.fillRect(bx, btnY, 50, btnH);
+                ctx.strokeStyle = isActive ? colors.neonCyan : '#555555';
+                ctx.lineWidth = isActive ? 2 : 1;
+                ctx.strokeRect(bx, btnY, 50, btnH);
+                Sentinel.utils.drawText(ctx, (i + 1) + 'x', bx + 25, btnY + btnH / 2, 13, isActive ? '#ffffff' : '#888888');
+            }
 
-                ctx.fillStyle = isActive ? '#2196F3' : '#555555';
-                ctx.fillRect(x, btnY, 55, btnH);
-                ctx.strokeStyle = isActive ? '#64B5F6' : '#666666';
-                ctx.lineWidth = 2;
-                ctx.strokeRect(x, btnY, 55, btnH);
-                Sentinel.utils.drawText(ctx, label, x + 27, btnY + btnH / 2, 14, '#ffffff');
-            });
+            // 뮤트 버튼
+            var muteX = 480;
+            var audio = Sentinel.managers.audio;
+            ctx.fillStyle = '#333333';
+            ctx.fillRect(muteX, btnY, 40, btnH);
+            ctx.strokeStyle = '#555555';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(muteX, btnY, 40, btnH);
+            var muteIcon = audio.enabled ? '\uD83D\uDD0A' : '\uD83D\uDD07';
+            Sentinel.utils.drawText(ctx, muteIcon, muteX + 20, btnY + btnH / 2, 16, '#ffffff');
         }
 
-        renderGameOver() {
-            const ctx = this.ctx;
-            const config = Sentinel.config;
+        // ═══════════════════════════════════════════════════
+        // 카운트다운 오버레이
+        // ═══════════════════════════════════════════════════
 
-            // 반투명 오버레이
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        renderCountdown() {
+            if (!this.countdownDisplay) return;
+
+            var ctx = this.ctx;
+            var config = Sentinel.config;
+            var cd = this.countdownDisplay;
+            var progress = cd.elapsed / cd.duration;
+            var alpha = 1 - progress;
+            var scale = 1 + progress * 2;
+
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.translate(config.gameWidth / 2, config.hudHeight + config.gameHeight / 2);
+            ctx.scale(scale, scale);
+            ctx.font = 'bold 72px Arial';
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.shadowColor = Sentinel.colors.neonCyan;
+            ctx.shadowBlur = 30;
+            ctx.fillText(cd.text, 0, 0);
+            ctx.restore();
+        }
+
+        showCountdownNumber(text) {
+            this.countdownDisplay = {
+                text: text,
+                elapsed: 0,
+                duration: 0.8
+            };
+        }
+
+        // ═══════════════════════════════════════════════════
+        // 게임 오버 / 승리
+        // ═══════════════════════════════════════════════════
+
+        renderGameOver() {
+            var ctx = this.ctx;
+            var config = Sentinel.config;
+            var cx = config.canvasWidth / 2;
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
             ctx.fillRect(0, 0, config.canvasWidth, config.canvasHeight);
 
-            // 제목
-            Sentinel.utils.drawText(ctx, 'GAME OVER', config.canvasWidth / 2, 200, 48, '#ff6b6b');
+            ctx.save();
+            ctx.shadowColor = '#ff4444';
+            ctx.shadowBlur = 20;
+            Sentinel.utils.drawText(ctx, 'GAME OVER', cx, 180, 52, '#ff6b6b');
+            ctx.restore();
 
-            // 통계
-            const centerX = config.canvasWidth / 2;
-            ctx.fillStyle = '#ffffff';
+            ctx.fillStyle = '#cccccc';
             ctx.font = '18px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('Wave Reached: ' + Sentinel.managers.wave.currentWave, centerX, 280);
-            ctx.fillText('Enemies Killed: ' + this.stats.enemiesKilled, centerX, 310);
-            ctx.fillText('Towers Built: ' + this.stats.towersBuilt, centerX, 340);
-            ctx.fillText('Gold Earned: ' + this.stats.goldEarned, centerX, 370);
+            ctx.fillText('Wave Reached: ' + Sentinel.managers.wave.currentWave + '/' + config.totalWaves, cx, 260);
+            ctx.fillText('Enemies Killed: ' + this.stats.enemiesKilled, cx, 290);
+            ctx.fillText('Towers Built: ' + this.stats.towersBuilt, cx, 320);
+            ctx.fillText('Gold Earned: ' + this.stats.goldEarned, cx, 350);
 
-            // 재시작 안내
-            Sentinel.utils.drawText(ctx, 'Refresh page to restart', centerX, 450, 16, '#aaaaaa');
+            this.renderPlayAgainButton(cx, 420);
         }
 
         renderVictory() {
-            const ctx = this.ctx;
-            const config = Sentinel.config;
+            var ctx = this.ctx;
+            var config = Sentinel.config;
+            var cx = config.canvasWidth / 2;
 
-            // 반투명 오버레이
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
             ctx.fillRect(0, 0, config.canvasWidth, config.canvasHeight);
 
-            // 제목
-            Sentinel.utils.drawText(ctx, 'VICTORY!', config.canvasWidth / 2, 200, 48, '#FFD700');
+            ctx.save();
+            ctx.shadowColor = '#FFD700';
+            ctx.shadowBlur = 30;
+            Sentinel.utils.drawText(ctx, '★ VICTORY ★', cx, 170, 52, '#FFD700');
+            ctx.restore();
 
-            // 통계
-            const centerX = config.canvasWidth / 2;
-            ctx.fillStyle = '#ffffff';
+            Sentinel.utils.drawText(ctx, 'All 10 waves defended!', cx, 230, 20, '#ffffff');
+
+            ctx.fillStyle = '#cccccc';
             ctx.font = '18px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('All waves completed!', centerX, 280);
-            ctx.fillText('Enemies Killed: ' + this.stats.enemiesKilled, centerX, 320);
-            ctx.fillText('Towers Built: ' + this.stats.towersBuilt, centerX, 350);
-            ctx.fillText('Gold Earned: ' + this.stats.goldEarned, centerX, 380);
-            ctx.fillText('Final Lives: ' + this.lives, centerX, 410);
+            ctx.fillText('Enemies Killed: ' + this.stats.enemiesKilled, cx, 280);
+            ctx.fillText('Towers Built: ' + this.stats.towersBuilt, cx, 310);
+            ctx.fillText('Gold Earned: ' + this.stats.goldEarned, cx, 340);
+            ctx.fillText('Final Lives: ' + this.lives, cx, 370);
 
-            // 재시작 안내
-            Sentinel.utils.drawText(ctx, 'Refresh page to play again', centerX, 480, 16, '#aaaaaa');
+            this.renderPlayAgainButton(cx, 430);
         }
 
-        placeTower(type, gridX, gridY) {
-            const data = Sentinel.data.towers[type];
+        renderPlayAgainButton(cx, btnCenterY) {
+            var ctx = this.ctx;
+            var btnW = 200;
+            var btnH = 45;
+            var btnX = cx - btnW / 2;
+            var btnY = btnCenterY - btnH / 2;
 
+            ctx.fillStyle = '#2a5a2a';
+            ctx.strokeStyle = Sentinel.colors.electricGreen;
+            ctx.lineWidth = 3;
+            this.roundRect(ctx, btnX, btnY, btnW, btnH, 8);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.save();
+            ctx.shadowColor = Sentinel.colors.electricGreen;
+            ctx.shadowBlur = 10;
+            Sentinel.utils.drawText(ctx, '↻ PLAY AGAIN', cx, btnCenterY, 20, '#ffffff');
+            ctx.restore();
+
+            this.playAgainBtn = { x: btnX, y: btnY, w: btnW, h: btnH };
+        }
+
+        // ═══════════════════════════════════════════════════
+        // 게임 액션
+        // ═══════════════════════════════════════════════════
+
+        placeTower(type, gridX, gridY) {
+            var data = Sentinel.data.towers[type];
             if (this.gold < data.baseCost) return false;
             if (!Sentinel.managers.path.canPlaceTower(gridX, gridY)) return false;
-            if (this.towers.some(t => t.gridX === gridX && t.gridY === gridY)) return false;
+            if (this.towers.some(function(t) { return t.gridX === gridX && t.gridY === gridY; })) return false;
 
             this.gold -= data.baseCost;
-            const tower = new Sentinel.classes.Tower(type, gridX, gridY);
+            var tower = new Sentinel.classes.Tower(type, gridX, gridY);
             this.towers.push(tower);
             this.stats.towersBuilt++;
-
             Sentinel.managers.audio.playTowerPlace();
-
-            console.log('[Game] Tower placed:', type, 'at', gridX, gridY);
             return true;
         }
 
         selectTower(tower) {
-            // 기존 선택 해제
-            this.towers.forEach(t => t.selected = false);
-
+            this.towers.forEach(function(t) { t.selected = false; });
             this.selectedTower = tower;
             this.selectedTowerType = null;
-
-            if (tower) {
-                tower.selected = true;
-            }
+            if (tower) tower.selected = true;
         }
 
         upgradeTower(tower) {
@@ -566,20 +809,12 @@
         }
 
         sellTower(tower) {
-            const value = tower.getSellValue();
+            var value = tower.getSellValue();
             this.gold += value;
-
-            const index = this.towers.indexOf(tower);
-            if (index !== -1) {
-                this.towers.splice(index, 1);
-            }
-
-            if (this.selectedTower === tower) {
-                this.selectedTower = null;
-            }
-
-            Sentinel.managers.audio.playTowerPlace(); // 간단한 사운드
-            console.log('[Game] Tower sold for', value);
+            var index = this.towers.indexOf(tower);
+            if (index !== -1) this.towers.splice(index, 1);
+            if (this.selectedTower === tower) this.selectedTower = null;
+            Sentinel.managers.audio.playTowerPlace();
         }
 
         startNextWave() {
@@ -597,29 +832,39 @@
         }
 
         gameOver() {
-            this.isGameOver = true;
+            this.gameState = 'gameover';
+            Sentinel.managers.audio.stopBGM();
             Sentinel.managers.audio.playGameOver();
-            console.log('[Game] Game Over');
         }
 
         victory() {
-            this.isVictory = true;
+            this.gameState = 'victory';
+            Sentinel.managers.audio.stopBGM();
             Sentinel.managers.audio.playVictory();
-            console.log('[Game] Victory!');
         }
 
         addGoldPopup(x, y, amount) {
             this.goldPopups.push({
-                x: x,
-                y: y - 20,
-                amount: amount,
-                alpha: 1,
-                duration: 1,
-                elapsed: 0
+                x: x, y: y - 20, amount: amount,
+                alpha: 1, duration: 1.2, elapsed: 0
             });
+        }
+
+        // 유틸: 둥근 사각형
+        roundRect(ctx, x, y, w, h, r) {
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + w - r, y);
+            ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+            ctx.lineTo(x + w, y + h - r);
+            ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+            ctx.lineTo(x + r, y + h);
+            ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.closePath();
         }
     }
 
     Sentinel.classes.Game = Game;
-    console.log('[Sentinel] Game loaded');
 })();
