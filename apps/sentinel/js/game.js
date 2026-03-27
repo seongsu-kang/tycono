@@ -37,6 +37,7 @@
             this.countdownDisplay = null;
             this.waveCompleteMsg = null; // { wave, bonus, elapsed, duration }
             this.bossWarning = null;     // { elapsed, duration }
+            this.damageFlash = null;     // { elapsed, duration }
 
             this.stats = { enemiesKilled: 0, towersBuilt: 0, totalDamage: 0, goldEarned: 0 };
             this.menuTime = 0;
@@ -70,6 +71,7 @@
             this.countdownDisplay = null;
             this.waveCompleteMsg = null;
             this.bossWarning = null;
+            this.damageFlash = null;
             this.stats = { enemiesKilled: 0, towersBuilt: 0, totalDamage: 0, goldEarned: 0 };
             this.pauseMenuBtns = null;
             this.gameOverBtns = null;
@@ -127,6 +129,12 @@
                 if (this.bossWarning.elapsed >= this.bossWarning.duration) this.bossWarning = null;
             }
 
+            // 기지 피격 플래시
+            if (this.damageFlash) {
+                this.damageFlash.elapsed += dt;
+                if (this.damageFlash.elapsed >= this.damageFlash.duration) this.damageFlash = null;
+            }
+
             // 타워
             var self = this;
             this.towers.forEach(function(tower) { tower.update(dt, self.enemies); });
@@ -144,6 +152,8 @@
                 if (!enemy.active) {
                     if (enemy.reached) {
                         this.lives -= (enemy.data.liveDamage || 1);
+                        this.damageFlash = { elapsed: 0, duration: 0.2 };
+                        Sentinel.managers.audio.playTone(150, 0.2, 'sawtooth', 0.3);
                         if (this.lives <= 0) { this.lives = 0; this.gameOver(); }
                     } else {
                         this.gold += enemy.reward;
@@ -151,6 +161,12 @@
                         this.stats.goldEarned += enemy.reward;
                         this.addGoldPopup(enemy.x, enemy.y, enemy.reward);
                         Sentinel.managers.audio.playEnemyDeath();
+                        // 사망 이펙트: 확장 원형 + 페이드
+                        this.effects.push({
+                            type: 'death', x: enemy.x, y: enemy.y,
+                            color: enemy.color, radius: enemy.getSize() + 15,
+                            alpha: 0.6, duration: 0.3, elapsed: 0
+                        });
                     }
                     this.enemies.splice(i, 1);
                 }
@@ -171,15 +187,15 @@
                 if (p.elapsed >= p.duration) this.goldPopups.splice(i, 1);
             }
 
-            // 웨이브 완료 체크
+            // 웨이브 완료 체크 — 유저가 Start Wave 클릭할 때까지 대기
             var wm = Sentinel.managers.wave;
-            if (wm.isWaveComplete() && !wm.isCountingDown) {
+            if (wm.isWaveComplete() && !wm.isCountingDown && !wm.waveCleared) {
+                wm.waveCleared = true;
                 if (wm.hasNextWave()) {
                     var bonus = wm.getCurrentWaveBonus();
                     this.gold += bonus;
                     this.stats.goldEarned += bonus;
                     this.showWaveComplete(wm.currentWave, bonus);
-                    wm.startCountdown(3);
                 } else if (this.enemies.length === 0) {
                     this.victory();
                 }
@@ -215,6 +231,7 @@
             this.renderCountdown();
             if (this.waveCompleteMsg) this.renderWaveCompleteMessage();
             if (this.bossWarning) this.renderBossWarningOverlay();
+            if (this.damageFlash) this.renderDamageFlash();
 
             // 일시정지 메뉴
             if (this.isPaused && this.gameState === 'playing') this.renderPauseMenu();
@@ -470,6 +487,18 @@
                     ctx.beginPath();
                     ctx.moveTo(effect.x1, effect.y1);
                     ctx.lineTo(effect.x2, effect.y2);
+                    ctx.stroke();
+                    ctx.restore();
+                } else if (effect.type === 'death') {
+                    var expandRadius = effect.radius * (0.5 + progress);
+                    ctx.save();
+                    ctx.globalAlpha = effect.alpha * (1 - progress);
+                    ctx.strokeStyle = effect.color;
+                    ctx.lineWidth = 3;
+                    ctx.shadowColor = effect.color;
+                    ctx.shadowBlur = 10;
+                    ctx.beginPath();
+                    ctx.arc(effect.x, effect.y, expandRadius, 0, Math.PI * 2);
                     ctx.stroke();
                     ctx.restore();
                 } else if (effect.type === 'rage') {
@@ -760,8 +789,8 @@
             ctx.font = 'bold 14px Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(wm.isSpawning ? '\uC9C4\uD589 \uC911...' : '\u25B6 \uC2DC\uC791 \uC6E8\uC774\uBE0C',
-                         startBtnX + startBtnW / 2, startBtnY + startBtnH / 2);
+            var startBtnLabel = wm.isSpawning ? '\uC9C4\uD589 \uC911...' : wm.isCountingDown ? '\uCE74\uC6B4\uD2B8\uB2E4\uC6B4...' : '\u25B6 \uC2DC\uC791 \uC6E8\uC774\uBE0C';
+            ctx.fillText(startBtnLabel, startBtnX + startBtnW / 2, startBtnY + startBtnH / 2);
 
             // 일시정지 + 속도 버튼
             var pauseBtnX = sx + 10;
@@ -887,6 +916,20 @@
             ctx.shadowColor = '#ff4444';
             ctx.shadowBlur = 20;
             ctx.fillText('BOSS INCOMING!', config.gameWidth / 2, config.hudHeight + config.gameHeight / 2);
+            ctx.restore();
+        }
+
+        renderDamageFlash() {
+            var ctx = this.ctx;
+            var config = Sentinel.config;
+            var df = this.damageFlash;
+            var progress = df.elapsed / df.duration;
+            var alpha = 0.35 * (1 - progress);
+
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = '#ff0000';
+            ctx.fillRect(0, 0, config.canvasWidth, config.canvasHeight);
             ctx.restore();
         }
 
@@ -1192,7 +1235,9 @@
         }
 
         startNextWave() {
-            if (Sentinel.managers.wave.startWave()) {
+            var wm = Sentinel.managers.wave;
+            if (!wm.isSpawning && !wm.isCountingDown && wm.hasNextWave()) {
+                wm.startCountdown(3);
                 Sentinel.managers.audio.playWaveStart();
             }
         }

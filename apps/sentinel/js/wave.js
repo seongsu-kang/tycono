@@ -13,11 +13,13 @@
             this.countdown = 0;
             this.isCountingDown = false;
             this.lastCountdownSecond = 0;
+            this.waveCleared = false;
         }
 
         startWave() {
             if (this.isSpawning || this.currentWave >= this.waveData.length) return false;
 
+            this.waveCleared = false;
             this.currentWave++;
             this.isSpawning = true;
             this.spawnQueue = [];
@@ -39,6 +41,7 @@
         }
 
         startCountdown(duration) {
+            this.waveCleared = false;
             this.countdown = duration;
             this.isCountingDown = true;
             this.lastCountdownSecond = Math.ceil(duration);

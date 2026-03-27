@@ -11,7 +11,8 @@
             speed: 96,  // 2.0 칸/s
             reward: 10,
             color: '#aa5555',
-            size: 12
+            size: 12,
+            liveDamage: 1
         },
 
         soldier: {
@@ -20,7 +21,8 @@
             speed: 72,  // 1.5 칸/s
             reward: 15,
             color: '#5555aa',
-            size: 16
+            size: 16,
+            liveDamage: 1
         },
 
         tank: {
@@ -30,7 +32,8 @@
             reward: 30,
             color: '#55aa55',
             size: 20,
-            armor: 0.2  // 물리 저항 20%
+            armor: 0.2,  // 물리 저항 20%
+            liveDamage: 2
         },
 
         healer: {
@@ -42,7 +45,8 @@
             size: 14,
             healRadius: 96,  // 2칸
             healRate: 5,  // 초당 5 HP
-            healInterval: 1  // 1초마다 주변 적 회복
+            healInterval: 1,  // 1초마다 주변 적 회복
+            liveDamage: 1
         },
 
         boss: {
@@ -54,7 +58,8 @@
             size: 28,
             armor: 0.3,  // 물리 저항 30%
             rage: true,  // HP 50% 이하 시 속도 1.5배
-            rageSpeedMultiplier: 1.5
+            rageSpeedMultiplier: 1.5,
+            liveDamage: 5
         }
     };
 
