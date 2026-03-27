@@ -1,4 +1,4 @@
-// Sentinel - Main Entry Point (폴리싱 버전)
+// Sentinel - Main Entry Point (CBO 디자인 스펙 반영)
 
 (function() {
     'use strict';
@@ -6,7 +6,7 @@
     var lastTime = 0;
 
     function init() {
-        var canvas = document.getElementById('gameCanvas');
+        var canvas = document.getElementById('game-canvas');
         if (!canvas) {
             console.error('[Sentinel] Canvas not found!');
             return;

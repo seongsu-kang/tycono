@@ -4,41 +4,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sentinel - Tower Defense</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <div id="gameContainer">
-        <canvas id="gameCanvas"></canvas>
+    <div id="game-container">
+        <canvas id="game-canvas" width="960" height="540"></canvas>
     </div>
 
-    <!-- Script 로드 순서 중요 (의존성 관리) -->
-
-    <!-- 1. Namespace -->
+    <!-- Scripts (순서 중요) -->
     <script src="js/namespace.js"></script>
-
-    <!-- 2. Data -->
+    <script src="js/utils.js"></script>
+    <script src="js/path.js"></script>
     <script src="data/towers.js"></script>
     <script src="data/enemies.js"></script>
     <script src="data/waves.js"></script>
-
-    <!-- 3. Utilities -->
-    <script src="js/utils.js"></script>
-
-    <!-- 4. Core Systems -->
-    <script src="js/path.js"></script>
     <script src="js/audio.js"></script>
-
-    <!-- 5. Game Objects -->
     <script src="js/projectile.js"></script>
     <script src="js/enemy.js"></script>
     <script src="js/tower.js"></script>
-
-    <!-- 6. Managers -->
     <script src="js/wave.js"></script>
-    <script src="js/game.js"></script>
     <script src="js/ui.js"></script>
-
-    <!-- 7. Entry Point -->
+    <script src="js/game.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>

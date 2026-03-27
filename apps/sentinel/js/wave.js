@@ -1,4 +1,4 @@
-// Sentinel - Wave Manager (폴리싱 버전 — 카운트다운 비주얼)
+// Sentinel - Wave Manager (startDelay 지원)
 
 (function() {
     'use strict';
@@ -16,9 +16,7 @@
         }
 
         startWave() {
-            if (this.isSpawning || this.currentWave >= this.waveData.length) {
-                return false;
-            }
+            if (this.isSpawning || this.currentWave >= this.waveData.length) return false;
 
             this.currentWave++;
             this.isSpawning = true;
@@ -27,10 +25,11 @@
 
             var wave = this.waveData[this.currentWave - 1];
             wave.enemies.forEach(function(group) {
+                var startDelay = group.startDelay || 0;
                 for (var i = 0; i < group.count; i++) {
                     this.spawnQueue.push({
                         type: group.type,
-                        delay: i * group.interval
+                        delay: startDelay + i * group.interval
                     });
                 }
             }.bind(this));
@@ -43,8 +42,6 @@
             this.countdown = duration;
             this.isCountingDown = true;
             this.lastCountdownSecond = Math.ceil(duration);
-
-            // 첫 번째 카운트다운 숫자 표시
             if (Sentinel.game) {
                 Sentinel.game.showCountdownNumber(String(this.lastCountdownSecond));
             }
@@ -53,8 +50,6 @@
         update(dt) {
             if (this.isCountingDown) {
                 this.countdown -= dt;
-
-                // 매 초마다 카운트다운 숫자 표시
                 var currentSecond = Math.ceil(this.countdown);
                 if (currentSecond > 0 && currentSecond < this.lastCountdownSecond) {
                     this.lastCountdownSecond = currentSecond;
@@ -63,12 +58,9 @@
                         Sentinel.managers.audio.playTone(300 + currentSecond * 100, 0.1, 'sine', 0.2);
                     }
                 }
-
                 if (this.countdown <= 0) {
                     this.isCountingDown = false;
-                    if (Sentinel.game) {
-                        Sentinel.game.showCountdownNumber('GO!');
-                    }
+                    if (Sentinel.game) Sentinel.game.showCountdownNumber('GO!');
                     this.startWave();
                 }
                 return;
@@ -76,29 +68,17 @@
 
             if (this.isSpawning) {
                 this.spawnTimer += dt;
-
                 while (this.spawnQueue.length > 0 && this.spawnQueue[0].delay <= this.spawnTimer) {
                     var spawn = this.spawnQueue.shift();
                     var enemy = new Sentinel.classes.Enemy(spawn.type);
                     Sentinel.game.enemies.push(enemy);
 
+                    // Boss 등장 경고
                     if (spawn.type === 'boss') {
-                        var config = Sentinel.config;
-                        Sentinel.game.effects.push({
-                            type: 'boss-warning',
-                            x: config.gameWidth / 2,
-                            y: config.gameHeight / 2,
-                            color: Sentinel.colors.dangerRed,
-                            text: '⚠ BOSS INCOMING!',
-                            duration: 2.0,
-                            elapsed: 0
-                        });
+                        Sentinel.game.showBossWarning();
                     }
                 }
-
-                if (this.spawnQueue.length === 0) {
-                    this.isSpawning = false;
-                }
+                if (this.spawnQueue.length === 0) this.isSpawning = false;
             }
         }
 
@@ -114,16 +94,7 @@
             return 0;
         }
 
-        hasNextWave() {
-            return this.currentWave < this.waveData.length;
-        }
-
-        getWaveProgress() {
-            if (!this.isSpawning) return 1;
-            var totalEnemies = this.waveData[this.currentWave - 1].enemies.reduce(function(sum, g) { return sum + g.count; }, 0);
-            var remaining = this.spawnQueue.length;
-            return (totalEnemies - remaining) / totalEnemies;
-        }
+        hasNextWave() { return this.currentWave < this.waveData.length; }
     }
 
     Sentinel.classes.WaveManager = WaveManager;

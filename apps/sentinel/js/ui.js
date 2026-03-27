@@ -1,4 +1,4 @@
-// Sentinel - UI Event Handler (폴리싱 버전)
+// Sentinel - UI Event Handler (CBO 디자인 스펙 반영)
 
 (function() {
     'use strict';
@@ -57,16 +57,22 @@
             var game = this.game;
             var config = Sentinel.config;
 
-            // 메인 메뉴
+            // 메인 메뉴 → 난이도 화면으로
             if (game.gameState === 'menu') {
                 if (game.menuPlayBtn) {
                     var btn = game.menuPlayBtn;
                     if (pos.x >= btn.x && pos.x <= btn.x + btn.w &&
                         pos.y >= btn.y && pos.y <= btn.y + btn.h) {
-                        game.startGame();
-                        Sentinel.managers.audio.playWaveStart();
+                        game.showDifficulty();
+                        Sentinel.managers.audio.playTone(400, 0.1, 'sine', 0.15);
                     }
                 }
+                return;
+            }
+
+            // 난이도 선택 화면
+            if (game.gameState === 'difficulty') {
+                this.handleDifficultyClick(pos);
                 return;
             }
 
@@ -94,13 +100,42 @@
                 this.handleSidebarClick(pos.x - config.gameWidth, pos.y - config.hudHeight);
                 return;
             }
+        }
 
-            // 하단 바 영역
-            if (pos.y >= config.hudHeight + config.gameHeight) {
-                this.handleBottomBarClick(pos.x, pos.y - (config.hudHeight + config.gameHeight));
-                return;
+        // ═══════════════════════════════════════════════
+        // 난이도 선택 클릭
+        // ═══════════════════════════════════════════════
+
+        handleDifficultyClick(pos) {
+            var game = this.game;
+
+            // 난이도 카드 클릭
+            if (game.difficultyBtns) {
+                for (var i = 0; i < game.difficultyBtns.length; i++) {
+                    var btn = game.difficultyBtns[i];
+                    if (pos.x >= btn.x && pos.x <= btn.x + btn.w &&
+                        pos.y >= btn.y && pos.y <= btn.y + btn.h) {
+                        game.startGame(btn.key);
+                        Sentinel.managers.audio.playWaveStart();
+                        return;
+                    }
+                }
+            }
+
+            // 뒤로가기 버튼
+            if (game.backBtn) {
+                var back = game.backBtn;
+                if (pos.x >= back.x && pos.x <= back.x + back.w &&
+                    pos.y >= back.y && pos.y <= back.y + back.h) {
+                    game.restart();
+                    Sentinel.managers.audio.playTone(300, 0.05, 'sine', 0.15);
+                }
             }
         }
+
+        // ═══════════════════════════════════════════════
+        // 게임 보드 클릭
+        // ═══════════════════════════════════════════════
 
         handleGameBoardClick(x, y) {
             var game = this.game;
@@ -120,59 +155,21 @@
             }
         }
 
+        // ═══════════════════════════════════════════════
+        // 사이드바 클릭 (타워카드 + 하단 컨트롤)
+        // ═══════════════════════════════════════════════
+
         handleSidebarClick(x, y) {
             var game = this.game;
             var config = Sentinel.config;
-            var w = config.sidebarWidth;
+            var sw = config.sidebarWidth;
+            var sh = config.gameHeight;
 
-            // 타워 선택 버튼
-            var towers = ['arrow', 'cannon', 'slow', 'sniper'];
-            for (var i = 0; i < towers.length; i++) {
-                var type = towers[i];
-                var btnX = 10;
-                var btnY = 10 + i * 75;
-                var btnW = w - 20;
-                var btnH = 65;
+            // ── 하단 컨트롤 (먼저 체크, 항상 표시) ──
 
-                if (x >= btnX && x <= btnX + btnW && y >= btnY && y <= btnY + btnH) {
-                    var data = Sentinel.data.towers[type];
-                    if (game.gold >= data.baseCost) {
-                        game.selectedTowerType = type;
-                        game.selectedTower = null; game.towers.forEach(function(t) { t.selected = false; });
-                        Sentinel.managers.audio.playTone(400, 0.05, 'sine', 0.15);
-                    }
-                    return;
-                }
-            }
-
-            // 선택된 타워 업그레이드/판매 버튼
-            if (game.selectedTower) {
-                var tower = game.selectedTower;
-                var infoY = config.gameHeight - 180;
-
-                if (tower.level < 3) {
-                    var upgBtnY = infoY + 105;
-                    if (x >= 20 && x <= w - 20 && y >= upgBtnY && y <= upgBtnY + 25) {
-                        game.upgradeTower(tower);
-                        return;
-                    }
-                }
-
-                var sellBtnY = infoY + 140;
-                if (x >= 20 && x <= w - 20 && y >= sellBtnY && y <= sellBtnY + 25) {
-                    game.sellTower(tower);
-                    return;
-                }
-            }
-        }
-
-        handleBottomBarClick(x, y) {
-            var game = this.game;
-            var btnY = 10;
-            var btnH = 30;
-
-            // Start Wave
-            if (x >= 20 && x <= 150 && y >= btnY && y <= btnY + btnH) {
+            // Start Wave 버튼: (10, sh-90) ~ (sw-10, sh-50)
+            var startBtnY = sh - 90;
+            if (x >= 10 && x <= sw - 10 && y >= startBtnY && y <= startBtnY + 40) {
                 var wm = Sentinel.managers.wave;
                 if (!wm.isSpawning && !wm.isCountingDown && wm.hasNextWave()) {
                     game.startNextWave();
@@ -180,25 +177,64 @@
                 return;
             }
 
-            // Pause
-            if (x >= 170 && x <= 270 && y >= btnY && y <= btnY + btnH) {
+            // Pause 버튼: (10, sh-40) ~ (115, sh-5)
+            var ctrlBtnY = startBtnY + 50;
+            if (x >= 10 && x <= 115 && y >= ctrlBtnY && y <= ctrlBtnY + 35) {
                 game.togglePause();
                 return;
             }
 
-            // Speed (1x, 2x, 3x)
-            for (var i = 0; i < 3; i++) {
-                var btnX = 290 + i * 55;
-                if (x >= btnX && x <= btnX + 50 && y >= btnY && y <= btnY + btnH) {
-                    game.speed = i + 1;
-                    return;
+            // Speed 버튼: (125, sh-40) ~ (sw-10, sh-5)
+            if (x >= 125 && x <= sw - 10 && y >= ctrlBtnY && y <= ctrlBtnY + 35) {
+                if (!game.isPaused) {
+                    game.toggleSpeed();
                 }
+                return;
             }
 
-            // 뮤트
-            if (x >= 480 && x <= 520 && y >= btnY && y <= btnY + btnH) {
-                Sentinel.managers.audio.toggle();
+            // ── 타워 정보 패널 (선택된 타워가 있을 때) ──
+
+            if (game.selectedTower) {
+                var tower = game.selectedTower;
+
+                // 업그레이드 버튼: (20, 205) ~ (sw-20, 230)
+                if (tower.level < 3) {
+                    if (x >= 20 && x <= sw - 20 && y >= 205 && y <= 230) {
+                        game.upgradeTower(tower);
+                        return;
+                    }
+                }
+
+                // 판매 버튼: (20, 235) ~ (sw-20, 260)
+                if (x >= 20 && x <= sw - 20 && y >= 235 && y <= 260) {
+                    game.sellTower(tower);
+                    return;
+                }
+
+                // 정보 패널 바깥 클릭 → 선택 해제
                 return;
+            }
+
+            // ── 타워 선택 카드 (88px 간격, 80px 높이) ──
+
+            var towers = ['arrow', 'cannon', 'slow', 'sniper'];
+            for (var i = 0; i < towers.length; i++) {
+                var type = towers[i];
+                var btnX = 10;
+                var btnY = 10 + i * 88;
+                var btnW = sw - 20;
+                var btnH = 80;
+
+                if (x >= btnX && x <= btnX + btnW && y >= btnY && y <= btnY + btnH) {
+                    var data = Sentinel.data.towers[type];
+                    if (game.gold >= data.baseCost) {
+                        game.selectedTowerType = type;
+                        game.selectedTower = null;
+                        game.towers.forEach(function(t) { t.selected = false; });
+                        Sentinel.managers.audio.playTone(400, 0.05, 'sine', 0.15);
+                    }
+                    return;
+                }
             }
         }
 

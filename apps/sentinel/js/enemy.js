@@ -1,4 +1,4 @@
-// Sentinel - Enemy Class (폴리싱 버전 — 유형별 비주얼)
+// Sentinel - Enemy Class (style-guide 비주얼 반영)
 
 (function() {
     'use strict';
@@ -7,11 +7,18 @@
         constructor(type) {
             this.type = type;
             this.data = Sentinel.data.enemies[type];
-            this.maxHp = this.data.hp;
+
+            // 난이도 배율 적용
+            var diff = Sentinel.game ? Sentinel.game.difficulty : null;
+            var hpMul = diff ? diff.hpMultiplier : 1;
+            var spdMul = diff ? diff.speedMultiplier : 1;
+            var rwdMul = diff ? diff.rewardMultiplier : 1;
+
+            this.maxHp = Math.round(this.data.hp * hpMul);
             this.hp = this.maxHp;
-            this.speed = this.data.speed;
-            this.baseSpeed = this.data.speed;
-            this.reward = this.data.reward;
+            this.speed = this.data.speed * spdMul;
+            this.baseSpeed = this.speed;
+            this.reward = Math.round(this.data.reward * rwdMul);
             this.color = this.data.color;
             this.size = this.data.size;
             this.active = true;
@@ -25,36 +32,22 @@
 
             // 효과
             this.effects = [];
-
-            // 피격 플래시
             this.hitFlash = 0;
+            this.animTime = Math.random() * Math.PI * 2;
 
             // Healer
-            if (type === 'healer') {
-                this.healTimer = 0;
-            }
+            if (type === 'healer') this.healTimer = 0;
 
             // Boss rage
-            if (type === 'boss') {
-                this.isRaging = false;
-            }
-
-            // 애니메이션
-            this.animTime = Math.random() * Math.PI * 2;
+            if (type === 'boss') this.isRaging = false;
         }
 
         update(dt) {
             if (!this.active) return;
-
             this.animTime += dt * 5;
             if (this.hitFlash > 0) this.hitFlash -= dt;
-
             this.updateEffects(dt);
-
-            if (this.type === 'healer') {
-                this.updateHealing(dt);
-            }
-
+            if (this.type === 'healer') this.updateHealing(dt);
             this.move(dt);
         }
 
@@ -64,7 +57,6 @@
                 this.active = false;
                 return;
             }
-
             var target = this.path[this.pathIndex + 1];
             var dx = target.x - this.x;
             var dy = target.y - this.y;
@@ -84,17 +76,13 @@
 
         updateEffects(dt) {
             this.speed = this.baseSpeed;
-
             for (var i = this.effects.length - 1; i >= 0; i--) {
                 var effect = this.effects[i];
                 effect.duration -= dt;
-
                 if (effect.duration <= 0) {
                     this.effects.splice(i, 1);
-                } else {
-                    if (effect.type === 'slow') {
-                        this.speed *= effect.multiplier;
-                    }
+                } else if (effect.type === 'slow') {
+                    this.speed *= effect.multiplier;
                 }
             }
         }
@@ -103,7 +91,6 @@
             this.healTimer += dt;
             if (this.healTimer >= this.data.healInterval) {
                 this.healTimer = 0;
-
                 var self = this;
                 var game = Sentinel.game;
                 game.enemies.forEach(function(enemy) {
@@ -114,7 +101,6 @@
                         }
                     }
                 });
-
                 game.effects.push({
                     type: 'heal', x: this.x, y: this.y,
                     radius: this.data.healRadius, color: '#66ff66',
@@ -124,10 +110,7 @@
         }
 
         takeDamage(amount) {
-            if (this.data.armor) {
-                amount *= (1 - this.data.armor);
-            }
-
+            if (this.data.armor) amount *= (1 - this.data.armor);
             this.hp -= amount;
             this.hitFlash = 0.1;
 
@@ -139,8 +122,9 @@
             // Boss rage (HP 50%)
             if (this.type === 'boss' && this.data.rage && !this.isRaging && this.hp <= this.maxHp * 0.5) {
                 this.isRaging = true;
-                this.baseSpeed = this.data.speed * this.data.rageSpeedMultiplier;
-
+                var diff = Sentinel.game ? Sentinel.game.difficulty : null;
+                var spdMul = diff ? diff.speedMultiplier : 1;
+                this.baseSpeed = this.data.speed * spdMul * this.data.rageSpeedMultiplier;
                 if (Sentinel.game) {
                     Sentinel.game.effects.push({
                         type: 'rage', x: this.x, y: this.y,
@@ -151,13 +135,19 @@
             }
         }
 
-        heal(amount) {
-            this.hp = Math.min(this.maxHp, this.hp + amount);
-        }
+        heal(amount) { this.hp = Math.min(this.maxHp, this.hp + amount); }
 
         applyEffect(effect) {
             this.effects = this.effects.filter(function(e) { return e.type !== effect.type; });
             this.effects.push(effect);
+        }
+
+        lightenColor(hex) {
+            var num = parseInt(hex.slice(1), 16);
+            var r = Math.min(255, ((num >> 16) & 0xff) + 34);
+            var g = Math.min(255, ((num >> 8) & 0xff) + 34);
+            var b = Math.min(255, (num & 0xff) + 34);
+            return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
         }
 
         render(ctx) {
@@ -165,116 +155,109 @@
 
             var x = this.x;
             var y = this.y;
-            var size = this.size + Math.sin(this.animTime) * 1;
-
-            // 피격 플래시
             var color = this.hitFlash > 0 ? '#ffffff' : this.color;
+            var borderColor = this.hitFlash > 0 ? '#ffffff' : this.lightenColor(this.color);
 
-            // 유형별 형태
             ctx.save();
-            ctx.fillStyle = color;
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 2;
 
             switch (this.type) {
                 case 'scout':
-                    // 삼각형 (빠름)
+                    // 원 (12px 반지름)
+                    ctx.fillStyle = color;
                     ctx.beginPath();
-                    ctx.moveTo(x, y - size);
-                    ctx.lineTo(x - size * 0.8, y + size * 0.6);
-                    ctx.lineTo(x + size * 0.8, y + size * 0.6);
-                    ctx.closePath();
+                    ctx.arc(x, y, 12, 0, Math.PI * 2);
                     ctx.fill();
+                    ctx.strokeStyle = borderColor;
+                    ctx.lineWidth = 2;
                     ctx.stroke();
                     break;
 
                 case 'soldier':
-                    // 사각형 (안정)
-                    var half = size * 0.7;
-                    ctx.fillRect(x - half, y - half, half * 2, half * 2);
-                    ctx.strokeRect(x - half, y - half, half * 2, half * 2);
+                    // 사각형 (16px 반변)
+                    ctx.fillStyle = color;
+                    ctx.fillRect(x - 16, y - 16, 32, 32);
+                    ctx.strokeStyle = borderColor;
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(x - 16, y - 16, 32, 32);
                     break;
 
                 case 'tank':
-                    // 팔각형 (큰, 두꺼운)
-                    ctx.lineWidth = 4;
-                    ctx.beginPath();
-                    for (var i = 0; i < 8; i++) {
-                        var angle = (Math.PI / 4) * i - Math.PI / 8;
-                        var px = x + Math.cos(angle) * size;
-                        var py = y + Math.sin(angle) * size;
-                        if (i === 0) ctx.moveTo(px, py);
-                        else ctx.lineTo(px, py);
-                    }
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.stroke();
+                    // 큰 사각형 (20px 반변, lineWidth 3)
+                    ctx.fillStyle = color;
+                    ctx.fillRect(x - 20, y - 20, 40, 40);
+                    ctx.strokeStyle = borderColor;
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(x - 20, y - 20, 40, 40);
                     break;
 
                 case 'healer':
-                    // 원 + 십자가
-                    ctx.beginPath();
-                    ctx.arc(x, y, size, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.stroke();
-
-                    // 십자가 마크
-                    ctx.fillStyle = '#ffffff';
-                    var cw = size * 0.3;
-                    var ch = size * 0.8;
-                    ctx.fillRect(x - cw / 2, y - ch / 2, cw, ch);
-                    ctx.fillRect(x - ch / 2, y - cw / 2, ch, cw);
+                    // 십자가 (14px 반변)
+                    ctx.fillStyle = color;
+                    ctx.fillRect(x - 14, y - 14 * 0.4, 28, 14 * 0.8);
+                    ctx.fillRect(x - 14 * 0.4, y - 14, 14 * 0.8, 28);
+                    ctx.strokeStyle = borderColor;
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(x - 14, y - 14 * 0.4, 28, 14 * 0.8);
+                    ctx.strokeRect(x - 14 * 0.4, y - 14, 14 * 0.8, 28);
                     break;
 
                 case 'boss':
-                    // 별 모양
-                    var spikes = 5;
-                    var outerR = size;
-                    var innerR = size * 0.5;
-
-                    // rage 시 글로우
+                    // 팔각형 (28px 반지름 + 글로우)
                     if (this.isRaging) {
-                        ctx.shadowColor = '#ff0000';
-                        ctx.shadowBlur = 20;
+                        ctx.shadowColor = '#ff4444';
+                        ctx.shadowBlur = 25;
                     }
-
+                    ctx.fillStyle = color;
                     ctx.beginPath();
-                    for (var i = 0; i < spikes * 2; i++) {
-                        var r = i % 2 === 0 ? outerR : innerR;
-                        var angle = (Math.PI / spikes) * i - Math.PI / 2;
-                        var px = x + Math.cos(angle) * r;
-                        var py = y + Math.sin(angle) * r;
-                        if (i === 0) ctx.moveTo(px, py);
-                        else ctx.lineTo(px, py);
+                    for (var i = 0; i < 8; i++) {
+                        var angle = (Math.PI / 4) * i;
+                        var px = x + Math.cos(angle) * 28;
+                        var py = y + Math.sin(angle) * 28;
+                        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
                     }
                     ctx.closePath();
                     ctx.fill();
+                    ctx.shadowColor = borderColor;
+                    ctx.shadowBlur = 20;
+                    ctx.strokeStyle = borderColor;
+                    ctx.lineWidth = 4;
                     ctx.stroke();
+                    ctx.shadowBlur = 0;
                     break;
-
-                default:
-                    // 원 (기본)
-                    ctx.beginPath();
-                    ctx.arc(x, y, size, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.stroke();
             }
             ctx.restore();
 
-            // HP 바
-            var hpBarWidth = this.size * 2.5;
-            var hpBarHeight = 4;
-            var hpBarY = y - this.size - 10;
-            Sentinel.utils.drawHealthBar(ctx, x, hpBarY, hpBarWidth, hpBarHeight, this.hp, this.maxHp);
+            // HP 바 (HP < maxHP 일 때만)
+            if (this.hp < this.maxHp) {
+                var barW = this.type === 'boss' ? 60 : 40;
+                var barH = this.type === 'boss' ? 8 : 6;
+                Sentinel.utils.drawHealthBar(ctx, x, y - 30, barW, barH, this.hp, this.maxHp);
+            }
 
             // 슬로우 효과 표시
-            if (this.effects.length > 0) {
-                for (var i = 0; i < this.effects.length; i++) {
-                    if (this.effects[i].type === 'slow') {
-                        Sentinel.utils.fillCircle(ctx, x, y + this.size + 6, 3, '#64B5F6', 0.8);
-                        break;
-                    }
+            for (var j = 0; j < this.effects.length; j++) {
+                if (this.effects[j].type === 'slow') {
+                    ctx.save();
+                    ctx.strokeStyle = '#00ccff';
+                    ctx.lineWidth = 3;
+                    ctx.shadowColor = '#00ccff';
+                    ctx.shadowBlur = 10;
+                    var es = this.getSize() + 8;
+                    ctx.strokeRect(x - es, y - es, es * 2, es * 2);
+                    ctx.restore();
+                    break;
                 }
+            }
+        }
+
+        getSize() {
+            switch (this.type) {
+                case 'scout': return 12;
+                case 'soldier': return 16;
+                case 'tank': return 20;
+                case 'healer': return 14;
+                case 'boss': return 28;
+                default: return 12;
             }
         }
     }
