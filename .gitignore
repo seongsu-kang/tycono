@@ -52,3 +52,4 @@ fixtures/*/.tycono/preferences.json
 # npm pack output
 *.tgz
 .tycono/
+.worktrees/

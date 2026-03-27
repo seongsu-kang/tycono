@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memo App</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📝 Memo</h1>
+        </header>
+
+        <div class="input-section">
+            <input
+                type="text"
+                id="memoInput"
+                placeholder="메모를 입력하세요..."
+                autocomplete="off"
+            >
+            <button id="addBtn">추가</button>
+        </div>
+
+        <div class="memo-list" id="memoList">
+            <!-- 메모 목록이 여기에 동적으로 추가됨 -->
+        </div>
+
+        <div class="empty-state" id="emptyState">
+            <p>메모가 없습니다.</p>
+            <p class="hint">위에서 메모를 추가해보세요 ✍️</p>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
