@@ -5,7 +5,7 @@
  * - Version tracking via .tycono/rules-version
  * - Auto-regeneration on version mismatch (server startup)
  * - Backup of pre-existing CLAUDE.md (first time only)
- * - Stub creation for .tycono/custom-rules.md
+ * - Stub creation for knowledge/custom-rules.md
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -42,13 +42,14 @@ function generateClaudeMd(version: string): string {
  *
  * Called on server startup. Compares .tycono/rules-version with package version.
  * If different, regenerates CLAUDE.md from template (safe because CLAUDE.md
- * contains 0% user data — all user customization is in .tycono/custom-rules.md).
+ * contains 0% user data — all user customization is in knowledge/custom-rules.md).
  */
 export function ensureClaudeMd(companyRoot: string): void {
   const tyconoDir = path.join(companyRoot, '.tycono');
   const rulesVersionPath = path.join(tyconoDir, 'rules-version');
   const claudeMdPath = path.join(companyRoot, 'CLAUDE.md');
-  const customRulesPath = path.join(tyconoDir, 'custom-rules.md');
+  const knowledgeDir = path.join(companyRoot, 'knowledge');
+  const customRulesPath = path.join(knowledgeDir, 'custom-rules.md');
   const backupPath = path.join(tyconoDir, 'CLAUDE.md.backup');
 
   // Skip if not initialized (no .tycono/ directory)

@@ -380,7 +380,7 @@ export function scaffoldCompany(name: string, targetDir: string): void {
     language: 'en',
   }, null, 2) + '\n');
   write(join(targetDir, '.tycono', 'rules-version'), getPackageVersion());
-  write(join(targetDir, '.tycono', 'custom-rules.md'), `# Custom Rules\n\n> Company-specific rules, constraints, and processes.\n> This file is owned by you — Tycono will never overwrite it.\n\n<!-- Add your custom rules below -->\n`);
+  write(join(targetDir, 'knowledge', 'custom-rules.md'), `# Custom Rules\n\n> Company-specific rules, constraints, and processes.\n> This file is owned by you — Tycono will never overwrite it.\n\n<!-- Add your custom rules below -->\n`);
 
   // 3. .gitignore
   write(join(targetDir, '.gitignore'), 'node_modules/\n.DS_Store\n');

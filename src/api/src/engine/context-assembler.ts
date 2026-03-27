@@ -300,8 +300,8 @@ function loadCompanyRules(companyRoot: string): string | null {
     parts.push(fs.readFileSync(claudeMdPath, 'utf-8'));
   }
 
-  // 2. User custom rules (.tycono/custom-rules.md — user owned)
-  const customPath = path.join(companyRoot, '.tycono', 'custom-rules.md');
+  // 2. User custom rules (knowledge/custom-rules.md — user owned, git tracked)
+  const customPath = path.join(companyRoot, 'knowledge', 'custom-rules.md');
   if (fs.existsSync(customPath)) {
     const custom = fs.readFileSync(customPath, 'utf-8').trim();
     if (custom) {

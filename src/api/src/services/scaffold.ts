@@ -337,11 +337,11 @@ export function scaffold(config: ScaffoldConfig): string[] {
   fs.writeFileSync(path.join(root, '.tycono', 'rules-version'), pkgVersion);
   created.push('.tycono/rules-version');
 
-  // Write .tycono/custom-rules.md (empty stub — user owned)
-  const customRulesPath = path.join(root, '.tycono', 'custom-rules.md');
+  // Write knowledge/custom-rules.md (empty stub — user owned, git tracked)
+  const customRulesPath = path.join(root, 'knowledge', 'custom-rules.md');
   if (!fs.existsSync(customRulesPath)) {
     fs.writeFileSync(customRulesPath, `# Custom Rules\n\n> Company-specific rules, constraints, and processes.\n> This file is owned by you — Tycono will never overwrite it.\n\n<!-- Add your custom rules below -->\n`);
-    created.push('.tycono/custom-rules.md');
+    created.push('knowledge/custom-rules.md');
   }
 
   // Write knowledge/company.md
