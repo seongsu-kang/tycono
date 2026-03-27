@@ -17,7 +17,7 @@
             sidebarWidth: 240,
             hudHeight: 60,
             bottomBarHeight: 50,
-            initialGold: 250,
+            initialGold: 200,
             initialLives: 20,
             totalWaves: 10
         },

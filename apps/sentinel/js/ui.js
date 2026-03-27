@@ -227,7 +227,8 @@
 
         handleRightClick(e) {
             this.game.selectedTowerType = null;
-            this.game.selectedTower = null; game.towers.forEach(function(t) { t.selected = false; });
+            this.game.selectedTower = null;
+            this.game.towers.forEach(function(t) { t.selected = false; });
         }
 
         getTowerAt(x, y) {
