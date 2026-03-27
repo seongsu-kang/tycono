@@ -134,10 +134,11 @@ export function generateClaudeMd(_name: string, _roles: Role[]): string {
 
 | Task | Read First | Role |
 |------|-----------|------|
-| Product planning | \`knowledge/projects/\` | PM |
-| Technical design | \`knowledge/architecture/\` | CTO |
-| Implementation | \`knowledge/projects/*/tasks.md\` | Engineer |
-| Operations | \`.tycono/\` | PM |
+| Product planning | \`projects/\` | PM |
+| Technical design | \`architecture/\` | CTO |
+| Implementation | \`projects/*/tasks.md\` | Engineer |
+| Business/Revenue | \`company.md\` | CBO |
+| Domain knowledge | \`knowledge.md\` | CBO |
 
 ---
 
@@ -149,7 +150,7 @@ export function generateClaudeMd(_name: string, _roles: Role[]): string {
 
 ### Custom Rules (CRITICAL)
 
-> ⛔ **Before starting work, check if \`.tycono/custom-rules.md\` exists and read it.**
+> ⛔ **Before starting work, check if \`custom-rules.md\` exists and read it.**
 
 ---
 
