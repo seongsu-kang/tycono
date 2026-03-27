@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinel — Tower Defense</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Layer 0: Namespace + Utils (foundation) -->
+    <script src="js/engine/namespace.js"></script>
+    <script src="js/utils/utils.js"></script>
+
+    <!-- Layer 1: Data (no dependencies beyond namespace) -->
+    <script src="js/data/towers.js"></script>
+    <script src="js/data/enemies.js"></script>
+    <script src="js/data/heroes.js"></script>
+    <script src="js/data/maps.js"></script>
+    <script src="js/data/waves.js"></script>
+
+    <!-- Layer 2: Systems (depend on data + utils) -->
+    <script src="js/systems/path.js"></script>
+    <script src="js/systems/particle.js"></script>
+    <script src="js/systems/economy.js"></script>
+    <script src="js/systems/synergy.js"></script>
+
+    <!-- Layer 3: Entities (depend on systems + data) -->
+    <script src="js/entities/enemy.js"></script>
+    <script src="js/entities/projectile.js"></script>
+    <script src="js/entities/tower.js"></script>
+    <script src="js/entities/hero.js"></script>
+
+    <!-- Layer 4: Wave Manager + Audio -->
+    <script src="js/systems/wave.js"></script>
+    <script src="js/audio/audio.js"></script>
+
+    <!-- Layer 5: UI -->
+    <script src="js/ui/hud.js"></script>
+    <script src="js/ui/sidebar.js"></script>
+    <script src="js/ui/menu.js"></script>
+    <script src="js/ui/modal.js"></script>
+    <script src="js/ui/effects.js"></script>
+
+    <!-- Layer 6: Engine (depend on all above) -->
+    <script src="js/engine/renderer.js"></script>
+    <script src="js/engine/input.js"></script>
+    <script src="js/engine/state.js"></script>
+
+    <!-- Layer 7: Main (game loop, ties everything together) -->
+    <script src="js/main.js"></script>
+</body>
+</html>
