@@ -1,9 +1,9 @@
-<p align="center">
-  <strong>Cursor gives you one AI developer. Tycono gives you an AI team.</strong><br>
-  <sub>Give one order. Watch your AI team plan, build, and learn together.</sub>
-</p>
+# tycono
 
-<h1 align="center">tycono</h1>
+AI Team Orchestration Engine
+
+> Infrastructure-as-Code defines servers with a single YAML file.
+> Company-as-Code defines an entire organization in code — and AI runs it.
 
 <p align="center">
   <a href="https://www.npmjs.com/package/tycono"><img src="https://img.shields.io/npm/v/tycono.svg" alt="npm version" /></a>
@@ -11,97 +11,128 @@
   <a href="https://www.npmjs.com/package/tycono"><img src="https://img.shields.io/node/v/tycono.svg" alt="node version" /></a>
 </p>
 
-<p align="center">
-  <a href="https://tycono.ai">Website</a> ·
-  <a href="#quick-start">Quick Start</a> ·
-  <a href="#how-it-works">How It Works</a> ·
-  <a href="#company-as-code">Company-as-Code</a> ·
-  <a href="CONTRIBUTING.md">Contributing</a>
-</p>
+---
+
+## Philosophy
+
+### Company as Code
+
+Define organizational structure, roles, authorities, and knowledge scopes in plain files. AI agents operate within this structure autonomously.
+
+```yaml
+# role.yaml
+id: engineer
+name: "Alex"
+level: member
+reports_to: cto
+model: claude-sonnet-4
+
+authority:
+  autonomous:
+    - "Code implementation"
+    - "Bug fixes"
+  requires_approval:
+    - "Architecture changes"
+
+knowledge_scope:
+  readable: ["projects/", "architecture/"]
+  writable: ["projects/*/technical/"]
+```
+
+One file defines who the agent is, what they can do, what they know, and who they report to.
+
+Vision: `tycono deploy company.yaml` — deploy a company with one command.
+
+### Knowledge That Compounds
+
+Every AI tool resets when the session ends. Tycono doesn't.
+
+The **Agentic Knowledge Base (AKB)** is a file-based knowledge system where insights persist, compound, and cross-link over time.
+
+```
+1. Pre-K    Read existing knowledge before starting
+2. Task     Define work from what the org already knows
+3. Execute  Do the actual work
+4. Post-K   Extract insights, cross-link, register in Hub
+5. Next     Update status, identify next work
+```
+
+Session 50 is dramatically smarter than Session 1.
+
+### Multi-Agent Supervision
+
+Not a black box. You watch the entire hierarchy work in real time.
+
+```
+dispatch   CEO assigns CTO. CTO assigns Engineer.
+watch      Heartbeat monitors progress in real time.
+react      If direction drifts, supervisor sends amend.
+repeat     Until the wave is complete.
+```
+
+Authority is enforced — engineers can't make CEO decisions, PMs can't merge code.
 
 ---
 
-Cursor, Lovable, Bolt — they all give you **one AI agent**. It helps, but you still drive everything.
+## Surfaces
 
-**tycono** gives you an **AI team**. A CTO reviews architecture. Engineers write code. A PM breaks down tasks. QA catches bugs. You just give the order and watch them work.
+One engine, three interfaces.
+
+### Plugin (Claude Code)
+
+Install the plugin and run AI teams directly inside Claude Code.
+
+```bash
+claude plugin install tycono
+/tycono "Build a landing page"
+/tycono --agency gamedev "Build a tower defense"
+```
+
+### TUI (Terminal)
+
+Terminal-native dashboard with multi-wave workspaces, real-time agent streams, and org tree visualization.
 
 ```bash
 npx tycono
 ```
 
 ```
-> Make a landing page for our product
-
-▶ Supervisor started
-💭 Analyzing the directive. I'll dispatch CTO for implementation and CBO for copy...
-→ cto 배정: Landing page structure + implementation
-→ cbo 배정: Product messaging + copywriting
-  → Read architecture/deployment.md
-  → dispatch fe-engineer: Build responsive landing page
-  cto         ▶ Reviewing architecture for landing page...
-  fe-engineer → Write src/landing/index.html
-  📄 Write src/landing/styles.css
-  cbo         ✓ done (5 turns)
-  fe-engineer ✓ done (12 turns)
-✓ Supervisor done (8 turns)
->
-```
-
-## Core Pillars
-
-### 1. CEO Supervisor — Org-chart orchestration
-
-You give one order. The system dispatches through a real hierarchy.
-
-CEO delegates to C-levels, C-levels dispatch to their teams. Authority is enforced — engineers can't make CEO decisions, PMs can't merge code.
-
-**Dual Mode**: Simple questions get answered directly (no team dispatch). Work tasks activate the full team. The system judges automatically.
-
-### 2. Multi-Wave — Parallel workspaces
-
-Multiple persistent conversations, each with its own team context.
-
-```
-/new Build the API        → Wave 1 (CTO + Engineers working)
-/new Write documentation  → Wave 2 (CBO + Writer working)
-/focus 1                  → Switch to Wave 1
-```
-
-Tab → Panel Mode: wave-scoped org tree, real-time stream, docs browser.
-
-### 3. Observability — See everything
-
-```
-Tab → Panel Mode
-
 ┌── W1 Build the API ──────┬── Stream  Docs  Info ──────────────┐
 │  3 sessions               │  cto     → dispatch engineer       │
 │  ── Org Tree ──           │  engineer → Write src/api/routes.ts│
-│  ● CEO                    │  engineer 📄 Write src/api/types.ts │
-│  ├─ ● CTO                │  qa       ▶ Running test suite...   │
+│  ● CEO                    │  engineer  Write src/api/types.ts  │
+│  ├─ ● CTO               │  qa       ▶ Running test suite...   │
 │  │  ├─ ● engineer         │                                     │
 │  │  └─ ● qa               │                                     │
 │  └─ ○ CBO                │                                     │
-│  [1] [2*]                 │                                     │
 └───────────────────────────┴─────────────────────────────────────┘
 ```
 
-- **Wave-scoped** — org tree shows only this wave's active agents
-- **Docs tab** — browse all .md files, ★ marks wave artifacts, Enter → vim
-- **Info tab** — wave metadata, sessions, ports
-- **Commands** — `/agents` `/sessions` `/kill` `/docs` `/read`
+### Pixel (Web Dashboard)
 
-### 4. AKB — Knowledge that compounds
+Isometric pixel office visualization. Watch your AI team walk around, sit at desks, and collaborate visually.
 
-Every AI tool: `Plan → Execute → Done`. Knowledge resets. Tycono adds:
+**Coming Soon** at [tycono.ai](https://tycono.ai)
 
+<p align="center">
+  <img src=".github/assets/hero-office.png" alt="Pixel office visualization" width="600" />
+</p>
+
+---
+
+## Agencies
+
+Pre-built team configurations for common workflows.
+
+```bash
+/tycono --agency gamedev "Build a browser game"
+/tycono --agency saas "Build an MVP for our SaaS"
+/tycono --agency research "Analyze competitor landscape"
 ```
-Pre-K:  Read existing knowledge → Plan grounded in what the company knows
-Execute: Do the work
-Post-K: Extract insights → Cross-link → Register in knowledge graph
-```
 
-Session 50 is dramatically smarter than session 1.
+Browse all agencies at [tycono.ai/agencies](https://tycono.ai/agencies)
+
+---
 
 ## Quick Start
 
@@ -110,16 +141,48 @@ mkdir my-company && cd my-company
 npx tycono
 ```
 
-A setup wizard guides you through:
-
-1. **Name your company** — set mission and domain
-2. **Choose a team template** — Startup, Research, Agency, or Custom
-3. **Start working** — type naturally, your AI team responds
+A setup wizard guides you through naming your company, choosing a team template, and starting work.
 
 ### Requirements
 
 - Node.js >= 18
 - [Claude Code CLI](https://claude.ai/download) (recommended) or Anthropic API key
+
+---
+
+## Project Structure
+
+This is a monorepo:
+
+```
+tycono/
+├── src/
+│   ├── api/              ← Core Engine (tycono server)
+│   ├── tui/              ← TUI (terminal interface)
+│   └── web/              ← Pixel (original web UI)
+├── packages/
+│   ├── server/           ← npm: tycono-server
+│   ├── plugin/           ← Claude Code Plugin
+│   └── web/              ← Agency Hub (tycono.ai)
+├── .github/assets/       ← Screenshots
+└── README.md
+```
+
+### Your Company Structure
+
+When you run `npx tycono`, it scaffolds:
+
+```
+your-company/
+├── CLAUDE.md             ← AI operating rules
+├── roles/                ← AI role definitions (role.yaml + skills)
+├── projects/             ← Product specs, PRDs, and tasks
+├── architecture/         ← Technical decisions and designs
+├── knowledge/            ← Domain knowledge (compounds over time)
+└── .tycono/              ← Config and preferences
+```
+
+---
 
 ## CLI
 
@@ -142,107 +205,33 @@ Type naturally to talk to your AI team.
 /agents           Wave → Role → Session tree
 /sessions         Sessions + ports
 /kill <id>        Kill a session
-/cleanup          Remove dead sessions
 /docs             Files created in this wave
 /read <path>      Preview file content
-/open <path>      Open in $EDITOR (vim)
-/help             Show help
-/quit             Exit
-
+/open <path>      Open in $EDITOR
 Tab               Panel Mode (org tree + stream + docs)
-1-9               Switch wave (in Panel Mode)
-h/l               Switch tab (Stream/Docs/Info)
-j/k               Navigate
-Ctrl+C            Quit
+/quit             Exit
 ```
 
-## Company-as-Code
+---
 
-Just as Terraform turns `.tf` files into running infrastructure, Tycono turns YAML and Markdown into a running company.
-
-```
-IaC                          CaC (Company-as-Code)
-─────────────────────        ─────────────────────
-.tf         → servers        role.yaml   → org structure
-playbook    → config         CLAUDE.md   → operating rules
-Dockerfile  → containers     skills/     → capabilities
-state file  → infra state    knowledge/  → org memory
-```
-
-Your company is **versionable**, **reproducible**, and **forkable** — just like code.
-
-## Your Company Structure
-
-```
-your-company/
-├── CLAUDE.md           ← AI operating rules (auto-managed)
-├── company/            ← Mission, vision, values
-├── roles/              ← AI role definitions (role.yaml + skills)
-├── projects/           ← Product specs, PRDs, and tasks
-├── architecture/       ← Technical decisions and designs
-├── operations/         ← Standups, decisions, wave history
-├── knowledge/          ← Domain knowledge (compounds over time)
-└── .tycono/            ← Config and preferences
-```
-
-## Team Templates
-
-| Template | Roles | Best For |
-|----------|-------|----------|
-| **Startup** | CTO + PM + Engineer + Designer + QA | Product development |
-| **Research** | Lead Researcher + Analyst + Writer | Analysis & reports |
-| **Agency** | Creative Director + Designer + Developer | Client projects |
-| **Custom** | Start empty, hire as you go | Full control |
-
-## Why Tycono?
-
-| | Cursor / Lovable / Bolt | Tycono |
-|---|---|---|
-| **Agents** | 1 AI helps you | **AI team works for you** |
-| **Your role** | Keep directing | **Give one order, watch** |
-| **Knowledge** | Resets every session | **Compounds forever** |
-| **Quality** | You review everything | **QA agent catches bugs** |
-| **Scale** | 1 task at a time | **Parallel across roles** |
-| **Interface** | Editor / chat | **Terminal-native TUI** |
-
-## Origin Story
-
-Tycono started as an AI office tycoon game — pixel characters walking around, sitting at desks, chatting in Slack-like channels. It was fun to watch.
-
-But the agents underneath were actually useful. They wrote real code, real documents, made real decisions. The game UI was cute; the real value was the AI team.
-
-So we stripped the pixels and built a terminal tool. Same AI team, no game — just work.
-
-The pixel office lives on as `npx tycono --classic` — a reminder of where it started.
+## Screenshots
 
 <p align="center">
-  <img src=".github/assets/hero-office.png" alt="Where it started — pixel office" width="480" />
-  <br>
-  <sub>Where it started: an AI office tycoon game</sub>
+  <img src=".github/assets/wave-center.png" alt="Wave center" width="600" />
+  <br><sub>Multi-wave workspace with real-time agent streams</sub>
 </p>
 
-## Environment Variables
+<p align="center">
+  <img src=".github/assets/knowledge-graph.png" alt="Knowledge graph" width="600" />
+  <br><sub>Knowledge graph visualization</sub>
+</p>
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `ANTHROPIC_API_KEY` | Your Anthropic API key | — |
-| `PORT` | Server port | auto-detect |
-| `COMPANY_ROOT` | Company directory | current directory |
-| `EDITOR` | Editor for /open command | vim |
+<p align="center">
+  <img src=".github/assets/pro-view.png" alt="Pro view" width="600" />
+  <br><sub>Pro view with detailed agent activity</sub>
+</p>
 
-## Roadmap
-
-- [x] TUI — terminal-native interface (default)
-- [x] Multi-Wave — parallel persistent workspaces
-- [x] Dual Mode — direct answer vs team dispatch
-- [x] CEO Wave dispatch with org-tree targeting
-- [x] AKB — Pre-K / Post-K knowledge loop
-- [x] Port Registry for multi-agent isolation
-- [x] Session lifecycle persistence
-- [ ] Git worktree isolation per agent session
-- [ ] **Desktop app** (.dmg / .exe) — background execution, notifications
-- [ ] Multi-LLM support (OpenAI, local models)
-- [ ] Company Preset Marketplace
+---
 
 ## Development
 
@@ -257,12 +246,10 @@ cd src/web && npm install && cd ../..
 npm run dev
 ```
 
-## License
+## Links
 
-[MIT](LICENSE)
-
----
-
-<p align="center">
-  <sub>Built with Tycono. An AI company that builds itself.</sub>
-</p>
+- Website: [tycono.ai](https://tycono.ai)
+- Agencies: [tycono.ai/agencies](https://tycono.ai/agencies)
+- npm: [tycono-server](https://www.npmjs.com/package/tycono-server)
+- GitHub: [seongsu-kang/tycono](https://github.com/seongsu-kang/tycono)
+- License: [MIT](LICENSE)

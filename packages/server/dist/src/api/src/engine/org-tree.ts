@@ -83,6 +83,17 @@ interface RawRoleYaml {
   };
 }
 
+/* ─── Default Roles (fallback when no roles/ directory) ── */
+
+const DEFAULT_ROLES: Array<{ id: string; name: string; level: 'c-level' | 'member'; reportsTo: string; persona: string }> = [
+  { id: 'cto', name: 'CTO', level: 'c-level', reportsTo: 'ceo', persona: 'Chief Technology Officer. Leads technical architecture and manages Engineer + QA.' },
+  { id: 'cbo', name: 'CBO', level: 'c-level', reportsTo: 'ceo', persona: 'Chief Business Officer. Leads product vision and manages PM + Designer.' },
+  { id: 'engineer', name: 'Engineer', level: 'member', reportsTo: 'cto', persona: 'Software Engineer. Writes working code.' },
+  { id: 'qa', name: 'QA', level: 'member', reportsTo: 'cto', persona: 'QA Engineer. Tests and validates.' },
+  { id: 'pm', name: 'PM', level: 'member', reportsTo: 'cbo', persona: 'Product Manager. Writes specs and requirements.' },
+  { id: 'designer', name: 'Designer', level: 'member', reportsTo: 'cbo', persona: 'UI/UX Designer.' },
+];
+
 /* ─── Build ──────────────────────────────────── */
 
 export function buildOrgTree(companyRoot: string, presetId?: string): OrgTree {
@@ -164,6 +175,27 @@ export function buildOrgTree(companyRoot: string, presetId?: string): OrgTree {
       } catch {
         // Skip malformed YAML
       }
+    }
+  }
+
+  // Fallback: if no C-Level roles found, use built-in defaults
+  const hasCLevel = Array.from(tree.nodes.values()).some(
+    n => n.id !== 'ceo' && n.level === 'c-level'
+  );
+  if (!hasCLevel) {
+    for (const def of DEFAULT_ROLES) {
+      if (tree.nodes.has(def.id)) continue;
+      tree.nodes.set(def.id, {
+        id: def.id,
+        name: def.name,
+        level: def.level,
+        reportsTo: def.reportsTo,
+        children: [],
+        persona: def.persona,
+        authority: { autonomous: [], needsApproval: [] },
+        knowledge: { reads: [], writes: [] },
+        reports: { daily: '', weekly: '' },
+      });
     }
   }
 

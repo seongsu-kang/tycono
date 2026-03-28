@@ -1,8 +1,14 @@
 {
   "name": "tycono",
-  "description": "AI team orchestration. Give Claude Code a team — CTO, Engineer, QA, Designer work together while you watch in real-time.",
+  "version": "0.1.0",
+  "description": "AI team orchestration. Give Claude Code an AI team — CTO, Engineer, QA, Designer work together while you watch.",
   "author": {
     "name": "Tycono",
-    "email": "hello@tycono.ai"
-  }
+    "email": "hello@tycono.ai",
+    "url": "https://tycono.ai"
+  },
+  "homepage": "https://tycono.ai",
+  "repository": "https://github.com/seongsu-kang/tycono",
+  "license": "MIT",
+  "keywords": ["ai-team", "orchestration", "agency", "gamedev", "startup", "multi-agent"]
 }

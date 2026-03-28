@@ -101,7 +101,8 @@ export function createHttpServer(): http.Server {
   const app = createExpressApp();
 
   const server = http.createServer((req, res) => {
-    const url = req.url ?? '';
+    const rawUrl = req.url ?? '';
+    const url = rawUrl.split('?')[0]; // Strip query string for route matching
     const method = req.method ?? '';
 
     // GET /api/waves/active — restore active waves after refresh
@@ -150,8 +151,8 @@ export function createHttpServer(): http.Server {
       return;
     }
 
-    // Non-SSE exec/jobs endpoints (GET, DELETE)
-    if ((url.startsWith('/api/exec/') || url.startsWith('/api/jobs')) && (method === 'GET' || method === 'DELETE')) {
+    // Non-SSE exec/jobs/waves endpoints (GET, DELETE)
+    if ((url.startsWith('/api/exec/') || url.startsWith('/api/jobs') || url.startsWith('/api/waves/')) && (method === 'GET' || method === 'DELETE')) {
       setExecCors(req, res);
       handleExecRequest(req, res);
       return;

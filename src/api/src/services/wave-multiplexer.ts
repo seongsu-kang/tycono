@@ -300,14 +300,14 @@ class WaveMultiplexer {
   getActiveWaves(): Array<{
     id: string;
     directive: string;
-    dispatches: Array<{ sessionId: string; roleId: string; roleName: string }>;
+    dispatches: Array<{ sessionId: string; roleId: string; roleName: string; status: string }>;
     startedAt: number;
     sessionIds: string[];
   }> {
     const result: Array<{
       id: string;
       directive: string;
-      dispatches: Array<{ sessionId: string; roleId: string; roleName: string }>;
+      dispatches: Array<{ sessionId: string; roleId: string; roleName: string; status: string }>;
       startedAt: number;
       sessionIds: string[];
     }> = [];
@@ -316,12 +316,13 @@ class WaveMultiplexer {
       const hasActive = Array.from(sessions.values()).some(e => e.status === 'running' || e.status === 'awaiting_input');
       if (!hasActive) continue;
 
+      // Include ALL sessions (not just root) so plugin can show full team status
       const rootSessions = Array.from(sessions.values())
-        .filter(e => !e.parentSessionId || !sessions.has(e.parentSessionId))
         .map(e => ({
           sessionId: e.sessionId,
           roleId: e.roleId,
           roleName: e.roleId.toUpperCase(),
+          status: e.status,
         }));
 
       const firstExec = rootSessions.length > 0

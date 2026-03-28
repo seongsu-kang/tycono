@@ -1,0 +1,324 @@
+@import "tailwindcss";
+
+@theme {
+  /* Background — original landing palette */
+  --color-base-950: #111118;
+  --color-base-900: #18181f;
+  --color-base-800: #1e1e28;
+  --color-base-700: #2a2a36;
+  --color-base-600: #3a3a48;
+  --color-base-500: #5a5a6a;
+  --color-base-400: #8a8a9a;
+  --color-base-300: #b0b0be;
+  --color-base-200: #d0d0da;
+  --color-base-100: #e8e8ef;
+  --color-base-50: #F0EDE8;
+
+  /* Accent */
+  --color-accent: #FF8C42;
+  --color-accent-light: #FFa862;
+  --color-accent-dark: #E07030;
+
+  /* Secondary */
+  --color-secondary: #6C63FF;
+  --color-secondary-light: #8B85FF;
+  --color-secondary-dark: #5A52E0;
+
+  /* Legacy compat */
+  --color-terminal-bg: #111118;
+  --color-terminal-bg-deeper: #18181f;
+  --color-terminal-surface: #1e1e28;
+  --color-terminal-surface-light: #2a2a36;
+  --color-text-primary: #F0EDE8;
+  --color-text-secondary: #8a8a9a;
+  --color-text-muted: #5a5a6a;
+  --color-accent-green: #34D399;
+  --color-code-text: #89b4fa;
+
+  /* Role colors */
+  --color-role-cto: #1565C0;
+  --color-role-cbo: #E65100;
+  --color-role-pm: #2E7D32;
+  --color-role-engineer: #4A148C;
+  --color-role-designer: #AD1457;
+  --color-role-qa: #00695C;
+  --color-role-default: #6366F1;
+
+  /* Font families */
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-display: 'DM Sans', 'Inter', system-ui, sans-serif;
+  --font-mono: 'Fira Code', monospace;
+}
+
+:root {
+  --border-color: rgba(240, 237, 232, 0.06);
+  --border-hover: rgba(255, 140, 66, 0.25);
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: #111118;
+  color: #F0EDE8;
+}
+
+h1, h2, h3 {
+  font-family: 'DM Sans', 'Inter', system-ui, sans-serif;
+}
+
+::selection {
+  background: #FF8C42;
+  color: #111118;
+}
+
+/* Smooth scroll */
+html {
+  scroll-behavior: smooth;
+}
+
+/* === Gradient text === */
+.gradient-text {
+  background: linear-gradient(135deg, #FF8C42 0%, #FFa862 50%, #FFc48a 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.gradient-text-secondary {
+  background: linear-gradient(135deg, #6C63FF 0%, #8B85FF 50%, #a8a2ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* === Glass nav === */
+.glass-nav {
+  background: rgba(17, 17, 24, 0.75);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+/* === Cards === */
+.landing-card {
+  background: rgba(30, 30, 40, 0.7);
+  border: 1px solid rgba(240, 237, 232, 0.06);
+  backdrop-filter: blur(10px);
+  transition: all 0.4s cubic-bezier(.16,1,.3,1);
+}
+.landing-card:hover {
+  border-color: rgba(255, 140, 66, 0.25);
+  transform: translateY(-6px);
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5), 0 0 60px rgba(255, 140, 66, 0.05);
+}
+
+/* === Code blocks (landing) === */
+.code-block-landing {
+  background: #18181f;
+  border: 1px solid rgba(240, 237, 232, 0.08);
+}
+
+/* === Hero animated glow === */
+.hero-glow {
+  position: absolute;
+  top: -200px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 900px;
+  height: 600px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(255, 140, 66, 0.06) 0%, rgba(108, 99, 255, 0.03) 50%, transparent 70%);
+  animation: hero-pulse 8s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes hero-pulse {
+  0%, 100% { opacity: 0.6; transform: translateX(-50%) scale(1); }
+  50% { opacity: 1; transform: translateX(-50%) scale(1.15); }
+}
+
+/* === Grid bg === */
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(255, 140, 66, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 140, 66, 0.015) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+/* === Section divider === */
+.section-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(240, 237, 232, 0.08), transparent);
+}
+
+/* === Warm glow === */
+.warm-glow {
+  box-shadow: 0 0 80px rgba(255, 140, 66, 0.05), 0 0 30px rgba(255, 140, 66, 0.03);
+}
+
+/* === Role icon === */
+.role-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* === Step dot === */
+.step-dot {
+  background: linear-gradient(135deg, #FF8C42 0%, #E07030 100%);
+}
+
+/* === Comparison row === */
+.comparison-row:nth-child(even) {
+  background: rgba(240, 237, 232, 0.02);
+}
+
+/* === Number highlight === */
+.num-highlight {
+  font-variant-numeric: tabular-nums;
+  background: linear-gradient(135deg, #FF8C42, #FFa862);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* === Floating particles === */
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.particle-1 {
+  width: 300px; height: 300px; top: 20%; left: -150px;
+  background: rgba(255, 140, 66, 0.03);
+  animation: float-1 20s ease-in-out infinite;
+}
+.particle-2 {
+  width: 200px; height: 200px; top: 60%; right: -100px;
+  background: rgba(108, 99, 255, 0.03);
+  animation: float-2 15s ease-in-out infinite;
+}
+.particle-3 {
+  width: 150px; height: 150px; top: 40%; left: 60%;
+  background: rgba(255, 140, 66, 0.02);
+  animation: float-3 18s ease-in-out infinite;
+}
+@keyframes float-1 { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(60px, -40px); } }
+@keyframes float-2 { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(-50px, 30px); } }
+@keyframes float-3 { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(-30px, -50px); } }
+
+/* === Scroll animations === */
+.reveal {
+  opacity: 0;
+  transform: translateY(32px);
+  transition: opacity 0.7s cubic-bezier(.16,1,.3,1), transform 0.7s cubic-bezier(.16,1,.3,1);
+}
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.reveal-scale {
+  opacity: 0;
+  transform: scale(0.92);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+.reveal-scale.visible {
+  opacity: 1;
+  transform: scale(1);
+}
+.stagger-1 { transition-delay: 0.08s; }
+.stagger-2 { transition-delay: 0.16s; }
+.stagger-3 { transition-delay: 0.24s; }
+.stagger-4 { transition-delay: 0.32s; }
+.stagger-5 { transition-delay: 0.40s; }
+.stagger-6 { transition-delay: 0.48s; }
+
+/* === Typing animation === */
+.typing-line { opacity: 0; transform: translateX(-8px); }
+.typing-line.typed { opacity: 1; transform: translateX(0); transition: opacity 0.3s ease, transform 0.3s ease; }
+
+/* === Cursor blink === */
+.cursor-blink::after { content: '|'; animation: blink 1s infinite; color: #FF8C42; }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+/* === Slideshow === */
+.slideshow { position: relative; overflow: hidden; border-radius: 16px; border: 1px solid rgba(240, 237, 232, 0.08); }
+.slideshow img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; animation: slideshow 15s infinite; }
+.slideshow img:nth-child(1) { animation-delay: 0s; }
+.slideshow img:nth-child(2) { animation-delay: 3s; }
+.slideshow img:nth-child(3) { animation-delay: 6s; }
+.slideshow img:nth-child(4) { animation-delay: 9s; }
+.slideshow img:nth-child(5) { animation-delay: 12s; }
+@keyframes slideshow { 0% { opacity: 0; } 4% { opacity: 1; } 20% { opacity: 1; } 24% { opacity: 0; } 100% { opacity: 0; } }
+
+/* === FAQ === */
+.faq-item { border-bottom: 1px solid rgba(240, 237, 232, 0.06); }
+.faq-answer { max-height: 0; overflow: hidden; transition: max-height 0.4s cubic-bezier(.16,1,.3,1), padding 0.3s ease; padding: 0 0; }
+.faq-item.open .faq-answer { max-height: 200px; padding: 0 0 20px 0; }
+.faq-chevron { transition: transform 0.3s ease; }
+.faq-item.open .faq-chevron { transform: rotate(180deg); }
+
+/* === Org chart animations === */
+.org-node { opacity: 0; transform: scale(0.8); transition: all 0.5s cubic-bezier(.16,1,.3,1); }
+.org-node.active { opacity: 1; transform: scale(1); }
+.org-node rect { transition: stroke-width 0.4s ease, stroke 0.4s ease, filter 0.4s ease, fill 0.4s ease; }
+.org-node.lit rect { stroke-width: 2.5; fill: rgba(30,30,40,0.95); }
+.org-line { stroke-dasharray: 300; stroke-dashoffset: 300; transition: stroke-dashoffset 0.6s ease, stroke 0.4s ease, stroke-width 0.3s ease; }
+.org-line.active { stroke-dashoffset: 0; }
+.org-line.lit { stroke-width: 2.5; }
+.org-kb { transition: opacity 0.8s ease, fill 0.6s ease, stroke 0.6s ease; }
+.org-kb.glow { fill: rgba(52,211,153,0.1) !important; stroke: rgba(52,211,153,0.35) !important; }
+
+/* === Legacy code-block (agencies page compat) === */
+.code-block {
+  background: #18181f;
+  border: 1px solid rgba(240, 237, 232, 0.08);
+  border-radius: 8px;
+  padding: 16px;
+  font-family: 'Fira Code', 'SF Mono', monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-x: auto;
+}
+.code-block .command { color: #89b4fa; }
+.code-block .flag { color: #d2a8ff; }
+.code-block .string { color: #a5d6ff; }
+
+/* Grid background pattern (legacy) */
+.grid-pattern {
+  background-image:
+    linear-gradient(rgba(255, 140, 66, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 140, 66, 0.015) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+/* Glow effect (legacy) */
+.glow-accent {
+  box-shadow: 0 0 60px rgba(255, 140, 66, 0.1), 0 0 120px rgba(255, 140, 66, 0.03);
+}
+
+/* Terminal window (legacy agencies compat) */
+.terminal-window {
+  background: #18181f;
+  border: 1px solid rgba(240, 237, 232, 0.08);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.terminal-header {
+  background: #1e1e28;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid rgba(240, 237, 232, 0.06);
+}
+.terminal-dot { width: 10px; height: 10px; border-radius: 50%; }
+.terminal-dot-red { background: #ff5f57; }
+.terminal-dot-yellow { background: #febc2e; }
+.terminal-dot-green { background: #28c840; }
+.terminal-title {
+  font-family: 'Fira Code', monospace;
+  font-size: 11px;
+  color: #5a5a6a;
+  margin-left: 8px;
+}
+.terminal-body { padding: 24px; }

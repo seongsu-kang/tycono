@@ -4,6 +4,8 @@
 # Starts headless server (if needed) and creates a wave
 
 set -euo pipefail
+export PYTHONIOENCODING=utf-8
+export LC_ALL=en_US.UTF-8
 
 # Parse arguments
 PROMPT_PARTS=()
@@ -12,21 +14,21 @@ PRESET=""
 while [[ $# -gt 0 ]]; do
   case $1 in
     -h|--help)
-      echo "Usage: /tycono [TASK...] [--preset <id>]"
+      echo "Usage: /tycono [TASK...] [--agency <id>]"
       echo ""
       echo "  Start an AI team to work on your task."
       echo ""
       echo "  Options:"
-      echo "    --preset <id>    Load domain knowledge (gamedev, startup-mvp, saas-growth)"
+      echo "    --agency <id>    Load domain knowledge (gamedev, startup-mvp, solo-founder)"
       echo ""
       echo "  Examples:"
       echo "    /tycono Build a browser game"
-      echo "    /tycono --preset gamedev Create a tower defense game"
+      echo "    /tycono --agency gamedev Create a tower defense game"
       exit 0
       ;;
-    --preset)
+    --agency|--preset)
       if [[ -z "${2:-}" ]]; then
-        echo "❌ Error: --preset requires an argument (e.g., gamedev, startup-mvp)" >&2
+        echo "❌ Error: --agency requires an argument (e.g., gamedev, startup-mvp)" >&2
         exit 1
       fi
       PRESET="$2"
@@ -46,8 +48,24 @@ if [[ -z "$DIRECTIVE" ]]; then
   echo "" >&2
   echo "  Examples:" >&2
   echo "    /tycono Build a browser shooting game" >&2
-  echo "    /tycono --preset gamedev Create an RPG" >&2
+  echo "    /tycono --agency gamedev Create an RPG" >&2
   exit 1
+fi
+
+# --- Bootstrap (Zero Setup) ---
+# Install global agencies only (roles/CLAUDE.md are managed by server)
+
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+BOOTSTRAP_DIR="${PLUGIN_ROOT}/bootstrap"
+
+if [[ -d "${BOOTSTRAP_DIR}/agencies" ]]; then
+  mkdir -p "$HOME/.tycono/agencies"
+  for AGENCY_DIR in "${BOOTSTRAP_DIR}/agencies"/*/; do
+    AGENCY_NAME=$(basename "$AGENCY_DIR")
+    if [[ ! -d "$HOME/.tycono/agencies/$AGENCY_NAME" ]]; then
+      cp -r "$AGENCY_DIR" "$HOME/.tycono/agencies/$AGENCY_NAME"
+    fi
+  done
 fi
 
 # --- Server Management ---
@@ -76,8 +94,8 @@ if [[ -z "$API_URL" ]]; then
   # Find tycono binary
   TYCONO_BIN=$(which tycono-server 2>/dev/null || echo "")
   if [[ -z "$TYCONO_BIN" ]]; then
-    # Use npx as fallback
-    npx tycono-server &
+    # Use npx as fallback (pin version)
+    npx tycono-server@0.1.0-beta.7 &
     SERVER_PID=$!
   else
     "$TYCONO_BIN" &
@@ -133,24 +151,31 @@ if [[ -z "$WAVE_ID" ]]; then
 fi
 
 # Save state for stop hook
+echo "📝 Saving state to $(pwd)/.claude/tycono.local.md ..."
 mkdir -p .claude
-cat > .claude/tycono.local.md <<EOF
+cat > .claude/tycono.local.md <<TYCONO_STATE
 ---
 active: true
 wave_id: ${WAVE_ID}
 api_url: ${API_URL}
 session_id: ${CLAUDE_CODE_SESSION_ID:-}
 directive: $(echo "$DIRECTIVE" | head -c 200)
-preset: ${PRESET:-none}
+agency: ${PRESET:-none}
 started_at: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 ---
-EOF
+TYCONO_STATE
+
+if [[ -f ".claude/tycono.local.md" ]]; then
+  echo "✅ State file saved"
+else
+  echo "❌ State file NOT saved!" >&2
+fi
 
 echo ""
 echo "🤖 Tycono Wave started!"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  Wave:     $WAVE_ID"
-echo "  Preset:   ${PRESET:-auto}"
+echo "  Agency:   ${PRESET:-auto}"
 echo "  Server:   $API_URL"
 echo ""
 echo "  Directive: $DIRECTIVE"

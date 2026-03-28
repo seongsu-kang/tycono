@@ -1,0 +1,69 @@
+# gamedev — Official Tycono Agency
+# 게임 개발팀
+
+spec: agency/v1
+id: gamedev
+name: "Game Dev Team"
+tagline: "From concept to playable game"
+version: "1.0.0"
+
+description: |
+  브라우저/모바일 게임을 기획부터 플레이 테스트까지 만드는 전문 팀.
+  게임 디자인 문서(GDD) 작성, 프로토타이핑, 게임 밸런싱에 집중.
+  "재미있는 게임"을 만들기 위한 반복적 테스트와 개선.
+
+author:
+  id: tycono
+  name: "Tycono Official"
+  verified: true
+
+# 분류
+category: engineering
+industry: gamedev
+stage: idea
+use_case:
+  - game-development
+  - browser-game
+  - mobile-game
+  - prototyping
+
+# 팀 구성 — Role ID만. 상세는 전사 roles/{id}/role.yaml
+roles:
+  - cto
+  - pm
+  - engineer
+  - designer
+  - qa
+
+# Knowledge — 전사 AKB에 설치될 추천 문서
+recommended_knowledge:
+  - game-dev-guide.md
+  - game-design-doc.md
+
+# 가격 (Official = Free)
+pricing:
+  type: one-time
+  price: 0
+  wave_scoped_tier: pro
+
+# 메타데이터
+tags: [game, gamedev, canvas, phaser, unity, browser-game]
+languages: [en, ko]
+
+stats:
+  installs: 0
+  rating: 0
+  reviews: 0
+  waves_used: 0
+
+# Wave-scoped 전용
+wave_scoped:
+  recommended_tasks:
+    - "게임 컨셉 + GDD 작성"
+    - "프로토타입 개발"
+    - "게임 메커닉 구현"
+    - "UI/HUD 디자인"
+    - "플레이테스트 + 밸런싱"
+  task_keywords: [game, gamedev, gdd, prototype, mechanic, balance, playtest, canvas, phaser]
+  avg_wave_duration: "4-10 hours"
+  complexity: high

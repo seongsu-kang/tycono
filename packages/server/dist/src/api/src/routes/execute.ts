@@ -126,6 +126,32 @@ export function handleExecRequest(req: IncomingMessage, res: ServerResponse): vo
     return;
   }
 
+  // ── GET /api/waves/:waveId — Single wave status ──
+  const waveDetailMatch = url.match(/^\/api\/waves\/([^/]+)$/);
+  if (method === 'GET' && waveDetailMatch) {
+    const waveId = waveDetailMatch[1];
+    // Try active waves first
+    const activeWaves = waveMultiplexer.getActiveWaves();
+    const active = activeWaves.find((w: { waveId: string }) => w.waveId === waveId);
+    if (active) {
+      jsonResponse(res, 200, active);
+      return;
+    }
+    // Fallback: read wave file from disk
+    const wavePath = path.join(COMPANY_ROOT, '.tycono', 'waves', `${waveId}.json`);
+    if (fs.existsSync(wavePath)) {
+      try {
+        const waveData = JSON.parse(fs.readFileSync(wavePath, 'utf-8'));
+        jsonResponse(res, 200, waveData);
+      } catch {
+        jsonResponse(res, 500, { error: 'Failed to read wave file' });
+      }
+      return;
+    }
+    jsonResponse(res, 404, { error: 'Wave not found' });
+    return;
+  }
+
   // ── Legacy /api/exec/* routes ──
   const sessionMatch = url.match(/\/api\/exec\/session\/([^/]+)\/message$/);
 

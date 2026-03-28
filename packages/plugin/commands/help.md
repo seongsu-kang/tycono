@@ -23,24 +23,27 @@ You see everything in real-time — who's working on what, what they're producin
 | `/tycono <task>` | Start a wave — your AI team begins working |
 | `/tycono-status` | Check current wave progress |
 | `/tycono-cancel` | Cancel the active wave |
+| `/tycono-agency-list` | List installed agencies |
+| `/tycono-agency-create` | Create a new custom agency |
+| `/tycono-agency-install` | Install an agency from marketplace |
 
 ## Examples
 
 ```
 /tycono "Build a browser tower defense game"
-/tycono --preset gamedev "Create an RPG with combat and inventory"
+/tycono --agency gamedev "Create an RPG with combat and inventory"
 /tycono "Refactor this project's API layer"
 ```
 
-## Presets
+## Agencies
 
-Presets load domain-specific knowledge for your team:
+Agencies load domain-specific knowledge for your team:
 
-| Preset | Team | Use Case |
+| Agency | Team | Use Case |
 |--------|------|----------|
 | `gamedev` | CTO, Engineer, QA, PM, Designer | Game development |
 | `startup-mvp` | CTO, Engineer, PM | MVP prototyping |
-| `saas-growth` | CTO, PM, CBO | SaaS product development |
+| `solo-founder` | CTO, CBO, Engineer, Designer | Solo founder projects |
 
 ## How it Works
 

@@ -1,83 +1,115 @@
-# Company Rules
+# Your Knowledge Base
 
-> Powered by [Tycono](https://tycono.ai) — AI Company Operating Platform
-
----
-
-## Task Routing
-
-| Task | Read First | Role |
-|------|-----------|------|
-| Product planning | `projects/` | PM |
-| Technical design | `architecture/` | CTO |
-| Implementation | `projects/*/tasks.md` | Engineer |
-| UI/UX Design | `projects/*/design/` | Designer |
-| Testing/QA | `projects/*/tasks.md` | QA |
-| E2E Testing | `e2e-experiments/tui-e2e-testcases.md` | QA |
-| Operations | `marketing/` | PM |
-| Business/Revenue | `company.md` | CBO |
-| Domain knowledge | `knowledge.md` | CBO |
+> Powered by [Tycono](https://tycono.ai)
 
 ---
 
-## AKB Core Concepts
+## AKB Core Concept
 
-> **AKB** = A file-based knowledge system where AI uses **search (Grep/Glob)** to find and **contextual links** to navigate
->
-> Full reference: `methodologies/agentic-knowledge-base.md`
+> **AKB** = File-based knowledge system where AI finds via **Search (Grep/Glob)** and navigates via **Contextual Links**
 
 | Layer | Role | AI Usage |
 |-------|------|----------|
 | **Root** (CLAUDE.md) | Minimal routing | Auto-injected as system prompt |
-| **Hub** ({folder}.md) | TOC + tool/guide references | **Check before starting work** |
-| **Node** (*.md) | Actual information | Search directly via Grep/Glob |
+| **Hub** ({folder}.md) | Human TOC + guides | **Check before starting work** |
+| **Node** (*.md) | Actual information | Direct search via Grep/Glob |
 
 ---
 
-## AI Work Rules
-
-### The Loop (Work Cycle)
-
-Every task follows this cycle. Implementing without completing the cycle is only half the job.
-
-| Step | Action | Why |
-|------|--------|-----|
-| ① Knowledge | Check/research related docs | Without context, direction goes wrong |
-| ② Task | Define task from docs | Without requirements, you'll rework |
-| ③ Implement | Execute the actual work | Value creation |
-| ④ Knowledge Update | Update docs with new insights | Prevents knowledge decay |
-| ⑤ Task Update | Update task status, check next work | Ensures continuity |
-
-**C-Level**: Execute The Loop autonomously — decompose tasks, analyze dependencies, dispatch independent tasks in parallel, collect results.
-**Member**: After implementation, always complete steps ④ and ⑤.
+## AI Working Rules (CRITICAL)
 
 ### Hub-First Principle
 
-> ⛔ **Read the relevant Hub document before starting any work.**
+> ⛔ **Read Hub document BEFORE implementing/testing**
 
-Check the Task Routing table above to find the right "Read First" path.
+Based on AKB observations, AI tends to skip Hubs and search directly.
+But **Hubs contain existing tools/scripts/guides** - missing them causes redundant work.
+
 Every folder has a Hub file (`{folder-name}.md`) as its entry point.
 Read the Hub's existing tools/scripts/guides before starting work.
 
-### Skill Check Principle
+### Required Check Situations
 
-> ⛔ **If `.claude/skills/{role-id}/SKILL.md` exists, you MUST read it.**
+| Situation | Read First | What to Find |
+|-----------|------------|--------------|
+| Debugging/Testing | Hub → guides/ | Existing debug tools |
+| API Calls | Hub → related Node | Documented methods |
+| New Feature | Hub | Similar existing features |
+| Strategy/Design | Hub + detail docs | Design philosophy, past decisions |
 
-Skill files define the tools, commands, and guides for each Role.
-Working without reading skills means missing existing tools and starting from scratch.
+### Correct Patterns
 
-### Custom Rules (CRITICAL)
+```
+✅ Debugging
+   → {domain}.md (Hub) → guides/debugging.md
+   → Use existing debug scripts
 
-> ⛔ **Before starting work, check if `custom-rules.md` exists and read it.**
-> This file contains company-specific rules, constraints, and processes.
-> If the file doesn't exist, ignore this section.
+✅ Testing
+   → {domain}.md (Hub) → test utilities
 
-### Git Rules
+✅ API Integration
+   → api.md (Hub) → existing client libraries
+```
 
-- Source code changes: feature branch → PR → merge
-- Direct push to main is prohibited
+### Anti-Patterns
 
-### Knowledge Gate
+```
+❌ Skip Hub → curl API directly
+❌ Skip Hub → Write scripts from scratch
+❌ Skip Hub → Start with assumptions
+```
+
+---
+
+## Exploration Depth Principle
+
+> ⛔ **For strategy/idea questions, Hub alone is NOT enough. Explore detail docs.**
+
+AI tends to read a few Hubs and judge "sufficient".
+But **strategic questions need specific context** - shallow exploration leads to superficial answers.
+
+### Exploration Depth by Question Type
+
+| Question Type | Minimum | Additional |
+|---------------|---------|------------|
+| Implementation | Hub | Related Nodes |
+| Debugging/Testing | Hub → guides/ | Existing tools |
+| **Strategy/Ideas** | Hub | **Design philosophy, core problems, phase docs** |
+| **Connecting A and B** | **Both Hubs** | **Both core docs (design, business, phases)** |
+
+### When Deep Exploration is Needed
+
+```
+✅ "How to connect System A and System B?"
+   → system-a.md + system-b.md (both Hubs)
+   → architecture.md (system design)
+   → security-model.md (design philosophy)
+   → business-requirements.md (business context)
+
+✅ "Ideas for improving performance?"
+   → {domain}.md (Hub)
+   → performance-analysis.md (problem details, current approach)
+
+✅ "Apply this architecture to another domain?"
+   → architecture.md (Hub)
+   → design-philosophy.md (domain-independent principles)
+```
+
+### Risks of Shallow Exploration
+
+```
+❌ Read only a few Hubs → "sufficient" judgment → superficial ideas
+❌ List only technical features → No connection to actual problems
+❌ Deep dive one side only → Forced fitting (bad integration)
+```
+
+> **Domain ≠ Core Problem**
+> Knowing "what the service is" but not "what's the core problem" → Technology pushing happens.
+> AKB Hubs specify core problems, enabling "problem-centered" connections.
+
+---
+
+## Knowledge Gate
 
 > **Before creating a new document, search existing docs first.**
 
@@ -93,7 +125,9 @@ Working without reading skills means missing existing tools and starting from sc
 5. Register in the relevant Hub
 ```
 
-### Document Hygiene
+---
+
+## Document Hygiene
 
 | Rule | Description |
 |------|-------------|
@@ -103,135 +137,14 @@ Working without reading skills means missing existing tools and starting from sc
 | Cross-link | New docs must reference at least 1 related doc |
 | Source attribution | External research must cite source and date |
 
-### Skills
-
-Roles have equipped **Skills** -- modular capability guides in `.claude/skills/`.
-
-- Role-specific skills: `.claude/skills/{role-id}/SKILL.md`
-- Shared skills: `.claude/skills/_shared/{skill-id}/SKILL.md`
-- Each Role's equipped skills are listed in `role.yaml` under `skills:`
-- **Always read SKILL.md before starting work** for that Role
-
-### Agent Dispatch Rules (CRITICAL)
-
-> **Sub-agents (Agent/Task) do NOT automatically receive CLAUDE.md.**
-> **You MUST instruct them to read CLAUDE.md in the first line of the prompt.**
-
-Without the Root (CLAUDE.md), sub-agents skip Hubs and dive straight into code,
-missing existing tools, guides, and constraints.
-
-#### Required Prompt Pattern
-
-Every sub-agent prompt **must include**:
-
-1. Instruction to read CLAUDE.md
-2. **Required skill file paths** for the Role
-
-```
-⛔ AKB Rule: Read CLAUDE.md before starting work.
-Find the relevant Hub from the "Task Routing" table and read it first.
-Check the Hub's existing tools/guides/constraints before exploring code.
-⛔ Read the required skill files below and use the tools/commands defined in them.
-```
-
-#### Role Skill Mapping
-
-| Role | Required Skills (path: `.claude/skills/{name}/SKILL.md`) |
-|------|--------------------------------------------------------|
-| Each Role | `{role-id}` + shared skills listed in `role.yaml` |
-
-> Check each Role's `role.yaml` `skills:` field for the exact list.
-
-### Self-Verification Before Escalation (CRITICAL)
-
-> **Before saying "I can't" or "user action needed", check your own tools/skills first.**
-
-#### Checklist (before reporting inability)
-
-```
-□ 1. Check CLAUDE.md routing table for relevant skills/tools
-□ 2. Glob search .claude/skills/ for related skills
-□ 3. Read the skill and determine if it can solve the problem
-□ 4. Only if all above fail → Report: "Tried X but unable due to [specific reason]"
-```
-
-### Exploration Depth
-
-> **Don't stop at Hubs. Explore detailed documents for thorough understanding.**
-
-| Question Type | Minimum | Additional |
-|--------------|---------|------------|
-| Implementation | Hub | Related Node |
-| Debugging | Hub | Related issues/logs |
-| **Strategy/Design** | Hub | **Design docs, past decisions, architecture details** |
-| **New Feature** | Hub | **Existing implementation patterns, related architecture** |
-
-### Skill Synchronization (CRITICAL)
-
-> **When changing code/processes, update related `.claude/skills/` SKILL.md files too.**
-
-| Change Type | Skill Update |
-|-------------|-------------|
-| API endpoint change | Update API reference |
-| New tool/script added | Add to tool listing |
-| Process change | Update procedure guide |
-| Feature removed | Remove related section |
-
-### AKB Management (CRITICAL)
-
-> **Every Role manages knowledge as part of their work. Don't just code and stop.**
-
-After completing any task, check:
-
-| # | Item | Description |
-|---|------|-------------|
-| 1 | **New knowledge?** | Did this task produce new insights/decisions/analysis? |
-| 2 | **Search existing docs** | Are there related docs already? (grep 3+ keywords) |
-| 3 | **Decide location** | Add to existing doc vs create new (prefer existing) |
-| 4 | **Hub connection** | Is the new/updated doc reachable from a Hub? |
-| 5 | **Cross-link** | Are there mutual references between related docs? |
-| 6 | **Task update** | Is the task status updated? Next work identified? |
-
 ---
 
-## Folder Structure
+## Writing Rules (4 Principles)
 
-```
-{project}/
-├── knowledge/                ← Tycono world. AI agent's cwd. Git root.
-│   ├── CLAUDE.md             ← Only AI entry point
-│   ├── .claude/skills/       ← Role skill guides
-│   │   ├── _shared/
-│   │   └── {role-id}/SKILL.md
-│   ├── roles/
-│   │   ├── roles.md          ← Hub
-│   │   └── {role-id}/
-│   │       ├── role.yaml
-│   │       ├── profile.md
-│   │       └── journal/
-│   ├── architecture/         ← Hub (technical architecture)
-│   ├── projects/             ← Hub (project tracking)
-│   ├── decisions/            ← CEO decisions
-│   ├── methodologies/        ← Frameworks & principles
-│   ├── presets/              ← Team presets
-│   ├── marketing/            ← Hub (SNS, launch, SEO)
-│   ├── e2e-experiments/      ← Hub (E2E test records)
-│   ├── company.md            ← Company info
-│   ├── custom-rules.md       ← Company custom rules (user owned)
-│   └── knowledge.md          ← Hub (domain knowledge index)
-│
-├── .tycono/                  ← Operational data (outside git)
-│   ├── config.json           ← Engine settings, codeRoots
-│   ├── tycono.db             ← SQLite (conversation history)
-│   ├── preferences.json      ← UI settings
-│   ├── waves/                ← Wave execution logs
-│   ├── sessions/             ← Session state
-│   ├── standup/              ← Daily standups
-│   ├── cost/                 ← Token cost tracking
-│   └── activity-streams/     ← SSE event logs (runtime)
-│
-└── apps/                     ← Code (default monorepo, outside git)
-```
+1. **TL;DR Required**: Include searchable keywords (bold)
+2. **Contextual Links**: Place links in body text with context
+3. **Keyword-Optimized Filenames**: `wallet-security.md` not `security.md`
+4. **Atomicity**: One topic per document, under 200 lines
 
 ---
 
