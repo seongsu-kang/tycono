@@ -1,13 +1,16 @@
 /**
- * preset-loader.ts — Load presets from knowledge/presets/
+ * preset-loader.ts — Load presets from multiple sources (2-Layer Knowledge)
  *
- * Scans knowledge/presets/ for:
- *   - _default.yaml (auto-generated from existing knowledge/roles/)
- *   - {name}/preset.yaml (installed presets with roles/skills/knowledge)
+ * Scan order (first match wins per preset ID):
+ *   1. knowledge/presets/{name}/preset.yaml    (legacy/local presets)
+ *   2. .tycono/agencies/{name}/preset.yaml     (local agency install)
+ *   3. ~/.tycono/agencies/{name}/preset.yaml   (global agency install)
+ *   4. Bundled presets (shipped with tycono-server)
  *
  * Returns PresetSummary[] for TUI display and full LoadedPreset for wave creation.
  */
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 import YAML from 'yaml';
@@ -124,10 +127,30 @@ export function loadPresets(companyRoot: string): LoadedPreset[] {
     }
   }
 
-  // 3. Bundled presets (shipped with tycono-server, fallback if not in user's project)
+  // 3. Installed agencies from .tycono/agencies/ (2-Layer Knowledge)
+  //    Local project agencies take priority, then global (~/.tycono/agencies/)
+  const agencyDirs = [
+    path.join(companyRoot, '.tycono', 'agencies'),
+    path.join(os.homedir(), '.tycono', 'agencies'),
+  ];
+  const loadedIds = new Set(presets.map(p => p.definition.id));
+  for (const agenciesDir of agencyDirs) {
+    if (!fs.existsSync(agenciesDir)) continue;
+    const entries = fs.readdirSync(agenciesDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (loadedIds.has(entry.name)) continue; // earlier sources take priority
+      const preset = loadPresetFromDir(path.join(agenciesDir, entry.name));
+      if (preset) {
+        presets.push(preset);
+        loadedIds.add(preset.definition.id);
+      }
+    }
+  }
+
+  // 4. Bundled presets (shipped with tycono-server, fallback if not in user's project)
   const bundledPresetsDir = path.resolve(__dirname, '../../../../presets');
   if (fs.existsSync(bundledPresetsDir)) {
-    const loadedIds = new Set(presets.map(p => p.definition.id));
     const entries = fs.readdirSync(bundledPresetsDir, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
