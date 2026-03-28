@@ -1,0 +1,8 @@
+{
+  "name": "tycono",
+  "description": "AI team orchestration. Give Claude Code a team — CTO, Engineer, QA, Designer work together while you watch in real-time.",
+  "author": {
+    "name": "Tycono",
+    "email": "hello@tycono.ai"
+  }
+}

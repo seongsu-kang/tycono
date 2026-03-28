@@ -787,14 +787,27 @@ ${state.continuous ? `## Continuous Improvement Mode (ON)
   }
 
   private onSupervisorDone(state: SupervisorState): void {
-    // Check if there are still running C-Level sessions for this wave
+    // Check if there are still running or paused C-Level sessions for this wave
     const waveSessions = listSessions().filter(s => s.waveId === state.waveId && s.id !== state.supervisorSessionId);
     const runningChildren = waveSessions.filter(s => {
       const exec = executionManager.getActiveExecution(s.id);
       return exec && exec.status === 'running';
     });
+    const awaitingChildren = waveSessions.filter(s => {
+      const exec = executionManager.getActiveExecution(s.id);
+      return exec && exec.status === 'awaiting_input';
+    });
 
-    if (runningChildren.length > 0) {
+    if (awaitingChildren.length > 0) {
+      // Auto-continue children that hit turn limit (using --resume for context continuity)
+      console.log(`[Supervisor] ${awaitingChildren.length} children awaiting_input (turn limit). Auto-continuing.`);
+      for (const session of awaitingChildren) {
+        executionManager.continueSession(session.id, '턴 한도에 도달했습니다. 이전 작업을 이어서 계속 진행하세요.');
+      }
+      // Restart supervisor to watch the resumed children
+      state.crashCount = 0;
+      this.scheduleRestart(state, 5_000);
+    } else if (runningChildren.length > 0) {
       // Principle 5: can't be done with running children → restart supervisor
       console.log(`[Supervisor] Done but ${runningChildren.length} children still running. Restarting.`);
       state.crashCount = 0; // Not a crash, intentional restart

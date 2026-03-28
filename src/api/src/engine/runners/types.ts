@@ -47,6 +47,8 @@ export interface RunnerConfig {
   env?: Record<string, string>;
   /** Wave-scoped preset ID for knowledge injection */
   presetId?: string;
+  /** CLI session ID for --resume (context continuity across turn limits) */
+  cliSessionId?: string;
   /** SV-7: Supervision — abort a running session */
   onAbortSession?: (sessionId: string) => boolean;
   /** SV-6: Supervision — amend a running session */
@@ -75,6 +77,8 @@ export interface RunnerResult {
   totalTokens: { input: number; output: number };
   toolCalls: Array<{ name: string; input?: Record<string, unknown> }>;
   dispatches: Array<{ roleId: string; task: string; result?: string }>;
+  /** CLI session ID captured from stream-json result event (for --resume) */
+  cliSessionId?: string;
 }
 
 /* ─── Handle (for abort support) ──────────────── */

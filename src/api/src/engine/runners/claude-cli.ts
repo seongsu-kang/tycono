@@ -471,18 +471,31 @@ export class ClaudeCliRunner implements ExecutionRunner {
 
     // 6. CLI args 구성
     const maxTurns = config.maxTurns ?? 25;
-    const args = [
-      '-p',
-      '--system-prompt', fs.readFileSync(promptFile, 'utf-8'),
-      '--output-format', 'stream-json',
-      '--verbose',
-      '--dangerously-skip-permissions',
-      '--model', config.model ?? 'claude-opus-4-6',
-      '--max-turns', String(maxTurns),
-      '--mcp-config', mcpConfig,
-      '--strict-mcp-config',
-      taskPrompt,
-    ];
+    const isResume = !!config.cliSessionId;
+    const args: string[] = isResume
+      ? [
+          '--resume', config.cliSessionId!,
+          '-p',
+          '--output-format', 'stream-json',
+          '--verbose',
+          '--dangerously-skip-permissions',
+          '--max-turns', String(maxTurns),
+          '--mcp-config', mcpConfig,
+          '--strict-mcp-config',
+          taskPrompt,
+        ]
+      : [
+          '-p',
+          '--system-prompt', fs.readFileSync(promptFile, 'utf-8'),
+          '--output-format', 'stream-json',
+          '--verbose',
+          '--dangerously-skip-permissions',
+          '--model', config.model ?? 'claude-opus-4-6',
+          '--max-turns', String(maxTurns),
+          '--mcp-config', mcpConfig,
+          '--strict-mcp-config',
+          taskPrompt,
+        ];
 
     // Disallow Agent and Task tools to force use of dispatch bridge
     // For roles with subordinates (C-Level), also disallow Edit/Write to enforce delegation
@@ -526,7 +539,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
     cleanEnv.TYCONO_CODE_ROOT = codeRoot;
     cleanEnv.TYCONO_AKB_ROOT = companyRoot;
     cleanEnv.TYCONO_KNOWLEDGE_ROOT = knowledgeDir;
-    console.log(`[Runner] Spawning claude -p: role=${roleId}, model=${modelName}, maxTurns=${maxTurns}, sessionId=${config.sessionId}, cwd=${cwd}, subordinates=[${subordinates.join(',')}]`);
+    console.log(`[Runner] Spawning claude ${isResume ? '--resume ' + config.cliSessionId + ' ' : ''}-p: role=${roleId}, model=${modelName}, maxTurns=${maxTurns}, sessionId=${config.sessionId}, cwd=${cwd}, subordinates=[${subordinates.join(',')}]`);
 
     const proc = spawn('claude', args, {
       cwd,
@@ -538,6 +551,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
     let turnCount = 0;
     let totalInput = 0;
     let totalOutput = 0;
+    let capturedCliSessionId: string | undefined;
     const toolCalls: RunnerResult['toolCalls'] = [];
     const dispatches: RunnerResult['dispatches'] = [];
     const tokenLedger = getTokenLedger(companyRoot);
@@ -567,6 +581,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
               totalTokens: { input: totalInput, output: totalOutput },
               toolCalls,
               dispatches,
+              cliSessionId: capturedCliSessionId,
             });
           }
         }, 5000);
@@ -592,6 +607,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
                 // JobManager.startJob() now auto-emits dispatch:start on parent stream.
               },
               incrementTurn: () => { turnCount++; callbacks.onTurnComplete?.(turnCount); },
+              captureCliSessionId: (id) => { capturedCliSessionId = id; },
               recordTokens: (input, out) => {
                 totalInput += input;
                 totalOutput += out;
@@ -694,6 +710,7 @@ interface StreamHandlers {
   addToolCall: (name: string, input?: Record<string, unknown>) => void;
   incrementTurn: () => void;
   recordTokens?: (inputTokens: number, outputTokens: number) => void;
+  captureCliSessionId?: (id: string) => void;
 }
 
 function processStreamEvent(
@@ -754,6 +771,11 @@ function processStreamEvent(
         if (inputTk > 0 || outputTk > 0) {
           handlers.recordTokens(inputTk, outputTk);
         }
+      }
+      // Capture CLI session ID for --resume support
+      const sid = event.session_id ?? (event as Record<string, unknown>).sessionId;
+      if (typeof sid === 'string' && handlers.captureCliSessionId) {
+        handlers.captureCliSessionId(sid);
       }
       break;
     }

@@ -42,6 +42,8 @@ export interface Execution {
   knowledgeDebt?: KnowledgeDebtItem[];
   ports?: PortAllocation;
   traceId?: string;
+  /** CLI session ID for --resume (captured from Claude CLI result event) */
+  cliSessionId?: string;
 }
 
 export interface StartExecutionParams {
@@ -56,6 +58,8 @@ export interface StartExecutionParams {
   targetRoles?: string[];
   sessionId: string;
   attachments?: ImageAttachment[];
+  /** CLI session ID for --resume (context continuity across turn limits) */
+  cliSessionId?: string;
 }
 
 /* ─── Helpers ────────────────────────────── */
@@ -262,6 +266,7 @@ class ExecutionManager {
         presetId,
         codeRoot: resolveCodeRoot(COMPANY_ROOT),
         attachments: params.attachments,
+        cliSessionId: params.cliSessionId,
         env: {
           ...process.env,
           ...portEnv,
@@ -424,6 +429,7 @@ class ExecutionManager {
     handle.promise
       .then((result: RunnerResult) => {
         execution.result = result;
+        if (result.cliSessionId) execution.cliSessionId = result.cliSessionId;
 
         const costUsd = estimateCost(
           result.totalTokens.input,
@@ -460,6 +466,13 @@ class ExecutionManager {
             targetRole,
             reason: 'turn_limit',
           });
+
+          // Auto-continue on turn limit: resume with --resume for context continuity
+          // Delay slightly to allow stream event to propagate
+          setTimeout(() => {
+            console.log(`[Harness] Auto-continuing ${params.roleId} (${execution.sessionId}) after turn limit`);
+            this.continueSession(execution.sessionId, '턴 한도에 도달했습니다. 이전 작업을 이어서 계속 진행하세요.');
+          }, 3_000);
         } else if (!params.isContinuation && hasQuestion(result.output)) {
           execution.status = 'awaiting_input';
           execution.targetRole = targetRole;
@@ -856,14 +869,23 @@ Your job: monitor progress, course-correct if needed, wait for completion, then 
     exec.stream.emit('msg:reply', exec.roleId, { response, responderRole: effectiveResponder, isFollowUp });
 
     const prevOutput = exec.result?.output ?? '';
-    const contextSummary = prevOutput.length > 2000
-      ? prevOutput.slice(-2000)
-      : prevOutput;
+    const hasCliSession = !!exec.cliSessionId;
 
     const responderLabel = effectiveResponder === 'ceo' ? 'CEO' : effectiveResponder.toUpperCase();
-    const continuationTask = isFollowUp
-      ? `[CEO Follow-up Directive]\n${response}\n\n[Previous context — your earlier report follows]\n${contextSummary}`
-      : `[Continuation — previous output follows]\n${contextSummary}\n\n[${responderLabel} Response]\n${response}`;
+    let continuationTask: string;
+    if (hasCliSession) {
+      // --resume preserves full conversation context — no need to repeat output
+      continuationTask = isFollowUp
+        ? `[CEO Follow-up Directive]\n${response}`
+        : `[${responderLabel} Response — continue where you left off]\n${response}`;
+    } else {
+      const contextSummary = prevOutput.length > 2000
+        ? prevOutput.slice(-2000)
+        : prevOutput;
+      continuationTask = isFollowUp
+        ? `[CEO Follow-up Directive]\n${response}\n\n[Previous context — your earlier report follows]\n${contextSummary}`
+        : `[Continuation — previous output follows]\n${contextSummary}\n\n[${responderLabel} Response]\n${response}`;
+    }
 
     const newExec = this.startExecution({
       type: exec.type,
@@ -873,6 +895,8 @@ Your job: monitor progress, course-correct if needed, wait for completion, then 
       parentSessionId: exec.parentSessionId,
       isContinuation: !isFollowUp,
       sessionId: exec.sessionId, // Same session → same stream
+      // Pass CLI session ID for --resume (preserves Claude conversation context)
+      cliSessionId: exec.cliSessionId,
     });
 
     return newExec;

@@ -20,6 +20,7 @@ function printHelp(): void {
 
   Usage:
     tycono [path]       Start TUI (default, optionally point to a company directory)
+    tycono --headless   Start API server only (no TUI, no browser)
     tycono --classic    Start pixel office web UI
     tycono --attach     Connect TUI to existing API server
     tycono --help       Show this help message
@@ -28,6 +29,7 @@ function printHelp(): void {
   Examples:
     tycono                      Start TUI in current directory
     tycono ./my-company         Start TUI with existing company folder
+    tycono --headless           API server only (for plugin/external clients)
     tycono --classic            Start pixel office web UI
     PORT=3000 tycono --attach   Attach TUI to running server
 
@@ -159,7 +161,21 @@ async function startServer(): Promise<void> {
   }
 
   const url = `http://localhost:${port}`;
-  if (initialized) {
+  const headless = !!process.env.__TYCONO_HEADLESS;
+  if (headless) {
+    console.log(`  tycono v${VERSION} — headless mode`);
+    console.log(`  API: ${url}`);
+    console.log(`  Company: ${companyName}`);
+    console.log(`  Engine: ${auth.engine}`);
+    console.log(`  PID: ${process.pid}`);
+    // Write port to .tycono/headless.json for plugin discovery
+    const headlessInfo = { port, pid: process.pid, url, startedAt: new Date().toISOString() };
+    const headlessPath = path.join(process.env.COMPANY_ROOT!, '.tycono', 'headless.json');
+    try {
+      fs.mkdirSync(path.dirname(headlessPath), { recursive: true });
+      fs.writeFileSync(headlessPath, JSON.stringify(headlessInfo, null, 2));
+    } catch {}
+  } else if (initialized) {
     printBanner(companyName, port, url, auth.engine);
   } else {
     console.log(`
@@ -180,12 +196,18 @@ async function startServer(): Promise<void> {
 
   const host = process.env.HOST || '0.0.0.0';
   server.listen(port, host, () => {
-    openBrowser(url);
+    if (!process.env.__TYCONO_HEADLESS) {
+      openBrowser(url);
+    }
   });
 
   // Graceful shutdown
   const shutdown = () => {
     console.log('\n  Shutting down...');
+    // Clean up headless discovery file
+    if (headless) {
+      try { fs.unlinkSync(path.join(process.env.COMPANY_ROOT!, '.tycono', 'headless.json')); } catch {}
+    }
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(1), 5000);
   };
@@ -345,6 +367,16 @@ export async function main(args: string[]): Promise<void> {
 
   if (command === '--version' || command === '-v') {
     console.log(VERSION);
+    return;
+  }
+
+  // --headless: API server only (no TUI, no browser) — for plugin/external clients
+  if (command === '--headless' || args.includes('--headless')) {
+    if (command === '--headless' && args[1] && !args[1].startsWith('-')) {
+      process.env.COMPANY_ROOT = path.resolve(args[1]);
+    }
+    process.env.__TYCONO_HEADLESS = '1';
+    await startServer();
     return;
   }
 
