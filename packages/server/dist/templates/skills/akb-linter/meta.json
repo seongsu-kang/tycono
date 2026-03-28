@@ -1,0 +1,12 @@
+{
+  "id": "akb-linter",
+  "name": "AKB Document Linter",
+  "description": "AKB document hygiene checker. Finds documents that confuse AI agents.",
+  "version": "1.0.0",
+  "author": "tycono",
+  "tags": ["documentation", "quality", "core"],
+  "category": "core",
+  "compatibleRoles": ["*"],
+  "dependencies": [],
+  "files": ["SKILL.md"]
+}

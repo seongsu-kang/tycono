@@ -1,0 +1,23 @@
+{
+  "version": "1.0.0",
+  "skills": [
+    {
+      "id": "knowledge-gate",
+      "name": "Knowledge Gate",
+      "category": "core",
+      "description": "Knowledge documentation gatekeeper with dynamic domain expert analysis."
+    },
+    {
+      "id": "akb-linter",
+      "name": "AKB Document Linter",
+      "category": "core",
+      "description": "Document hygiene checker that finds AI-confusing documents."
+    },
+    {
+      "id": "agent-browser",
+      "name": "Agent Browser",
+      "category": "core",
+      "description": "Token-efficient browser automation CLI for AI agents."
+    }
+  ]
+}

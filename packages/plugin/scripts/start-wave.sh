@@ -74,13 +74,13 @@ if [[ -z "$API_URL" ]]; then
   echo "🚀 Starting Tycono server..."
 
   # Find tycono binary
-  TYCONO_BIN=$(which tycono 2>/dev/null || npx which tycono 2>/dev/null || echo "")
+  TYCONO_BIN=$(which tycono-server 2>/dev/null || echo "")
   if [[ -z "$TYCONO_BIN" ]]; then
     # Use npx as fallback
-    npx tycono --headless &
+    npx tycono-server &
     SERVER_PID=$!
   else
-    "$TYCONO_BIN" --headless &
+    "$TYCONO_BIN" &
     SERVER_PID=$!
   fi
 
