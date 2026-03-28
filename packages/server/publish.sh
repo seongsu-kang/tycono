@@ -22,6 +22,14 @@ cp "$ROOT_DIR/src/core/scaffolder.ts" "$DIST_DIR/src/core/scaffolder.ts"
 # templates/ must be at dist root level — claude-md-manager resolves ../../../../templates from src/api/src/services/
 cp -r "$ROOT_DIR/templates/"* "$DIST_DIR/templates/"
 
+# Bundle default presets (free official presets shipped with server)
+mkdir -p "$DIST_DIR/presets"
+for preset in gamedev startup-mvp solo-founder; do
+  if [ -d "$ROOT_DIR/../tycono-akb/knowledge/presets/$preset" ]; then
+    cp -r "$ROOT_DIR/../tycono-akb/knowledge/presets/$preset" "$DIST_DIR/presets/$preset"
+  fi
+done
+
 # Copy bin
 cp "$SCRIPT_DIR/bin/cli.js" "$DIST_DIR/bin/cli.js"
 cp "$SCRIPT_DIR/bin/server.ts" "$DIST_DIR/bin/server.ts"
