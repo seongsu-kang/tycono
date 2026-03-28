@@ -680,21 +680,23 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
 
   const targetRoles = body.targetRoles as string[] | undefined;
   const continuous = body.continuous === true;
+  const preset = body.preset as string | undefined;
 
   // Always supervisor mode — CEO supervises C-Levels
-  handleWaveSupervisor(directive, targetRoles, continuous, req, res);
+  handleWaveSupervisor(directive, targetRoles, continuous, req, res, preset);
 }
 
 /**
  * Supervisor mode: Start a single CEO Supervisor session that dispatches C-Levels.
  * The supervisor uses dispatch/watch/amend tools — same pattern as any supervisor node.
  */
-function handleWaveSupervisor(directive: string, targetRoles: string[] | undefined, continuous: boolean, req: IncomingMessage, res: ServerResponse): void {
+function handleWaveSupervisor(directive: string, targetRoles: string[] | undefined, continuous: boolean, req: IncomingMessage, res: ServerResponse, preset?: string): void {
   const state = supervisorHeartbeat.start(
     `wave-${Date.now()}`,
     directive,
     targetRoles && targetRoles.length > 0 ? targetRoles : undefined,
     continuous,
+    preset,
   );
 
   if (state.status === 'error') {
