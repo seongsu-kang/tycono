@@ -2,6 +2,7 @@ import Link from "next/link";
 import { agencies } from "@/data/agencies";
 import { AgencyCard } from "@/components/agency-card";
 import { LandingAnimations } from "@/components/landing-animations";
+import { WaitlistForm } from "@/components/waitlist-form";
 
 const featured = agencies.filter((a) => !a.comingSoon).slice(0, 3);
 const comingSoon = agencies.filter((a) => a.comingSoon).slice(0, 4);
@@ -74,6 +75,9 @@ export default function HomePage() {
             </a>
           </div>
 
+          {/* Waitlist signup */}
+          <WaitlistForm variant="hero" />
+
           {/* Hero: TUI terminal demo */}
           <div className="reveal-scale rounded-2xl overflow-hidden max-w-4xl mx-auto warm-glow border border-base-700/30 ring-1 ring-base-600/10 bg-base-950">
             <div className="p-4 border-b border-base-700/30 flex items-center gap-1.5">
@@ -89,7 +93,7 @@ export default function HomePage() {
           <div className="reveal mt-12 text-center">
             <p className="text-sm text-base-500 mb-4">Started as an AI office tycoon game. The agents were too useful to keep in a game.</p>
             <div className="rounded-xl overflow-hidden max-w-md mx-auto opacity-60 hover:opacity-100 transition-opacity duration-500 border border-base-700/20">
-              <img src="assets/hero-office.png" alt="Where it started — pixel office tycoon" className="w-full h-auto" loading="lazy" />
+              <img src="/assets/hero-office.png" alt="Where it started — pixel office tycoon" className="w-full h-auto" loading="lazy" />
             </div>
             <p className="text-xs text-base-600 mt-2">The pixel office lives on: <code className="text-accent/60">npx tycono --classic</code></p>
           </div>
@@ -341,12 +345,12 @@ export default function HomePage() {
                 <h3 className="text-xl font-semibold text-base-50 mb-2">Build your team</h3>
                 <p className="text-base-400 mb-4">Guided setup wizard. Pick your AI engine, name your company, choose a team template.</p>
                 <div className="slideshow max-w-lg aspect-[560/500]">
-                  <img src="assets/wizard-1-engine.png" alt="Step 1: AI Engine Setup" loading="lazy" />
-                  <img src="assets/wizard-2-project.png" alt="Step 2: Company Info" loading="lazy" />
-                  <img src="assets/wizard-3-team.png" alt="Step 3: Project Setup" loading="lazy" />
-                  <img src="assets/wizard-4-review.png" alt="Step 4: Knowledge Strategy" loading="lazy" />
-                  <img src="assets/wizard-5-done.png" alt="Step 5: Team Template" loading="lazy" />
-                  <img src="assets/wizard-6-office.png" alt="Step 6: Company Created" loading="lazy" />
+                  <img src="/assets/wizard-1-engine.png" alt="Step 1: AI Engine Setup" loading="lazy" />
+                  <img src="/assets/wizard-2-project.png" alt="Step 2: Company Info" loading="lazy" />
+                  <img src="/assets/wizard-3-team.png" alt="Step 3: Project Setup" loading="lazy" />
+                  <img src="/assets/wizard-4-review.png" alt="Step 4: Knowledge Strategy" loading="lazy" />
+                  <img src="/assets/wizard-5-done.png" alt="Step 5: Team Template" loading="lazy" />
+                  <img src="/assets/wizard-6-office.png" alt="Step 6: Company Created" loading="lazy" />
                 </div>
               </div>
             </div>
@@ -360,13 +364,13 @@ export default function HomePage() {
                 <h3 className="text-xl font-semibold text-base-50 mb-2">Watch them work</h3>
                 <p className="text-base-400 mb-4">Give orders from the CEO desk. Watch tasks flow through your organization in real time.</p>
                 <div className="rounded-xl overflow-hidden max-w-2xl border border-base-700/30 warm-glow mb-4">
-                  <img src="assets/hero-office.png" alt="Isometric office view — AI agents at their desks" className="w-full h-auto" loading="lazy" />
+                  <img src="/assets/hero-office.png" alt="Isometric office view — AI agents at their desks" className="w-full h-auto" loading="lazy" />
                 </div>
                 <div className="rounded-xl overflow-hidden max-w-2xl border border-base-700/30 warm-glow mb-4">
-                  <img src="assets/wave-dispatch.png" alt="CEO Wave — dispatch directives to your entire organization" className="w-full h-auto" loading="lazy" />
+                  <img src="/assets/wave-dispatch.png" alt="CEO Wave — dispatch directives to your entire organization" className="w-full h-auto" loading="lazy" />
                 </div>
                 <div className="rounded-xl overflow-hidden max-w-2xl border border-base-700/30 warm-glow">
-                  <img src="assets/sidepanel-chat.png" alt="Side panel — talking with CTO, real-time task progress" className="w-full h-auto" loading="lazy" />
+                  <img src="/assets/sidepanel-chat.png" alt="Side panel — talking with CTO, real-time task progress" className="w-full h-auto" loading="lazy" />
                 </div>
               </div>
             </div>
@@ -414,7 +418,7 @@ export default function HomePage() {
               <p className="text-accent font-mono text-xs uppercase tracking-wider">Wave in action</p>
             </div>
             <div className="rounded-xl overflow-hidden border border-base-700/30 warm-glow mb-6">
-              <img src="assets/feature-wave-full.png" alt="CEO dispatches a wave" className="w-full h-auto" loading="lazy" />
+              <img src="/assets/feature-wave-full.png" alt="CEO dispatches a wave" className="w-full h-auto" loading="lazy" />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               {[
@@ -434,7 +438,7 @@ export default function HomePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="rounded-lg overflow-hidden border border-base-700/20 group">
                 <div className="aspect-[16/10] overflow-hidden">
-                  <img src="assets/feature-save-game.png" alt="Save Game — git commit" className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+                  <img src="/assets/feature-save-game.png" alt="Save Game — git commit" className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300" loading="lazy" />
                 </div>
                 <div className="bg-base-900/80 px-3 py-2">
                   <p className="text-xs text-base-400">Save Game &mdash; every change is version-controlled</p>
@@ -442,7 +446,7 @@ export default function HomePage() {
               </div>
               <div className="rounded-lg overflow-hidden border border-base-700/20 group">
                 <div className="aspect-[16/10] overflow-hidden">
-                  <img src="assets/sidepanel-chat.png" alt="Team chat" className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+                  <img src="/assets/sidepanel-chat.png" alt="Team chat" className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-300" loading="lazy" />
                 </div>
                 <div className="bg-base-900/80 px-3 py-2">
                   <p className="text-xs text-base-400">Team chat &mdash; agents discuss and debate autonomously</p>
@@ -530,7 +534,7 @@ export default function HomePage() {
               <div>
                 <div className="rounded-xl overflow-hidden border border-base-700/30 warm-glow mb-3">
                   <div className="aspect-[16/10] overflow-hidden">
-                    <img src="assets/feature-knowledge.png" alt="Knowledge Base" className="w-full h-full object-cover object-top" loading="lazy" />
+                    <img src="/assets/feature-knowledge.png" alt="Knowledge Base" className="w-full h-full object-cover object-top" loading="lazy" />
                   </div>
                 </div>
                 <div className="px-1">
@@ -541,7 +545,7 @@ export default function HomePage() {
               <div>
                 <div className="rounded-xl overflow-hidden border border-base-700/30 warm-glow mb-3">
                   <div className="aspect-[16/10] overflow-hidden">
-                    <img src="assets/feature-stats.png" alt="Company Stats" className="w-full h-full object-cover object-top" loading="lazy" />
+                    <img src="/assets/feature-stats.png" alt="Company Stats" className="w-full h-full object-cover object-top" loading="lazy" />
                   </div>
                 </div>
                 <div className="px-1">
@@ -580,27 +584,27 @@ export default function HomePage() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
               <div className="md:col-span-3 rounded-xl overflow-hidden border border-base-700/30 warm-glow">
-                <img src="assets/feature-role-profile.png" alt="Role Profile" className="w-full h-auto" loading="lazy" />
+                <img src="/assets/feature-role-profile.png" alt="Role Profile" className="w-full h-auto" loading="lazy" />
               </div>
               <div className="md:col-span-2 rounded-xl overflow-hidden border border-base-700/30 warm-glow">
-                <img src="assets/feature-forge.png" alt="Character Forge" className="w-full h-auto" loading="lazy" />
+                <img src="/assets/feature-forge.png" alt="Character Forge" className="w-full h-auto" loading="lazy" />
               </div>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="col-span-2 rounded-lg overflow-hidden border border-base-700/20 group">
-                <img src="assets/feature-edit-mode.png" alt="Edit Mode" className="w-full h-auto group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+                <img src="/assets/feature-edit-mode.png" alt="Edit Mode" className="w-full h-auto group-hover:scale-105 transition-transform duration-300" loading="lazy" />
                 <div className="bg-base-900/80 px-3 py-2">
                   <p className="text-xs text-base-400">Drag furniture, rearrange rooms</p>
                 </div>
               </div>
               <div className="rounded-lg overflow-hidden border border-base-700/20 group">
-                <img src="assets/detail-office-room.png" alt="Pixel-art agents" className="w-full h-auto group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+                <img src="/assets/detail-office-room.png" alt="Pixel-art agents" className="w-full h-auto group-hover:scale-105 transition-transform duration-300" loading="lazy" />
                 <div className="bg-base-900/80 px-3 py-2">
                   <p className="text-xs text-base-400">Pixel-art agents</p>
                 </div>
               </div>
               <div className="rounded-lg overflow-hidden border border-base-700/20 group">
-                <img src="assets/feature-decisions.png" alt="Decision Log" className="w-full h-auto group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+                <img src="/assets/feature-decisions.png" alt="Decision Log" className="w-full h-auto group-hover:scale-105 transition-transform duration-300" loading="lazy" />
                 <div className="bg-base-900/80 px-3 py-2">
                   <p className="text-xs text-base-400">Decision log</p>
                 </div>

@@ -53,3 +53,4 @@ fixtures/*/.tycono/preferences.json
 *.tgz
 .tycono/
 .worktrees/
+!packages/web/public/assets/*.png

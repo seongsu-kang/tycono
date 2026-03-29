@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { WaitlistForm } from "./waitlist-form";
 
 export function Footer() {
   return (
@@ -31,10 +32,7 @@ export function Footer() {
             </div>
           </div>
           <div>
-            <h4 className="text-xs font-semibold text-base-300 uppercase tracking-wider mb-4">Community</h4>
-            <div className="space-y-2.5 text-sm">
-              <a href="https://x.com" target="_blank" rel="noopener noreferrer" className="block text-base-400 hover:text-base-50 transition-colors">Twitter/X</a>
-            </div>
+            <WaitlistForm variant="footer" />
           </div>
         </div>
         <div className="border-t border-base-700/10 pt-6 flex flex-col md:flex-row items-center justify-between gap-4">
