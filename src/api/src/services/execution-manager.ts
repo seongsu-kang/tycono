@@ -474,14 +474,24 @@ class ExecutionManager {
             this.continueSession(execution.sessionId, '턴 한도에 도달했습니다. 이전 작업을 이어서 계속 진행하세요.');
           }, 3_000);
         } else if (!params.isContinuation && hasQuestion(result.output)) {
-          execution.status = 'awaiting_input';
-          execution.targetRole = targetRole;
-          execution.stream.emit('msg:awaiting_input', params.roleId, {
-            ...doneData,
-            question: result.output.trim().split('\n').slice(-5).join('\n'),
-            awaitingInput: true,
-            targetRole,
-          });
+          // CEO supervisor should auto-continue instead of hanging on awaiting_input
+          // (subordinates may have completed while CEO was running — CEO needs to synthesize results)
+          const session = getSession(execution.sessionId);
+          if (session?.roleId === 'ceo' && session?.source === 'wave') {
+            console.log(`[Harness] CEO supervisor hasQuestion — auto-continuing to synthesize results`);
+            setTimeout(() => {
+              this.continueSession(execution.sessionId, 'All dispatched sessions have completed. Synthesize the results from your team and provide a final briefing.');
+            }, 3_000);
+          } else {
+            execution.status = 'awaiting_input';
+            execution.targetRole = targetRole;
+            execution.stream.emit('msg:awaiting_input', params.roleId, {
+              ...doneData,
+              question: result.output.trim().split('\n').slice(-5).join('\n'),
+              awaitingInput: true,
+              targetRole,
+            });
+          }
         } else {
           const changedMdFiles = result.toolCalls
             .filter(tc => (tc.name === 'write_file' || tc.name === 'edit_file') && tc.input && typeof tc.input.path === 'string')
