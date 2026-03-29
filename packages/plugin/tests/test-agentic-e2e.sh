@@ -170,61 +170,45 @@ cleanup
 trap - EXIT
 
 # =============================================================================
-# TC-AGENT-5: Tycono Channel unit tests pass
+# TC-AGENT-5: start-wave.sh notification setup (SSE listener)
 # =============================================================================
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "TC-AGENT-5: Tycono Channel unit tests"
+echo "TC-AGENT-5: start-wave.sh notification code present"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-CHANNEL_DIR="${PLUGIN_ROOT}/channel"
+SCRIPTS_DIR="${PLUGIN_ROOT}/scripts"
+START_WAVE="${SCRIPTS_DIR}/start-wave.sh"
 
-if [[ -f "$CHANNEL_DIR/tycono-channel.test.ts" ]]; then
-  RESULT=$(cd "$CHANNEL_DIR" && npx tsx --test tycono-channel.test.ts 2>&1) || true
-
-  if echo "$RESULT" | grep -q "fail 0"; then
-    echo "  [PASS] All channel unit tests passed"
-    # Extract pass count
-    CHANNEL_PASS_COUNT=$(echo "$RESULT" | grep "^# pass" | awk '{print $3}')
-    echo "  [INFO] $CHANNEL_PASS_COUNT tests passed"
-    PASS=$((PASS + 1))
-  else
-    echo "  [FAIL] Channel unit tests have failures"
-    echo "$RESULT" | grep -E "\[FAIL\]|not ok" | head -5
-    FAIL=$((FAIL + 1))
-  fi
+if [[ -f "$START_WAVE" ]]; then
+  SCRIPT_CONTENT=$(cat "$START_WAVE")
+  assert_contains "Has SSE subscribe" "$SCRIPT_CONTENT" "curl -sN"
+  assert_contains "Has awaiting_input detection" "$SCRIPT_CONTENT" "awaiting_input"
+  assert_contains "Has error detection" "$SCRIPT_CONTENT" "msg:error"
+  assert_contains "Has dispatch:error detection" "$SCRIPT_CONTENT" "dispatch:error"
+  assert_contains "Has osascript notification" "$SCRIPT_CONTENT" "osascript"
+  assert_contains "Has NOTIFY_PID saved" "$SCRIPT_CONTENT" "NOTIFY_PID"
 else
-  echo "  [SKIP] Channel test file not found"
+  echo "  [SKIP] start-wave.sh not found"
   SKIP=$((SKIP + 1))
 fi
 
 # =============================================================================
-# TC-AGENT-6: Channel server starts without crash
+# TC-AGENT-6: cancel.sh cleans up notification listener
 # =============================================================================
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "TC-AGENT-6: Tycono Channel server smoke test"
+echo "TC-AGENT-6: cancel.sh notification cleanup"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-if [[ -f "$CHANNEL_DIR/tycono-channel.ts" ]]; then
-  # Start channel server in background, wait 2s, check it's alive
-  cd "$CHANNEL_DIR"
-  npx tsx tycono-channel.ts &
-  CHANNEL_PID=$!
-  sleep 2
+CANCEL_SH="${SCRIPTS_DIR}/cancel.sh"
 
-  if kill -0 "$CHANNEL_PID" 2>/dev/null; then
-    echo "  [PASS] Channel server started successfully (PID $CHANNEL_PID)"
-    PASS=$((PASS + 1))
-    kill "$CHANNEL_PID" 2>/dev/null || true
-    wait "$CHANNEL_PID" 2>/dev/null || true
-  else
-    echo "  [FAIL] Channel server crashed on startup"
-    FAIL=$((FAIL + 1))
-  fi
-  CHANNEL_PID=""
+if [[ -f "$CANCEL_SH" ]]; then
+  CANCEL_CONTENT=$(cat "$CANCEL_SH")
+  assert_contains "Cancel kills NOTIFY_PID" "$CANCEL_CONTENT" "NOTIFY_PID"
+  assert_contains "Cancel checks process alive" "$CANCEL_CONTENT" "kill -0"
 else
-  echo "  [SKIP] Channel server file not found"
+  echo "  [SKIP] cancel.sh not found"
   SKIP=$((SKIP + 1))
 fi
 
