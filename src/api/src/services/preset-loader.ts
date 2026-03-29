@@ -304,6 +304,7 @@ export function autoSelectPreset(companyRoot: string, directive: string): string
     }
   }
 
-  // Minimum threshold: need at least one strong keyword match
-  return bestScore >= 2 ? bestId : undefined;
+  // Minimum threshold: need at least one exact keyword match (score 3+)
+  // Score 2 = only partial matches, too weak for confident auto-selection
+  return bestScore >= 3 ? bestId : undefined;
 }
