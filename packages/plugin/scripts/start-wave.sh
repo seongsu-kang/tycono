@@ -77,8 +77,22 @@ fi
 
 # --- Server Management ---
 
+# Resolve companyRoot: walk up from cwd to find knowledge/CLAUDE.md
+COMPANY_ROOT=""
+CHECK_DIR="$(pwd)"
+while [[ "$CHECK_DIR" != "/" ]]; do
+  if [[ -f "$CHECK_DIR/knowledge/CLAUDE.md" ]]; then
+    COMPANY_ROOT="$CHECK_DIR"
+    break
+  fi
+  CHECK_DIR="$(dirname "$CHECK_DIR")"
+done
+if [[ -z "$COMPANY_ROOT" ]]; then
+  COMPANY_ROOT="$(pwd)"
+fi
+
 # Check if a headless server is already running
-HEADLESS_JSON=".tycono/headless.json"
+HEADLESS_JSON="${COMPANY_ROOT}/.tycono/headless.json"
 API_URL=""
 
 if [[ -f "$HEADLESS_JSON" ]]; then
