@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import YAML from 'yaml';
 import type { PresetDefinition, LoadedPreset, PresetSummary } from '../../../shared/types.js';
 
@@ -149,7 +150,8 @@ export function loadPresets(companyRoot: string): LoadedPreset[] {
   }
 
   // 4. Bundled presets (shipped with tycono-server, fallback if not in user's project)
-  const bundledPresetsDir = path.resolve(__dirname, '../../../../presets');
+  const __dirname_esm = path.dirname(fileURLToPath(import.meta.url));
+  const bundledPresetsDir = path.resolve(__dirname_esm, '../../../../presets');
   if (fs.existsSync(bundledPresetsDir)) {
     const entries = fs.readdirSync(bundledPresetsDir, { withFileTypes: true });
     for (const entry of entries) {
