@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import YAML from 'yaml';
 
@@ -117,10 +118,17 @@ export function buildOrgTree(companyRoot: string, presetId?: string): OrgTree {
   const roleDirs: string[] = [];
   if (fs.existsSync(rolesDir)) roleDirs.push(rolesDir);
 
-  // If preset specified, also scan preset's roles directory
+  // If preset specified, also scan preset/agency roles directories (2-Layer Knowledge)
+  // Search order: local presets > local agencies > global agencies
   if (presetId && presetId !== 'default') {
-    const presetRolesDir = path.join(companyRoot, 'knowledge', 'presets', presetId, 'roles');
-    if (fs.existsSync(presetRolesDir)) roleDirs.push(presetRolesDir);
+    const presetRoleCandidates = [
+      path.join(companyRoot, 'knowledge', 'presets', presetId, 'roles'),
+      path.join(companyRoot, '.tycono', 'agencies', presetId, 'roles'),
+      path.join(os.homedir(), '.tycono', 'agencies', presetId, 'roles'),
+    ];
+    for (const candidateDir of presetRoleCandidates) {
+      if (fs.existsSync(candidateDir)) roleDirs.push(candidateDir);
+    }
   }
 
   // Read all role.yaml files from all role directories

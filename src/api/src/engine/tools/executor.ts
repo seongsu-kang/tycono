@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { glob } from 'glob';
@@ -73,6 +74,22 @@ export async function executeTool(
   }
 }
 
+/* ─── 2-Layer Knowledge: allowed read paths ──── */
+
+/**
+ * For READ operations, agents may access agency-bundled knowledge
+ * in addition to the user's companyRoot (knowledge/).
+ * Write operations remain restricted to companyRoot only.
+ */
+function isAllowedReadPath(absolute: string, companyRoot: string): boolean {
+  const allowedPaths = [
+    companyRoot,
+    path.join(companyRoot, '.tycono', 'agencies'),
+    path.join(os.homedir(), '.tycono', 'agencies'),
+  ];
+  return allowedPaths.some(p => absolute.startsWith(p));
+}
+
 /* ─── Tool Implementations ───────────────────── */
 
 function readFile(
@@ -95,8 +112,8 @@ function readFile(
 
   const absolute = path.resolve(companyRoot, filePath);
 
-  // Security: prevent path traversal
-  if (!absolute.startsWith(companyRoot)) {
+  // Security: prevent path traversal (2-Layer: allow agency knowledge paths for reads)
+  if (!isAllowedReadPath(absolute, companyRoot)) {
     return { tool_use_id: id, content: 'Error: path traversal not allowed', is_error: true };
   }
 
@@ -134,7 +151,8 @@ function listFiles(
   }
 
   const absolute = path.resolve(companyRoot, directory);
-  if (!absolute.startsWith(companyRoot)) {
+  // 2-Layer: allow agency knowledge paths for reads
+  if (!isAllowedReadPath(absolute, companyRoot)) {
     return { tool_use_id: id, content: 'Error: path traversal not allowed', is_error: true };
   }
 
@@ -168,7 +186,8 @@ function searchFiles(
   }
 
   const absolute = path.resolve(companyRoot, directory);
-  if (!absolute.startsWith(companyRoot)) {
+  // 2-Layer: allow agency knowledge paths for reads
+  if (!isAllowedReadPath(absolute, companyRoot)) {
     return { tool_use_id: id, content: 'Error: path traversal not allowed', is_error: true };
   }
 
