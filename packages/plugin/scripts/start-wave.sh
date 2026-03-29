@@ -10,20 +10,23 @@ export LC_ALL=en_US.UTF-8
 # Parse arguments
 PROMPT_PARTS=()
 PRESET=""
+CONTINUOUS=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
     -h|--help)
-      echo "Usage: /tycono [TASK...] [--agency <id>]"
+      echo "Usage: /tycono [TASK...] [--agency <id>] [--continuous]"
       echo ""
       echo "  Start an AI team to work on your task."
       echo ""
       echo "  Options:"
       echo "    --agency <id>    Load domain knowledge (gamedev, startup-mvp, solo-founder)"
+      echo "    --continuous     Enable continuous improvement loop (CEO restarts after completion)"
       echo ""
       echo "  Examples:"
       echo "    /tycono Build a browser game"
       echo "    /tycono --agency gamedev Create a tower defense game"
+      echo "    /tycono --agency research-scout --continuous 'hypothesis discovery loop'"
       exit 0
       ;;
     --agency|--preset)
@@ -33,6 +36,10 @@ while [[ $# -gt 0 ]]; do
       fi
       PRESET="$2"
       shift 2
+      ;;
+    --continuous)
+      CONTINUOUS="true"
+      shift
       ;;
     *)
       PROMPT_PARTS+=("$1")
@@ -130,10 +137,14 @@ fi
 # --- Create Wave ---
 
 # Build JSON payload
-PAYLOAD="{\"directive\": $(python3 -c "import json; print(json.dumps('$DIRECTIVE'))")}"
+PAYLOAD_PARTS="\"directive\": $(python3 -c "import json; print(json.dumps('$DIRECTIVE'))")"
 if [[ -n "$PRESET" ]]; then
-  PAYLOAD="{\"directive\": $(python3 -c "import json; print(json.dumps('$DIRECTIVE'))"), \"preset\": \"$PRESET\"}"
+  PAYLOAD_PARTS="$PAYLOAD_PARTS, \"preset\": \"$PRESET\""
 fi
+if [[ -n "$CONTINUOUS" ]]; then
+  PAYLOAD_PARTS="$PAYLOAD_PARTS, \"continuous\": true"
+fi
+PAYLOAD="{$PAYLOAD_PARTS}"
 
 WAVE_RESPONSE=$(curl -s -X POST "${API_URL}/api/exec/wave" \
   -H "Content-Type: application/json" \
