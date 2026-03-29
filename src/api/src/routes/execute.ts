@@ -282,7 +282,17 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
     return;
   }
 
-  const orgTree = buildOrgTree(COMPANY_ROOT);
+  // Resolve preset from wave for correct org tree (includes agency roles)
+  let presetId: string | undefined;
+  if (waveId) {
+    try {
+      const wavePath = path.join(COMPANY_ROOT, '.tycono', 'waves', `${waveId}.json`);
+      if (fs.existsSync(wavePath)) {
+        presetId = JSON.parse(fs.readFileSync(wavePath, 'utf-8')).preset;
+      }
+    } catch { /* ignore */ }
+  }
+  const orgTree = buildOrgTree(COMPANY_ROOT, presetId);
   if (!canDispatchTo(orgTree, sourceRole, roleId)) {
     jsonResponse(res, 403, { error: `${sourceRole} cannot dispatch to ${roleId}.` });
     return;
