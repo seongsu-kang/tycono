@@ -234,3 +234,74 @@ function downloadPreset(companyRoot: string, presetId: string): LoadedPreset | n
     return null;
   }
 }
+
+/**
+ * Auto-select the best preset based on directive text.
+ *
+ * Matches directive words against each preset's:
+ *   - wave_scoped.task_keywords (highest weight: 3)
+ *   - tags (weight: 2)
+ *   - use_case (weight: 2)
+ *   - category + industry (weight: 1)
+ *
+ * Returns preset ID with highest score, or undefined if no meaningful match.
+ * Minimum score threshold: 2 (at least one strong keyword match).
+ */
+export function autoSelectPreset(companyRoot: string, directive: string): string | undefined {
+  const presets = loadPresets(companyRoot).filter(p => !p.isDefault);
+  if (presets.length === 0) return undefined;
+
+  const words = directive.toLowerCase().split(/[\s,.:;!?'"()\-]+/).filter(w => w.length > 2);
+  if (words.length === 0) return undefined;
+
+  let bestId: string | undefined;
+  let bestScore = 0;
+
+  for (const preset of presets) {
+    const def = preset.definition;
+    let score = 0;
+
+    // task_keywords: strongest signal — exact match (weight 5), partial (weight 2)
+    const taskKeywords = def.wave_scoped?.task_keywords ?? [];
+    for (const kw of taskKeywords) {
+      const kwLower = kw.toLowerCase();
+      if (words.includes(kwLower)) {
+        score += 5; // exact word match
+      } else if (words.some(w => (w.length > 3 && kwLower.includes(w)) || (kwLower.length > 3 && w.includes(kwLower)))) {
+        score += 2; // partial match (only for longer words)
+      }
+    }
+
+    // tags: exact match (weight 3), partial (weight 1)
+    const tags = def.tags ?? [];
+    for (const tag of tags) {
+      const tagLower = tag.toLowerCase();
+      if (words.includes(tagLower)) {
+        score += 3;
+      } else if (words.some(w => w.length > 3 && (w.includes(tagLower) || tagLower.includes(w)))) {
+        score += 1;
+      }
+    }
+
+    // use_case: word match (weight 2)
+    const useCases = def.use_case ?? [];
+    for (const uc of useCases) {
+      const ucWords = uc.toLowerCase().split(/[\s\-_]+/).filter(u => u.length > 2);
+      for (const ucw of ucWords) {
+        if (words.includes(ucw)) score += 2;
+      }
+    }
+
+    // category + industry: exact match only (weight 1)
+    if (def.category && words.includes(def.category.toLowerCase())) score += 1;
+    if (def.industry && words.includes(def.industry.toLowerCase())) score += 1;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestId = def.id;
+    }
+  }
+
+  // Minimum threshold: need at least one strong keyword match
+  return bestScore >= 2 ? bestId : undefined;
+}

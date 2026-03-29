@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { COMPANY_ROOT } from '../services/file-reader.js';
+import { autoSelectPreset } from '../services/preset-loader.js';
 // activity-tracker removed — executionManager is Single Source of Truth
 import { buildOrgTree, canDispatchTo, getSubordinates } from '../engine/org-tree.js';
 import { createRunner, type RunnerResult } from '../engine/runners/index.js';
@@ -762,7 +763,15 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
 
   const targetRoles = body.targetRoles as string[] | undefined;
   const continuous = body.continuous === true;
-  const preset = body.preset as string | undefined;
+  let preset = body.preset as string | undefined;
+
+  // Auto-select agency from directive when no --agency specified
+  if (!preset) {
+    preset = autoSelectPreset(COMPANY_ROOT, directive);
+    if (preset) {
+      console.log(`[Wave] Auto-selected agency: ${preset} (from directive keywords)`);
+    }
+  }
 
   // Always supervisor mode — CEO supervises C-Levels
   handleWaveSupervisor(directive, targetRoles, continuous, req, res, preset);
