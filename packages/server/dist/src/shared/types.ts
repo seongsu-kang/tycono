@@ -85,6 +85,8 @@ export type ActivityEventType =
   | 'prompt:assembled' | 'trace:response'
   // Supervision (C-Level heartbeat)
   | 'heartbeat:tick' | 'heartbeat:skip'
+  // Approval (agent blocked, needs human decision)
+  | 'approval:needed'
   // Other
   | 'stderr';
 
