@@ -5,9 +5,12 @@ import { glob } from 'glob';
 
 function findCompanyRoot(): string {
   if (process.env.COMPANY_ROOT) return process.env.COMPANY_ROOT;
-  // Walk up from cwd to find knowledge/CLAUDE.md (project root marker)
+  // Walk up from cwd to find CLAUDE.md (supports both layouts)
+  //   - Claude Code standard: CLAUDE.md at project root
+  //   - Tycono scaffold: knowledge/CLAUDE.md
   let dir = process.cwd();
   while (dir !== path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, 'CLAUDE.md'))) return dir;
     if (fs.existsSync(path.join(dir, 'knowledge', 'CLAUDE.md'))) return dir;
     dir = path.dirname(dir);
   }

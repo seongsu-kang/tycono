@@ -11,22 +11,24 @@ export LC_ALL=en_US.UTF-8
 PROMPT_PARTS=()
 PRESET=""
 CONTINUOUS=""
+PERMISSION_MODE="auto"
 
 while [[ $# -gt 0 ]]; do
   case $1 in
     -h|--help)
-      echo "Usage: /tycono [TASK...] [--agency <id>] [--continuous]"
+      echo "Usage: /tycono [TASK...] [--agency <id>] [--continuous] [--unsafe]"
       echo ""
       echo "  Start an AI team to work on your task."
       echo ""
       echo "  Options:"
       echo "    --agency <id>    Load domain knowledge (gamedev, startup-mvp, solo-founder)"
       echo "    --continuous     Enable continuous improvement loop (CEO restarts after completion)"
+      echo "    --unsafe         Bypass permission checks (for SSH, external repo access)"
       echo ""
       echo "  Examples:"
       echo "    /tycono Build a browser game"
       echo "    /tycono --agency gamedev Create a tower defense game"
-      echo "    /tycono --agency research-scout --continuous 'hypothesis discovery loop'"
+      echo "    /tycono --agency research-scout --continuous --unsafe 'hypothesis loop'"
       exit 0
       ;;
     --agency|--preset)
@@ -39,6 +41,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --continuous)
       CONTINUOUS="true"
+      shift
+      ;;
+    --unsafe)
+      PERMISSION_MODE="bypassPermissions"
       shift
       ;;
     *)
@@ -169,6 +175,7 @@ fi
 if [[ -n "$CONTINUOUS" ]]; then
   PAYLOAD_PARTS="$PAYLOAD_PARTS, \"continuous\": true"
 fi
+PAYLOAD_PARTS="$PAYLOAD_PARTS, \"permissionMode\": \"$PERMISSION_MODE\""
 PAYLOAD="{$PAYLOAD_PARTS}"
 
 WAVE_RESPONSE=$(curl -s -X POST "${API_URL}/api/exec/wave" \
@@ -219,58 +226,9 @@ echo "  Directive: $DIRECTIVE"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# Poll wave status until completion (designed for run_in_background)
-# Claude Code runs this in background → user's session stays free
-# On completion, Claude Code auto-notifies: "Background command completed"
-echo "⏳ Monitoring wave progress..."
-POLL_INTERVAL=10
-LAST_STATUS=""
-
-while true; do
-  WAVE_STATUS=$(curl -s "${API_URL}/api/waves/${WAVE_ID}" 2>/dev/null || echo "")
-  if [[ -z "$WAVE_STATUS" ]]; then
-    sleep "$POLL_INTERVAL"
-    continue
-  fi
-
-  STATUS=$(echo "$WAVE_STATUS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
-
-  # Print status changes only
-  if [[ "$STATUS" != "$LAST_STATUS" ]]; then
-    LAST_STATUS="$STATUS"
-    case "$STATUS" in
-      running)  echo "🔄 Wave running..." ;;
-      stopped)
-        echo ""
-        echo "✅ Wave complete!"
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        # Print summary
-        SESSIONS=$(echo "$WAVE_STATUS" | python3 -c "
-import sys, json
-w = json.load(sys.stdin)
-sessions = w.get('sessions', [])
-for s in sessions:
-  print(f\"  {s.get('roleId','?'):15s} {s.get('status','?')}\")
-" 2>/dev/null || echo "")
-        echo "$SESSIONS"
-        # Print dispatch stats if available
-        DISPATCH=$(echo "$WAVE_STATUS" | python3 -c "
-import sys, json
-w = json.load(sys.stdin)
-d = w.get('dispatch', {})
-if d:
-  print(f\"  Dispatch: {d.get('succeeded',0)} succeeded, {d.get('failed',0)} failed\")
-" 2>/dev/null || echo "")
-        if [[ -n "$DISPATCH" ]]; then echo "$DISPATCH"; fi
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        exit 0
-        ;;
-      error)
-        echo "❌ Wave error!"
-        exit 1
-        ;;
-    esac
-  fi
-
-  sleep "$POLL_INTERVAL"
-done
+echo "Wave is running in the background."
+echo "Check progress: /tycono-status"
+echo "Cancel:         /tycono-cancel"
+if [[ "$PERMISSION_MODE" == "bypassPermissions" ]]; then
+  echo "⚠️  Permission mode: UNSAFE (full access, no safety checks)"
+fi

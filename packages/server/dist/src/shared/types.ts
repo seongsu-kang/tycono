@@ -76,7 +76,7 @@ export type ActivityEventType =
   | 'text' | 'thinking'
   | 'tool:start' | 'tool:result'
   // Dispatch (child session)
-  | 'dispatch:start' | 'dispatch:done'
+  | 'dispatch:start' | 'dispatch:done' | 'dispatch:error'
   // Harness (turn limits)
   | 'turn:warning' | 'turn:limit'
   // Knowledge import

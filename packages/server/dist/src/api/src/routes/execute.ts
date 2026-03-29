@@ -294,7 +294,19 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
   }
   const orgTree = buildOrgTree(COMPANY_ROOT, presetId);
   if (!canDispatchTo(orgTree, sourceRole, roleId)) {
-    jsonResponse(res, 403, { error: `${sourceRole} cannot dispatch to ${roleId}.` });
+    const errorMsg = `${sourceRole} cannot dispatch to ${roleId}`;
+    // Emit dispatch:error on parent's activity stream so it surfaces in SSE
+    if (parentSessionId) {
+      const parentStream = ActivityStream.getOrCreate(parentSessionId, sourceRole);
+      parentStream.emit('dispatch:error', sourceRole, {
+        sourceRole,
+        targetRole: roleId,
+        error: errorMsg,
+        timestamp: Date.now(),
+      });
+    }
+    console.warn(`[Dispatch:Error] ${errorMsg} (parent=${parentSessionId ?? 'none'}, wave=${waveId ?? 'none'})`);
+    jsonResponse(res, 403, { error: `${errorMsg}.` });
     return;
   }
 
@@ -495,7 +507,31 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
     }
   }
 
-  const waveJson = {
+  // Collect dispatch statistics
+  const dispatchStats = {
+    attempted: 0,
+    succeeded: 0,
+    failed: 0,
+    errors: [] as Array<{ sourceRole: string; targetRole: string; error: string }>,
+  };
+  for (const role of rolesData) {
+    for (const e of role.events) {
+      if (e.type === 'dispatch:start') {
+        dispatchStats.attempted++;
+        dispatchStats.succeeded++;
+      } else if (e.type === 'dispatch:error') {
+        dispatchStats.attempted++;
+        dispatchStats.failed++;
+        dispatchStats.errors.push({
+          sourceRole: (e.data.sourceRole as string) ?? 'unknown',
+          targetRole: (e.data.targetRole as string) ?? 'unknown',
+          error: (e.data.error as string) ?? 'unknown',
+        });
+      }
+    }
+  }
+
+  const waveJson: Record<string, unknown> = {
     id: baseName,
     directive,
     startedAt: startedAt.toISOString(),
@@ -504,6 +540,7 @@ function handleSaveWave(body: Record<string, unknown>, res: ServerResponse): voi
     ...(waveId && { waveId }),
     sessionIds: allSessionIds,
   };
+  if (dispatchStats.attempted > 0) waveJson.dispatch = dispatchStats;
   fs.writeFileSync(jsonPath, JSON.stringify(waveJson, null, 2), 'utf-8');
 
   const roleCount = rolesData.length;
@@ -671,6 +708,9 @@ function handleAssign(body: Record<string, unknown>, req: IncomingMessage, res: 
         break;
       case 'dispatch:start':
         sendSSE(res, 'dispatch', { roleId: event.data.targetRoleId, task: event.data.task, childSessionId: event.data.childSessionId });
+        break;
+      case 'dispatch:error':
+        sendSSE(res, 'dispatch:error', { sourceRole: event.data.sourceRole, targetRole: event.data.targetRole, error: event.data.error, timestamp: event.data.timestamp });
         break;
       case 'msg:turn-complete':
         sendSSE(res, 'turn', { turn: event.data.turn });

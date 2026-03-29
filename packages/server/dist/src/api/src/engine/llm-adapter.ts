@@ -257,7 +257,7 @@ export class ClaudeCliProvider implements LLMProvider {
         '--output-format', 'text',
         ...(useTools ? [
           '--tools', 'Read,Grep,Glob',
-          '--dangerously-skip-permissions',
+          '--permission-mode', 'auto',
         ] : []),
         userText,
       ];
