@@ -1,6 +1,6 @@
 # tycono
 
-**Cursor gives you one dev. Tycono gives you a team.**
+**You're one person building a company. Tycono gives you the team.**
 
 Give Claude Code an AI team that plans, builds, tests, and ships — while you watch in real-time.
 
@@ -8,8 +8,17 @@ Give Claude Code an AI team that plans, builds, tests, and ships — while you w
 
 ## Quick Start
 
+```bash
+# From official marketplace (after approval):
+/plugin install tycono@claude-plugins-official
+
+# Or from GitHub (available now):
+/plugin marketplace add seongsu-kang/tycono
+/plugin install tycono@tycono
 ```
-claude plugin install tycono
+
+Then:
+```
 /tycono "Build a browser tower defense game"
 ```
 
@@ -35,51 +44,70 @@ You: /tycono "Build an RPG with combat and inventory"
 
 Each role runs as a separate Claude session with specialized knowledge. The CEO supervises the whole team, course-corrects when needed, and delivers results back to you.
 
-You see every dispatch, every decision, every bug fix in your session.
-
 ---
 
-## Available Commands
+## Commands
 
 | Command | Description |
 |---------|-------------|
 | `/tycono <task>` | Start a wave — your AI team begins working |
 | `/tycono --agency <id> <task>` | Start with a specific agency (team config) |
-| `/tycono-status` | Check current wave progress |
-| `/tycono-cancel` | Cancel the active wave |
-| `/tycono-help` | Show all commands and usage |
-| `/tycono-agency-list` | List installed agencies |
-| `/tycono-agency-create` | Create a new custom agency interactively |
-| `/tycono-agency-install <id>` | Install an agency from marketplace or GitHub |
+| `/tycono:tycono-status` | Check current wave progress |
+| `/tycono:tycono-cancel` | Cancel the active wave |
+| `/tycono:help` | Show all commands and usage |
+| `/tycono:agency-list` | List installed agencies |
+| `/tycono:agency-create` | Create a custom agency with guided setup |
+| `/tycono:agency-install <id>` | Install an agency from marketplace or GitHub |
+
+---
+
+## Guided Agency Setup
+
+`/tycono:agency-create` walks you through setting up an AI team for your existing project:
+
+```
+Phase 1: Auto-scan your project (code, skills, knowledge)
+Phase 2: 3 questions → team composition + skill attachment
+Phase 3: Auto-generate agency files
+Phase 4: Auto-verify with test waves (mandatory)
+```
+
+Detects your existing `.claude/skills/`, suggests role-skill matching, handles writes scope, and verifies everything works before you start.
+
+---
+
+## Tycono Channel
+
+Real-time notifications from your AI team, pushed directly into your Claude Code session via MCP Channel:
+
+```
+[You're working on something else...]
+
+💬 Tycono: "🔔 backtester needs your decision.
+   Option A (conservative) or Option B (aggressive)?"
+
+You: "Option A"
+→ Agent resumes immediately
+```
+
+No more checking status manually. Errors, completions, approval requests — all pushed to you.
 
 ---
 
 ## Bundled Agencies
 
-Agencies are team configurations with domain-specific knowledge.
-
 | Agency | Team | Best For |
 |--------|------|----------|
-| `gamedev` | CTO, Engineer, QA, PM, Designer | Browser/mobile games, game jams |
-| `startup-mvp` | CTO, Engineer, PM | MVP prototyping, rapid validation |
-| `solo-founder` | CTO, CBO, Engineer, Designer | Solo founder building a product |
+| `gamedev` | CTO, Engineer, QA, PM, Designer | Browser/mobile games |
+| `startup-mvp` | CTO, Engineer, PM | MVP prototyping |
+| `solo-founder` | CTO, CBO, Engineer, Designer | Solo founder products |
 
 ```
 /tycono --agency gamedev "Create a roguelike dungeon crawler"
 /tycono --agency startup-mvp "Build a SaaS dashboard MVP"
 ```
 
----
-
-## Agency System
-
-Build, share, and install custom team configurations.
-
-- **`/tycono-agency-list`** — See all installed agencies (bundled + custom)
-- **`/tycono-agency-create`** — Interactive wizard to create your own agency with custom roles, domain knowledge, and team composition
-- **`/tycono-agency-install`** — Install from the marketplace or a GitHub URL
-
-Agencies are portable YAML configs stored in `~/.tycono/agencies/` (global) or `.tycono/agencies/` (project-local).
+Create your own with `/tycono:agency-create` or install from the community.
 
 ---
 
@@ -87,48 +115,31 @@ Agencies are portable YAML configs stored in `~/.tycono/agencies/` (global) or `
 
 ```
 /tycono "your task"
-    |
-    v
+    │
+    ▼
 [Plugin] starts tycono-server (headless, background)
-    |
-    v
-[Server] creates a Wave — your task becomes a mission
-    |
-    v
-[CEO Supervisor] analyzes the task, dispatches roles
-    |
-    +---> [CTO] designs architecture
-    |       +---> [Engineer] implements code
-    |       +---> [QA] tests and validates
-    +---> [CBO] analyzes market fit
-            +---> [PM] defines requirements
-            +---> [Designer] creates UI/UX
-    |
-    v
-[Activity Stream] real-time updates in your session
-    |
-    v
-[Results] delivered + knowledge saved to akb/
+    │
+    ▼
+[CEO Supervisor] analyzes task, dispatches roles
+    │
+    ├──▶ [CTO] designs architecture
+    │      ├──▶ [Engineer] implements code
+    │      └──▶ [QA] tests and validates
+    └──▶ [CBO] analyzes market fit
+           ├──▶ [PM] defines requirements
+           └──▶ [Designer] creates UI/UX
+    │
+    ▼
+[Activity Stream] real-time updates via Tycono Channel
+    │
+    ▼
+[Results] delivered + knowledge saved
 ```
 
-Key details:
-- The server runs locally via `npx tycono-server` (auto-installed on first run)
-- Each role runs as a separate Claude Code session with its own context
-- A stop hook keeps your session alive until the wave completes
-- Knowledge accumulates across waves in `akb/` (Agentic Knowledge Base)
-
----
-
-## vs Solo AI
-
-| | Claude Code (solo) | Ralph Loop | Tycono |
-|--|-------------------|-----------|--------|
-| **Who works** | You + 1 AI | 1 AI in a loop | Team of specialized AI agents |
-| **Visibility** | Direct | Black box until done | Real-time activity stream |
-| **Course correction** | Manual | None | CEO Supervisor auto-corrects |
-| **Knowledge** | Lost between sessions | Lost between runs | Accumulated in `akb/` |
-| **Quality** | Single perspective | Single perspective | Multi-perspective (plan + build + test) |
-| **Best for** | Quick tasks, pair programming | Repetitive automation | Complex projects, full features |
+- Server runs locally via `npx tycono-server` (auto-installed on first run)
+- Each role runs as a separate Claude Code session
+- Knowledge accumulates across waves (AKB — Agentic Knowledge Base)
+- CEO Supervisor auto-corrects when things go off track
 
 ---
 
