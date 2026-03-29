@@ -1,0 +1,16 @@
+{
+  "name": "tycono-channel",
+  "version": "0.0.1",
+  "description": "MCP Channel server — bridges Tycono server events to Claude Code session",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "npx tsx tycono-channel.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0"
+  }
+}
