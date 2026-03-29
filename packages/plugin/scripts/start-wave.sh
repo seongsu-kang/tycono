@@ -11,7 +11,7 @@ export LC_ALL=en_US.UTF-8
 PROMPT_PARTS=()
 PRESET=""
 CONTINUOUS=""
-PERMISSION_MODE="auto"
+PERMISSION_MODE="bypassPermissions"
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -23,12 +23,12 @@ while [[ $# -gt 0 ]]; do
       echo "  Options:"
       echo "    --agency <id>    Load domain knowledge (gamedev, startup-mvp, solo-founder)"
       echo "    --continuous     Enable continuous improvement loop (CEO restarts after completion)"
-      echo "    --unsafe         Bypass permission checks (for SSH, external repo access)"
+      echo "    --safe           Enable model-based safety checks (blocks risky commands)"
       echo ""
       echo "  Examples:"
       echo "    /tycono Build a browser game"
       echo "    /tycono --agency gamedev Create a tower defense game"
-      echo "    /tycono --agency research-scout --continuous --unsafe 'hypothesis loop'"
+      echo "    /tycono --agency research-scout --continuous 'hypothesis loop'"
       exit 0
       ;;
     --agency|--preset)
@@ -43,8 +43,8 @@ while [[ $# -gt 0 ]]; do
       CONTINUOUS="true"
       shift
       ;;
-    --unsafe)
-      PERMISSION_MODE="bypassPermissions"
+    --safe)
+      PERMISSION_MODE="auto"
       shift
       ;;
     *)
@@ -229,6 +229,6 @@ echo ""
 echo "Wave is running in the background."
 echo "Check progress: /tycono-status"
 echo "Cancel:         /tycono-cancel"
-if [[ "$PERMISSION_MODE" == "bypassPermissions" ]]; then
-  echo "⚠️  Permission mode: UNSAFE (full access, no safety checks)"
+if [[ "$PERMISSION_MODE" == "auto" ]]; then
+  echo "🛡️  Permission mode: SAFE (model-based safety checks enabled)"
 fi

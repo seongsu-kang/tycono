@@ -257,7 +257,7 @@ export class ClaudeCliProvider implements LLMProvider {
         '--output-format', 'text',
         ...(useTools ? [
           '--tools', 'Read,Grep,Glob',
-          '--permission-mode', process.env.TYCONO_PERMISSION_MODE || 'auto',
+          '--permission-mode', process.env.TYCONO_PERMISSION_MODE || 'bypassPermissions',
         ] : []),
         userText,
       ];

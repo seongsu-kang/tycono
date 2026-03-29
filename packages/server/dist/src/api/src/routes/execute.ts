@@ -250,6 +250,12 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
     const targetRoles = body.targetRoles as string[] | undefined;
     const continuous = body.continuous === true;
     const preset = body.preset as string | undefined;
+    const permissionMode = body.permissionMode as string | undefined;
+
+    // Set permission mode for agent runners (auto = model-based safety, bypassPermissions = full access)
+    if (permissionMode) {
+      process.env.TYCONO_PERMISSION_MODE = permissionMode;
+    }
 
     // Always use supervisor mode — CEO supervises C-Levels who supervise members
     {
