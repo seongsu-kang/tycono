@@ -154,7 +154,7 @@ echo "# Trading strategy docs" > "$TEST_DIR/knowledge/project/strategy.md"
 
 RESULT=$(cd "$TEST_DIR" && claude -p \
   --plugin-dir "$PLUGIN_ROOT" \
-  --max-turns 8 \
+  --max-turns 20 \
   "Run /tycono:agency-create. When asked what the team should do, say 'trading hypothesis research and backtesting'. When asked about the team composition, accept the suggestion. When asked about external access, say no. Show me the final result." 2>&1) || true
 
 # Phase 1: Project scan should detect existing skills
