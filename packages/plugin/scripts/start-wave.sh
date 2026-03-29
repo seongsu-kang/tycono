@@ -94,8 +94,9 @@ if [[ -z "$API_URL" ]]; then
   # Find tycono binary
   TYCONO_BIN=$(which tycono-server 2>/dev/null || echo "")
   if [[ -z "$TYCONO_BIN" ]]; then
-    # Use npx as fallback (pin version)
-    npx tycono-server@0.1.0-beta.7 &
+    # Use npx as fallback — @latest ensures the newest server features
+    # (dispatch, 2-Layer Knowledge, etc.) without manual version bumps
+    npx tycono-server@latest &
     SERVER_PID=$!
   else
     "$TYCONO_BIN" &
