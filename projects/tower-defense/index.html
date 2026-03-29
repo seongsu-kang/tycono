@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sentinel - Tower Defense</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a1a;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      font-family: Arial, sans-serif;
+    }
+    #game-container {
+      border: 2px solid #e94560;
+      border-radius: 4px;
+      box-shadow: 0 0 20px rgba(233, 69, 96, 0.3);
+    }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+  <div id="game-container"></div>
+
+  <script src="lib/phaser.min.js"></script>
+  <script src="js/data/towers.js"></script>
+  <script src="js/data/enemies.js"></script>
+  <script src="js/data/levels.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/scenes/BootScene.js"></script>
+  <script src="js/scenes/MenuScene.js"></script>
+  <script src="js/scenes/LevelSelectScene.js"></script>
+  <script src="js/scenes/GameScene.js"></script>
+  <script src="js/scenes/GameOverScene.js"></script>
+
+  <script>
+    var config = {
+      type: Phaser.AUTO,
+      width: GAME_CONFIG.TOTAL_WIDTH,
+      height: GAME_CONFIG.TOTAL_HEIGHT,
+      parent: 'game-container',
+      backgroundColor: '#1a1a2e',
+      scene: [BootScene, MenuScene, LevelSelectScene, GameScene, GameOverScene],
+      physics: {
+        default: 'arcade',
+        arcade: { debug: false }
+      },
+      scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH
+      }
+    };
+
+    var game = new Phaser.Game(config);
+  </script>
+</body>
+</html>
