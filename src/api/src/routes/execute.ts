@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { COMPANY_ROOT } from '../services/file-reader.js';
 import { autoSelectPreset } from '../services/preset-loader.js';
+import { readConfig } from '../services/company-config.js';
 // activity-tracker removed — executionManager is Single Source of Truth
 import { buildOrgTree, canDispatchTo, getSubordinates } from '../engine/org-tree.js';
 import { createRunner, type RunnerResult } from '../engine/runners/index.js';
@@ -765,11 +766,17 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
   const continuous = body.continuous === true;
   let preset = body.preset as string | undefined;
 
-  // Auto-select agency from directive when no --agency specified
+  // Agency resolution priority: --agency flag > config.defaultAgency > auto-select
   if (!preset) {
-    preset = autoSelectPreset(COMPANY_ROOT, directive);
-    if (preset) {
-      console.log(`[Wave] Auto-selected agency: ${preset} (from directive keywords)`);
+    const config = readConfig(COMPANY_ROOT);
+    if (config.defaultAgency) {
+      preset = config.defaultAgency;
+      console.log(`[Wave] Using default agency: ${preset} (from .tycono/config.json)`);
+    } else {
+      preset = autoSelectPreset(COMPANY_ROOT, directive);
+      if (preset) {
+        console.log(`[Wave] Auto-selected agency: ${preset} (from directive keywords)`);
+      }
     }
   }
 
