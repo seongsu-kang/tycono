@@ -232,3 +232,32 @@ echo "Cancel:         /tycono-cancel"
 if [[ "$PERMISSION_MODE" == "auto" ]]; then
   echo "🛡️  Permission mode: SAFE (model-based safety checks enabled)"
 fi
+
+# --- Background Notification (macOS) ---
+# Subscribe to SSE stream and push desktop notifications for critical events.
+# Runs silently in background, auto-exits when wave ends (SSE stream closes).
+if command -v osascript &>/dev/null; then
+  (
+    curl -sN "${API_URL}/api/waves/${WAVE_ID}/stream" 2>/dev/null | while IFS= read -r line; do
+      # Parse SSE event type
+      if echo "$line" | grep -q '"type"'; then
+        NOTIFY_MSG=""
+        if echo "$line" | grep -q "awaiting_input"; then
+          NOTIFY_MSG="🔔 에이전트가 결정을 기다리고 있습니다. /tycono-status로 확인하세요."
+        elif echo "$line" | grep -q "msg:error"; then
+          NOTIFY_MSG="❌ 에이전트 세션 에러 발생. /tycono-status로 확인하세요."
+        elif echo "$line" | grep -q "dispatch:error"; then
+          NOTIFY_MSG="⚠️ Dispatch 실패. /tycono-status로 확인하세요."
+        fi
+        if [[ -n "$NOTIFY_MSG" ]]; then
+          osascript -e "display notification \"$NOTIFY_MSG\" with title \"Tycono — $WAVE_ID\"" 2>/dev/null &
+        fi
+      fi
+    done
+  ) &
+  NOTIFY_PID=$!
+  # Save PID for cleanup by cancel.sh
+  if [[ -f ".claude/tycono.local.md" ]]; then
+    echo "notify_pid: ${NOTIFY_PID}" >> .claude/tycono.local.md
+  fi
+fi

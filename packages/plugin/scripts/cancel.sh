@@ -36,5 +36,11 @@ else
   echo "⚠️ Could not find wave info in state file."
 fi
 
+# Kill notification listener if running
+NOTIFY_PID="${NOTIFY_PID:-}"
+if [[ -n "$NOTIFY_PID" ]] && kill -0 "$NOTIFY_PID" 2>/dev/null; then
+  kill "$NOTIFY_PID" 2>/dev/null || true
+fi
+
 rm -f "$STATE_FILE"
 echo "State file cleaned up."
