@@ -77,18 +77,29 @@ fi
 
 # --- Server Management ---
 
-# Resolve companyRoot: walk up from cwd to find knowledge/CLAUDE.md
+# Resolve companyRoot: walk up from cwd to find CLAUDE.md
+# Supports both layouts:
+#   - Claude Code standard: CLAUDE.md at project root
+#   - Tycono scaffold: knowledge/CLAUDE.md
 COMPANY_ROOT=""
-CHECK_DIR="$(pwd)"
-while [[ "$CHECK_DIR" != "/" ]]; do
-  if [[ -f "$CHECK_DIR/knowledge/CLAUDE.md" ]]; then
-    COMPANY_ROOT="$CHECK_DIR"
-    break
+if [[ -n "${COMPANY_ROOT_OVERRIDE:-}" ]]; then
+  COMPANY_ROOT="$COMPANY_ROOT_OVERRIDE"
+else
+  CHECK_DIR="$(pwd)"
+  while [[ "$CHECK_DIR" != "/" ]]; do
+    if [[ -f "$CHECK_DIR/CLAUDE.md" ]]; then
+      COMPANY_ROOT="$CHECK_DIR"
+      break
+    fi
+    if [[ -f "$CHECK_DIR/knowledge/CLAUDE.md" ]]; then
+      COMPANY_ROOT="$CHECK_DIR"
+      break
+    fi
+    CHECK_DIR="$(dirname "$CHECK_DIR")"
+  done
+  if [[ -z "$COMPANY_ROOT" ]]; then
+    COMPANY_ROOT="$(pwd)"
   fi
-  CHECK_DIR="$(dirname "$CHECK_DIR")"
-done
-if [[ -z "$COMPANY_ROOT" ]]; then
-  COMPANY_ROOT="$(pwd)"
 fi
 
 # Check if a headless server is already running
