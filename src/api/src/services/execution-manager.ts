@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
 import { COMPANY_ROOT } from './file-reader.js';
 import { ActivityStream, type ActivityEvent } from './activity-stream.js';
 import { buildOrgTree } from '../engine/org-tree.js';
@@ -79,6 +80,29 @@ function summarizeInput(input: Record<string, unknown>): Record<string, unknown>
 function hasQuestion(output: string): boolean {
   const lastBlock = output.trim().split('\n').slice(-5).join('\n');
   return /\?\s*$/.test(lastBlock) || /할까요|해볼까요|어떨까요|확인.*필요/.test(lastBlock);
+}
+
+/* ─── [APPROVAL_NEEDED] Detection ─── */
+
+const APPROVAL_TAGS = /\[APPROVAL_NEEDED\]|\[CEO_DECISION\]|\[DECISION_REQUIRED\]/;
+
+function extractApprovalQuestion(output: string): string | null {
+  const idx = output.search(APPROVAL_TAGS);
+  if (idx === -1) return null;
+  // Extract text after the tag until end or next section marker
+  const afterTag = output.slice(idx);
+  const lines = afterTag.split('\n');
+  // Take up to 10 lines after the tag line for context
+  const relevant = lines.slice(0, 10).join('\n').trim();
+  return relevant || null;
+}
+
+function sendApprovalNotification(roleId: string, question: string): void {
+  try {
+    const title = `Tycono: ${roleId} needs approval`;
+    const msg = question.replace(/["\\\n]/g, ' ').slice(0, 200);
+    execSync(`osascript -e 'display notification "${msg}" with title "${title}" sound name "Ping"'`);
+  } catch { /* ignore on non-macOS */ }
 }
 
 function isExecActive(status: ExecStatus): boolean {
@@ -458,6 +482,19 @@ class ExecutionManager {
         };
 
         const targetRole = resolveTargetRole(params.sourceRole, params.parentSessionId, this.executions);
+
+        // ── [APPROVAL_NEEDED] detection — notify user when agent is blocked ──
+        const approvalQuestion = extractApprovalQuestion(result.output);
+        if (approvalQuestion) {
+          console.log(`[Approval] ${params.roleId} (${execution.sessionId}) output contains approval tag`);
+          execution.stream.emit('approval:needed', params.roleId, {
+            roleId: params.roleId,
+            sessionId: execution.sessionId,
+            question: approvalQuestion,
+            timestamp: Date.now(),
+          });
+          sendApprovalNotification(params.roleId, approvalQuestion);
+        }
 
         if (hardLimitReached) {
           execution.status = 'awaiting_input';

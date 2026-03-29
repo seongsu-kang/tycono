@@ -79,12 +79,21 @@ try:
         sessions = found.get('dispatches', found.get('sessions', []))
         if sessions:
             print('  Sessions:')
+            approvals = []
             for s in sessions:
                 role = s.get('roleId', '?')
                 st = s.get('status', '?')
                 icon = '🟢' if st in ('running','active') else '✅' if st == 'done' else '⏸️' if st == 'awaiting_input' else '❌'
                 print(f'    {icon} [{role}] {st}')
-        print()
+                if s.get('approvalNeeded'):
+                    approvals.append((role, s.get('approvalQuestion', '?')))
+            print()
+            if approvals:
+                print('  ⏸️  APPROVAL NEEDED:')
+                for role, q in approvals:
+                    print(f'    {role}: \"{q[:80]}\"')
+                print(f'    → Reply with: /tycono directive \"your decision\"')
+                print()
 except Exception as e:
     print(f'  Error: {e}')
 " 2>/dev/null || echo "  (Could not parse API response)"

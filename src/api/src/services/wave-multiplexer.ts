@@ -300,14 +300,14 @@ class WaveMultiplexer {
   getActiveWaves(): Array<{
     id: string;
     directive: string;
-    dispatches: Array<{ sessionId: string; roleId: string; roleName: string; status: string }>;
+    dispatches: Array<{ sessionId: string; roleId: string; roleName: string; status: string; approvalNeeded?: boolean; approvalQuestion?: string }>;
     startedAt: number;
     sessionIds: string[];
   }> {
     const result: Array<{
       id: string;
       directive: string;
-      dispatches: Array<{ sessionId: string; roleId: string; roleName: string; status: string }>;
+      dispatches: Array<{ sessionId: string; roleId: string; roleName: string; status: string; approvalNeeded?: boolean; approvalQuestion?: string }>;
       startedAt: number;
       sessionIds: string[];
     }> = [];
@@ -317,13 +317,22 @@ class WaveMultiplexer {
       if (!hasActive) continue;
 
       // Include ALL sessions (not just root) so plugin can show full team status
+      const APPROVAL_RE = /\[APPROVAL_NEEDED\]|\[CEO_DECISION\]|\[DECISION_REQUIRED\]/;
       const rootSessions = Array.from(sessions.values())
-        .map(e => ({
-          sessionId: e.sessionId,
-          roleId: e.roleId,
-          roleName: e.roleId.toUpperCase(),
-          status: e.status,
-        }));
+        .map(e => {
+          const output = e.result?.output ?? '';
+          const hasApproval = APPROVAL_RE.test(output);
+          return {
+            sessionId: e.sessionId,
+            roleId: e.roleId,
+            roleName: e.roleId.toUpperCase(),
+            status: e.status,
+            ...(hasApproval && {
+              approvalNeeded: true,
+              approvalQuestion: output.slice(output.search(APPROVAL_RE)).split('\n').slice(0, 5).join(' ').slice(0, 200),
+            }),
+          };
+        });
 
       const firstExec = rootSessions.length > 0
         ? Array.from(sessions.values()).find(e => e.sessionId === rootSessions[0].sessionId)
