@@ -307,9 +307,13 @@ class ExecutionManager {
         onDispatch: (subRoleId, subTask) => {
           if (params.targetRoles && params.targetRoles.length > 0) {
             if (!params.targetRoles.includes(subRoleId)) {
+              const errorMsg = `Dispatch to ${subRoleId} blocked — not in active target scope for this wave.`;
               console.warn(`[ExecMgr] Dispatch blocked: ${params.roleId} → ${subRoleId} (not in targetRoles)`);
-              execution.stream.emit('stderr', params.roleId, {
-                message: `Dispatch to ${subRoleId} blocked — not in active target scope for this wave.`,
+              execution.stream.emit('dispatch:error', params.roleId, {
+                sourceRole: params.roleId,
+                targetRole: subRoleId,
+                error: errorMsg,
+                timestamp: Date.now(),
               });
               return;
             }

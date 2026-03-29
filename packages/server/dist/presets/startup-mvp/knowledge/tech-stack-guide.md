@@ -6,46 +6,46 @@ tags: ["tech-stack", "mvp", "architecture", "tools"]
 domain: engineering
 ---
 
-# Tech Stack Guide — MVP를 위한 기술 선택
+# Tech Stack Guide — Choosing Tech for Your MVP
 
-> "MVP에서 기술 선택의 기준은 '빠르게 만들고 쉽게 바꿀 수 있는가'다."
+> "For an MVP, the selection criteria is: 'Can we build it fast and change it easily?'"
 
 ## TL;DR
 
-- **원칙**: 익숙한 것 > 최신 것, 간단한 것 > 강력한 것
-- **추천**: 풀스택 JS/TS (React + Node) 또는 Firebase/Supabase
-- **피하라**: 마이크로서비스, Kubernetes, 복잡한 인프라
+- **Principle**: Familiar > Trendy, Simple > Powerful
+- **Recommended**: Full-stack JS/TS (React + Node) or Firebase/Supabase
+- **Avoid**: Microservices, Kubernetes, complex infrastructure
 
 ---
 
-## 1. 기술 선택 원칙
+## 1. Tech Selection Principles
 
-### 1.1 MVP 단계의 우선순위
+### 1.1 MVP Stage Priorities
 
 ```
-     개발 속도      ████████████████████  (최우선)
-     단순함         ████████████████
-     익숙함         ██████████████
-     확장성         ██████████
-     최신 기술      ████
-     완벽한 아키텍처 ██
+     Dev speed        ████████████████████  (Top priority)
+     Simplicity       ████████████████
+     Familiarity      ██████████████
+     Scalability      ██████████
+     Cutting edge     ████
+     Perfect arch     ██
 ```
 
-### 1.2 결정 체크리스트
+### 1.2 Decision Checklist
 
-| 질문 | 선택 기준 |
-|------|----------|
-| 팀이 잘 아는가? | ✅ 그렇다 → 선택 |
-| 2주 내 배울 수 있나? | ⚠️ 그렇다 → 고려 |
-| 1개월 이상 걸리나? | ❌ MVP 단계에 부적합 |
+| Question | Selection Criteria |
+|----------|-------------------|
+| Does the team know it well? | ✅ Yes → Choose it |
+| Can learn in 2 weeks? | ⚠️ Yes → Consider |
+| Takes 1+ months to learn? | ❌ Not suitable for MVP |
 
 ---
 
-## 2. 추천 스택
+## 2. Recommended Stacks
 
-### 2.1 초고속 MVP (1~2주)
+### 2.1 Ultra-Fast MVP (1-2 weeks)
 
-**BaaS (Backend-as-a-Service) 기반**
+**BaaS (Backend-as-a-Service) based**
 
 ```
 ┌────────────────────────────────────────┐
@@ -57,19 +57,19 @@ domain: engineering
 └────────────────────────────────────────┘
 ```
 
-**장점**:
-- 인프라 관리 불필요
-- 인증/DB/스토리지 즉시 사용
-- 무료 티어로 시작 가능
+**Pros**:
+- No infrastructure management
+- Auth/DB/storage ready out of the box
+- Can start on the free tier
 
-**적합한 경우**:
-- 1~2명 팀
-- CRUD 중심 앱
-- 빠른 검증이 최우선
+**Best for**:
+- 1-2 person teams
+- CRUD-focused apps
+- When fast validation is the top priority
 
-### 2.2 균형잡힌 MVP (2~4주)
+### 2.2 Balanced MVP (2-4 weeks)
 
-**풀스택 JS/TS**
+**Full-stack JS/TS**
 
 ```
 ┌────────────────────────────────────────┐
@@ -81,17 +81,17 @@ domain: engineering
 └────────────────────────────────────────┘
 ```
 
-**장점**:
-- 언어 통일 (JS/TS)
-- 커스터마이징 자유도
-- 확장 시 리팩토링 최소화
+**Pros**:
+- Unified language (JS/TS)
+- Customization flexibility
+- Minimal refactoring when scaling
 
-**적합한 경우**:
-- 2~4명 팀
-- 커스텀 로직 필요
-- 복잡한 비즈니스 규칙
+**Best for**:
+- 2-4 person teams
+- Custom logic needed
+- Complex business rules
 
-### 2.3 대안: Python/Django
+### 2.3 Alternative: Python/Django
 
 ```
 ┌────────────────────────────────────────┐
@@ -103,132 +103,132 @@ domain: engineering
 └────────────────────────────────────────┘
 ```
 
-**적합한 경우**:
-- 팀이 Python에 익숙
-- 데이터/ML 작업 포함
-- 관리자 패널 필요 (Django Admin)
+**Best for**:
+- Team is experienced in Python
+- Data/ML work involved
+- Need admin panel (Django Admin)
 
 ---
 
-## 3. 컴포넌트별 선택 가이드
+## 3. Component Selection Guide
 
-### 3.1 프론트엔드
+### 3.1 Frontend
 
-| 옵션 | 학습 곡선 | MVP 속도 | 추천 |
-|------|----------|----------|------|
-| **React + Vite** | 중간 | ⭐⭐⭐⭐ | ✅ 가장 범용적 |
-| **Next.js** | 중간 | ⭐⭐⭐⭐⭐ | ✅ SSR 필요 시 |
-| Vue 3 | 쉬움 | ⭐⭐⭐⭐ | 팀이 선호하면 |
-| Svelte | 쉬움 | ⭐⭐⭐⭐ | 팀이 선호하면 |
-| HTMX | 쉬움 | ⭐⭐⭐⭐⭐ | 인터랙션 단순할 때 |
+| Option | Learning Curve | MVP Speed | Recommendation |
+|--------|---------------|-----------|----------------|
+| **React + Vite** | Medium | ⭐⭐⭐⭐ | ✅ Most versatile |
+| **Next.js** | Medium | ⭐⭐⭐⭐⭐ | ✅ When SSR needed |
+| Vue 3 | Easy | ⭐⭐⭐⭐ | If team prefers it |
+| Svelte | Easy | ⭐⭐⭐⭐ | If team prefers it |
+| HTMX | Easy | ⭐⭐⭐⭐⭐ | For simple interactions |
 
-### 3.2 백엔드
+### 3.2 Backend
 
-| 옵션 | 학습 곡선 | MVP 속도 | 추천 |
-|------|----------|----------|------|
-| **Firebase** | 쉬움 | ⭐⭐⭐⭐⭐ | ✅ 가장 빠름 |
-| **Supabase** | 쉬움 | ⭐⭐⭐⭐⭐ | ✅ SQL 선호 시 |
-| Express.js | 쉬움 | ⭐⭐⭐⭐ | 커스텀 필요 시 |
-| FastAPI | 쉬움 | ⭐⭐⭐⭐ | Python 선호 시 |
-| Django | 중간 | ⭐⭐⭐ | 관리자 패널 필요 시 |
-| Rails | 중간 | ⭐⭐⭐⭐ | Ruby 선호 시 |
+| Option | Learning Curve | MVP Speed | Recommendation |
+|--------|---------------|-----------|----------------|
+| **Firebase** | Easy | ⭐⭐⭐⭐⭐ | ✅ Fastest |
+| **Supabase** | Easy | ⭐⭐⭐⭐⭐ | ✅ If you prefer SQL |
+| Express.js | Easy | ⭐⭐⭐⭐ | When custom logic needed |
+| FastAPI | Easy | ⭐⭐⭐⭐ | If you prefer Python |
+| Django | Medium | ⭐⭐⭐ | When admin panel needed |
+| Rails | Medium | ⭐⭐⭐⭐ | If you prefer Ruby |
 
-### 3.3 데이터베이스
+### 3.3 Database
 
-| 옵션 | 유형 | MVP 추천 |
-|------|------|----------|
-| **PostgreSQL** | SQL | ✅ 가장 범용적, 무료 |
-| SQLite | SQL | 프로토타입, 로컬 개발 |
-| Firestore | NoSQL | Firebase 사용 시 |
-| MongoDB | NoSQL | 스키마 불확실할 때 |
+| Option | Type | MVP Recommendation |
+|--------|------|--------------------|
+| **PostgreSQL** | SQL | ✅ Most versatile, free |
+| SQLite | SQL | Prototypes, local dev |
+| Firestore | NoSQL | When using Firebase |
+| MongoDB | NoSQL | When schema is uncertain |
 
-### 3.4 인증
+### 3.4 Authentication
 
-| 옵션 | 설정 시간 | 추천 |
-|------|----------|------|
-| **Clerk** | 30분 | ✅ 가장 쉬움 |
-| Auth0 | 1시간 | 엔터프라이즈 준비 |
-| NextAuth | 2시간 | Next.js 사용 시 |
-| Firebase Auth | 30분 | Firebase 사용 시 |
-| Supabase Auth | 30분 | Supabase 사용 시 |
+| Option | Setup Time | Recommendation |
+|--------|-----------|----------------|
+| **Clerk** | 30 min | ✅ Easiest |
+| Auth0 | 1 hour | Enterprise-ready |
+| NextAuth | 2 hours | When using Next.js |
+| Firebase Auth | 30 min | When using Firebase |
+| Supabase Auth | 30 min | When using Supabase |
 
-### 3.5 배포
+### 3.5 Deployment
 
-| 옵션 | 무료 티어 | 난이도 | 추천 |
-|------|----------|--------|------|
-| **Vercel** | ✅ | 매우 쉬움 | ✅ Next.js/React |
-| **Netlify** | ✅ | 매우 쉬움 | 정적 사이트 |
-| **Railway** | ✅ (크레딧) | 쉬움 | ✅ 풀스택 |
-| Render | ✅ | 쉬움 | 풀스택 |
-| Fly.io | ✅ | 중간 | 글로벌 배포 |
-| AWS/GCP | ❌ | 어려움 | ⚠️ MVP에 과함 |
-
----
-
-## 4. 피해야 할 것
-
-### 4.1 MVP 단계에서 하지 말 것
-
-| ❌ 하지 말 것 | 이유 |
-|--------------|------|
-| 마이크로서비스 | 2~3명 팀에 오버엔지니어링 |
-| Kubernetes | 인프라 관리에 시간 낭비 |
-| 커스텀 인증 구현 | 보안 취약점, 시간 낭비 |
-| 새로운 언어 학습 | 속도가 핵심인 단계 |
-| 완벽한 CI/CD | 나중에 해도 됨 |
-| 최신 프레임워크 | 레퍼런스 부족, 버그 |
-
-### 4.2 기술 부채 허용 범위
-
-```
-MVP 단계 허용:
-  ✅ 하드코딩된 설정값
-  ✅ 일부 코드 중복
-  ✅ 불완전한 에러 핸들링
-  ✅ 테스트 부재 (핵심 경로만)
-  ✅ 단일 DB, 단일 서버
-
-MVP 단계에서도 하면 안 되는 것:
-  ❌ 비밀번호 평문 저장
-  ❌ SQL 인젝션 취약점
-  ❌ 인증 없는 API
-  ❌ 개인정보 로깅
-```
+| Option | Free Tier | Difficulty | Recommendation |
+|--------|-----------|-----------|----------------|
+| **Vercel** | ✅ | Very easy | ✅ Next.js/React |
+| **Netlify** | ✅ | Very easy | Static sites |
+| **Railway** | ✅ (credits) | Easy | ✅ Full-stack |
+| Render | ✅ | Easy | Full-stack |
+| Fly.io | ✅ | Medium | Global deployment |
+| AWS/GCP | ❌ | Hard | ⚠️ Overkill for MVP |
 
 ---
 
-## 5. 결정 플로우차트
+## 4. What to Avoid
+
+### 4.1 Don't Do This at MVP Stage
+
+| ❌ Don't | Why |
+|----------|-----|
+| Microservices | Over-engineering for a 2-3 person team |
+| Kubernetes | Wasting time on infrastructure |
+| Custom auth | Security vulnerabilities, time waste |
+| Learning a new language | Speed is critical at this stage |
+| Perfect CI/CD | Can do it later |
+| Bleeding-edge frameworks | Limited references, more bugs |
+
+### 4.2 Acceptable Technical Debt
 
 ```
-시작
+Acceptable at MVP stage:
+  ✅ Hardcoded config values
+  ✅ Some code duplication
+  ✅ Incomplete error handling
+  ✅ No tests (except critical path)
+  ✅ Single DB, single server
+
+Never acceptable, even at MVP stage:
+  ❌ Storing passwords in plaintext
+  ❌ SQL injection vulnerabilities
+  ❌ APIs without authentication
+  ❌ Logging personal information
+```
+
+---
+
+## 5. Decision Flowchart
+
+```
+Start
   │
-  ├─ "2주 안에 런칭해야 해?" ─── Yes ──▶ Firebase/Supabase
-  │                                      + React/Next.js
+  ├─ "Need to launch in 2 weeks?" ── Yes ──▶ Firebase/Supabase
+  │                                          + React/Next.js
   │
   No
   │
-  ├─ "팀이 Python 전문가?" ──── Yes ──▶ FastAPI/Django
-  │                                     + React or HTMX
+  ├─ "Team are Python experts?" ──── Yes ──▶ FastAPI/Django
+  │                                          + React or HTMX
   │
   No
   │
-  ├─ "SSR/SEO 중요?" ────────── Yes ──▶ Next.js + API Routes
-  │                                     또는 + Express
+  ├─ "SSR/SEO important?" ────────── Yes ──▶ Next.js + API Routes
+  │                                          or + Express
   │
   No
   │
-  └─ 기본 추천 ─────────────────────▶ React + Vite
-                                      + Express/Fastify
-                                      + PostgreSQL
-                                      + Vercel/Railway
+  └─ Default recommendation ────────────▶ React + Vite
+                                          + Express/Fastify
+                                          + PostgreSQL
+                                          + Vercel/Railway
 ```
 
 ---
 
-## 관련 문서
+## Related Documents
 
-- [MVP Checklist](./mvp-checklist.md) — 런칭 전 점검
-- [Lean Startup](./lean-startup.md) — 검증 방법론
+- [MVP Checklist](./mvp-checklist.md) — Pre-launch checklist
+- [Lean Startup](./lean-startup.md) — Validation methodology
 
 ---
 

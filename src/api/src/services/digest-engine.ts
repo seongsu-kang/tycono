@@ -12,7 +12,7 @@ import type { ActivityEvent, ActivityEventType } from '../../../shared/types.js'
 /* ─── Types ──────────────────────────────────── */
 
 export interface Anomaly {
-  type: 'error' | 'stall' | 'scope_creep' | 'awaiting_input' | 'budget_warning' | 'ceo_directive';
+  type: 'error' | 'stall' | 'scope_creep' | 'awaiting_input' | 'budget_warning' | 'ceo_directive' | 'dispatch_error';
   sessionId: string;
   message: string;
   severity: number; // 0-10
@@ -37,6 +37,7 @@ const EVENT_TIER_MAP: Partial<Record<ActivityEventType, EventTier>> = {
   'msg:awaiting_input': 'critical',
   'dispatch:start': 'high',
   'dispatch:done': 'high',
+  'dispatch:error': 'critical',
   'msg:done': 'high',
   'msg:start': 'high',
   'thinking': 'medium',
@@ -197,6 +198,8 @@ function summarizeEvent(event: ActivityEvent): string | null {
       return `Dispatched → ${event.data?.targetRoleId}: ${(event.data?.task as string ?? '').slice(0, 60)}`;
     case 'dispatch:done':
       return `Dispatch completed: ${event.data?.targetRoleId}`;
+    case 'dispatch:error':
+      return `❌ Dispatch FAILED: ${event.data?.sourceRole} → ${event.data?.targetRole}: ${(event.data?.error as string ?? 'unknown').slice(0, 80)}`;
     case 'tool:start': {
       const toolName = event.data?.name as string ?? 'unknown';
       const input = event.data?.input as Record<string, unknown> | undefined;

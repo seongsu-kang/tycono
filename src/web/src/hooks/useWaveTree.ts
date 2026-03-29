@@ -278,6 +278,21 @@ export default function useWaveTree(
                       }
                     }
 
+                    if (event.type === 'dispatch:error') {
+                      const targetRole = event.data.targetRole as string | undefined;
+                      if (targetRole) {
+                        const targetNode = next.get(targetRole);
+                        if (targetNode && targetNode.status === 'waiting') {
+                          next.set(targetRole, {
+                            ...targetNode,
+                            status: 'error',
+                            streamStatus: 'error',
+                          });
+                        }
+                        console.warn(`[WaveTree] dispatch:error → ${event.data.sourceRole} → ${targetRole}: ${event.data.error}`);
+                      }
+                    }
+
                     if (event.type === 'msg:done') {
                       updated.status = 'done';
                       updated.streamStatus = 'done';

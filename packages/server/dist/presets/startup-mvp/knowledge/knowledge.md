@@ -7,59 +7,59 @@ domain: engineering
 
 # Startup MVP Knowledge
 
-> 아이디어에서 첫 사용자까지 — 최소한으로 최대한 배우기
+> From idea to first users — learn the most with the least
 
 ## TL;DR
 
-- **철학**: 완벽한 제품이 아닌 "학습을 위한 최소 제품"
-- **프레임워크**: Build-Measure-Learn 사이클
-- **목표**: 2~4주 안에 첫 사용자 피드백 받기
-- **원칙**: "Will it work?"보다 "What do I need to learn?"
+- **Philosophy**: Not a perfect product, but a "minimum product for learning"
+- **Framework**: Build-Measure-Learn cycle
+- **Goal**: Get first user feedback within 2-4 weeks
+- **Principle**: "What do I need to learn?" over "Will it work?"
 
 ---
 
-## 지식 구조
+## Knowledge Structure
 
-| 문서 | 내용 | 담당 Role |
-|------|------|----------|
-| [Lean Startup](./lean-startup.md) | Build-Measure-Learn, 가설 검증 | PM |
-| [Tech Stack Guide](./tech-stack-guide.md) | 상황별 스택 추천, 선택 기준 | CTO |
-| [MVP Checklist](./mvp-checklist.md) | MVP 완성 기준, 런칭 전 점검 | PM, Engineer |
-
----
-
-## 핵심 원칙
-
-### 1. 학습이 목표다
-
-> "MVP의 목적은 제품을 만드는 게 아니라, 고객을 이해하는 것이다."
-
-- ❌ 완벽한 기능 구현
-- ✅ 핵심 가설 검증
-
-### 2. 속도가 품질이다 (이 단계에서는)
-
-| 잘못된 생각 | 올바른 생각 |
-|------------|-----------|
-| "이 기능도 있어야 해" | "이거 없으면 테스트 불가능해?" |
-| "코드 구조가 별로..." | "2주 후에 리팩토링해도 됨" |
-| "디자인이 안 예뻐" | "사용자가 이해하면 충분해" |
-
-### 3. 측정 가능해야 한다
-
-MVP는 반드시 측정 지표가 있어야 한다:
-- 회원가입 수
-- 첫 사용 완료율
-- 재방문율
-- NPS (권장 의향)
+| Document | Content | Role |
+|----------|---------|------|
+| [Lean Startup](./lean-startup.md) | Build-Measure-Learn, hypothesis validation | PM |
+| [Tech Stack Guide](./tech-stack-guide.md) | Situational stack recommendations, selection criteria | CTO |
+| [MVP Checklist](./mvp-checklist.md) | MVP completion criteria, pre-launch checklist | PM, Engineer |
 
 ---
 
-## 관련 문서
+## Core Principles
 
-- [Lean Startup](./lean-startup.md) — Build-Measure-Learn 상세
-- [Tech Stack Guide](./tech-stack-guide.md) — 빠른 개발을 위한 스택 선택
-- [MVP Checklist](./mvp-checklist.md) — 런칭 전 점검 목록
+### 1. Learning Is the Goal
+
+> "The purpose of an MVP is not to build a product, but to understand the customer."
+
+- ❌ Perfect feature implementation
+- ✅ Core hypothesis validation
+
+### 2. Speed Is Quality (At This Stage)
+
+| Wrong Thinking | Right Thinking |
+|----------------|----------------|
+| "We need this feature too" | "Can we test without this?" |
+| "The code structure is bad..." | "Refactor in 2 weeks" |
+| "The design isn't pretty" | "Good enough if users understand it" |
+
+### 3. It Must Be Measurable
+
+Every MVP must have measurable metrics:
+- Signups
+- First-use completion rate
+- Return rate
+- NPS (recommendation intent)
+
+---
+
+## Related Documents
+
+- [Lean Startup](./lean-startup.md) — Build-Measure-Learn details
+- [Tech Stack Guide](./tech-stack-guide.md) — Stack selection for rapid development
+- [MVP Checklist](./mvp-checklist.md) — Pre-launch checklist
 
 ---
 

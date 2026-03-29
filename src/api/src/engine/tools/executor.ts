@@ -56,7 +56,7 @@ export async function executeTool(
       case 'bash_execute':
         return bashExecute(id, input, codeRoot ?? companyRoot);
       case 'dispatch':
-        return await dispatchTask(id, input, onDispatch);
+        return await dispatchTask(id, input, onDispatch, options);
       case 'consult':
         return await consultTask(id, input, onConsult);
       case 'heartbeat_watch':
@@ -413,19 +413,44 @@ async function dispatchTask(
   id: string,
   input: Record<string, unknown>,
   onDispatch?: (roleId: string, task: string) => Promise<string>,
+  options?: ToolExecutorOptions,
 ): Promise<ToolResult> {
-  const roleId = String(input.roleId ?? '');
+  const targetRoleId = String(input.roleId ?? '');
   const task = String(input.task ?? '');
 
-  if (!roleId || !task) {
+  if (!targetRoleId || !task) {
     return { tool_use_id: id, content: 'Error: roleId and task are required', is_error: true };
   }
 
   if (!onDispatch) {
+    // Emit dispatch:error — dispatch not available
+    if (options?.sessionId) {
+      const stream = ActivityStream.getOrCreate(options.sessionId, options.roleId);
+      stream.emit('dispatch:error', options.roleId, {
+        sourceRole: options.roleId,
+        targetRole: targetRoleId,
+        error: 'dispatch not available in this context',
+        timestamp: Date.now(),
+      });
+    }
     return { tool_use_id: id, content: 'Error: dispatch not available in this context', is_error: true };
   }
 
-  const result = await onDispatch(roleId, task);
+  const result = await onDispatch(targetRoleId, task);
+
+  // Detect dispatch rejection and emit dispatch:error event
+  if (result.startsWith('Dispatch rejected:') || result.startsWith('[DISPATCH BLOCKED]')) {
+    if (options?.sessionId) {
+      const stream = ActivityStream.getOrCreate(options.sessionId, options.roleId);
+      stream.emit('dispatch:error', options.roleId, {
+        sourceRole: options.roleId,
+        targetRole: targetRoleId,
+        error: result,
+        timestamp: Date.now(),
+      });
+    }
+  }
+
   return { tool_use_id: id, content: result };
 }
 

@@ -6,200 +6,200 @@ tags: ["gdd", "game-design", "balancing", "difficulty"]
 domain: business
 ---
 
-# Game Design Document (GDD) — 템플릿 & 밸런싱 가이드
+# Game Design Document (GDD) — Template & Balancing Guide
 
-> "문서화되지 않은 게임 디자인은 아이디어가 아니라 환상이다."
+> "An undocumented game design isn't an idea — it's a fantasy."
 
 ## TL;DR
 
-- **GDD 목적**: 팀 전체가 같은 게임을 상상하게 하기
-- **핵심 섹션**: 컨셉, 메커닉, 플레이어 경험, 콘텐츠
-- **밸런싱**: 수치 기반 설계 + 플레이테스트 반복
+- **GDD Purpose**: Get the entire team imagining the same game
+- **Key Sections**: Concept, mechanics, player experience, content
+- **Balancing**: Data-driven design + iterative playtesting
 
 ---
 
-## 1. GDD 템플릿
+## 1. GDD Template
 
-### 1.1 한 페이지 컨셉 (1-Page Pitch)
+### 1.1 One-Page Concept (1-Page Pitch)
 
 ```markdown
-# [게임 제목]
+# [Game Title]
 
-## 한 줄 설명
-[장르]에서 [독특한 메커닉]으로 [핵심 재미]를 경험하는 게임
+## One-Line Description
+A game where players experience [core fun] through [unique mechanic] in [genre]
 
-## 엘리베이터 피치 (30초)
-[타겟 플레이어]를 위한 [장르] 게임.
-[핵심 메커닉]을 통해 [플레이어 경험]을 제공.
-[레퍼런스 게임 1] meets [레퍼런스 게임 2].
+## Elevator Pitch (30 seconds)
+A [genre] game for [target players].
+Delivers [player experience] through [core mechanic].
+[Reference Game 1] meets [Reference Game 2].
 
-## 핵심 재미 (Core Fun)
-- 1. [첫 번째 재미 요소]
-- 2. [두 번째 재미 요소]
-- 3. [세 번째 재미 요소]
+## Core Fun
+- 1. [First fun element]
+- 2. [Second fun element]
+- 3. [Third fun element]
 
-## 타겟 플레이어
-- 나이: [범위]
-- 게임 경험: [캐주얼/코어]
-- 플레이 시간: [세션당 분]
+## Target Player
+- Age: [range]
+- Gaming experience: [casual/core]
+- Play time: [minutes per session]
 
-## 레퍼런스
-- [게임 1]: [어떤 요소를 참고]
-- [게임 2]: [어떤 요소를 참고]
+## References
+- [Game 1]: [which element to reference]
+- [Game 2]: [which element to reference]
 ```
 
-### 1.2 전체 GDD 구조
+### 1.2 Full GDD Structure
 
 ```markdown
-# [게임 제목] - Game Design Document
+# [Game Title] - Game Design Document
 
-## 1. 게임 개요
-### 1.1 컨셉
-### 1.2 장르
-### 1.3 타겟 플랫폼
-### 1.4 타겟 플레이어
+## 1. Game Overview
+### 1.1 Concept
+### 1.2 Genre
+### 1.3 Target Platform
+### 1.4 Target Player
 ### 1.5 USP (Unique Selling Points)
 
-## 2. 게임플레이
-### 2.1 핵심 루프
-### 2.2 게임 메커닉
-### 2.3 진행 시스템
-### 2.4 난이도 곡선
-### 2.5 컨트롤
+## 2. Gameplay
+### 2.1 Core Loop
+### 2.2 Game Mechanics
+### 2.3 Progression System
+### 2.4 Difficulty Curve
+### 2.5 Controls
 
-## 3. 게임 월드
-### 3.1 설정/배경
-### 3.2 캐릭터
-### 3.3 스토리 (있다면)
-### 3.4 레벨/맵 구조
+## 3. Game World
+### 3.1 Setting/Background
+### 3.2 Characters
+### 3.3 Story (if applicable)
+### 3.4 Level/Map Structure
 
-## 4. 아트 & 오디오
-### 4.1 아트 스타일
-### 4.2 UI/UX 가이드
-### 4.3 사운드 디자인
-### 4.4 음악
+## 4. Art & Audio
+### 4.1 Art Style
+### 4.2 UI/UX Guide
+### 4.3 Sound Design
+### 4.4 Music
 
-## 5. 기술 요구사항
-### 5.1 플랫폼
-### 5.2 엔진/프레임워크
-### 5.3 성능 목표
+## 5. Technical Requirements
+### 5.1 Platform
+### 5.2 Engine/Framework
+### 5.3 Performance Targets
 
-## 6. 생산 계획
-### 6.1 마일스톤
-### 6.2 리소스
-### 6.3 리스크
+## 6. Production Plan
+### 6.1 Milestones
+### 6.2 Resources
+### 6.3 Risks
 ```
 
 ---
 
-## 2. 핵심 메커닉 설계
+## 2. Core Mechanic Design
 
-### 2.1 메커닉 정의 템플릿
+### 2.1 Mechanic Definition Template
 
 ```markdown
-## 메커닉: [이름]
+## Mechanic: [Name]
 
-**설명**: [플레이어가 무엇을 하는가]
+**Description**: [What the player does]
 
-**입력**: [어떤 조작으로]
+**Input**: [What controls trigger it]
 
-**결과**: [어떤 일이 발생하는가]
+**Result**: [What happens]
 
-**피드백**: 
-- 시각적: [이펙트, 애니메이션]
-- 청각적: [사운드]
-- 촉각적: [진동, 있다면]
+**Feedback**:
+- Visual: [effects, animations]
+- Audio: [sounds]
+- Haptic: [vibration, if applicable]
 
-**재미 요소**: [왜 이것이 재미있는가]
+**Fun Factor**: [Why this is fun]
 
-**관련 수치**:
-| 변수 | 값 | 설명 |
-|------|-----|------|
-| [변수1] | [값] | [의미] |
+**Related Values**:
+| Variable | Value | Description |
+|----------|-------|-------------|
+| [var1] | [val] | [meaning] |
 ```
 
-### 2.2 메커닉 예시
+### 2.2 Mechanic Example
 
 ```markdown
-## 메커닉: 대시
+## Mechanic: Dash
 
-**설명**: 플레이어가 짧은 거리를 빠르게 이동
+**Description**: Player moves a short distance at high speed
 
-**입력**: Shift 키
+**Input**: Shift key
 
-**결과**: 
-- 0.2초간 이동 속도 3배
-- 무적 상태 (회피 가능)
-- 3초 쿨다운
+**Result**:
+- 3x movement speed for 0.2 seconds
+- Invincibility frames (dodge through attacks)
+- 3-second cooldown
 
-**피드백**:
-- 시각적: 잔상 이펙트 + 화면 블러
-- 청각적: "쉬윅" 효과음
-- 촉각적: 짧은 진동 (모바일)
+**Feedback**:
+- Visual: Afterimage effect + screen blur
+- Audio: "Swoosh" sound effect
+- Haptic: Short vibration (mobile)
 
-**재미 요소**: 
-- 위험 상황 탈출의 쾌감
-- 타이밍 숙련의 보상
-- 공격적 진입 옵션
+**Fun Factor**:
+- Thrill of escaping dangerous situations
+- Reward for mastering timing
+- Aggressive engage option
 
-**관련 수치**:
-| 변수 | 값 | 설명 |
-|------|-----|------|
-| dashDuration | 0.2초 | 대시 지속 시간 |
-| dashMultiplier | 3x | 속도 배율 |
-| dashCooldown | 3초 | 재사용 대기 |
-| iFrames | 0.15초 | 무적 시간 |
+**Related Values**:
+| Variable | Value | Description |
+|----------|-------|-------------|
+| dashDuration | 0.2s | Dash duration |
+| dashMultiplier | 3x | Speed multiplier |
+| dashCooldown | 3s | Cooldown time |
+| iFrames | 0.15s | Invincibility window |
 ```
 
 ---
 
-## 3. 밸런싱 방법론
+## 3. Balancing Methodology
 
-### 3.1 밸런싱 변수 설계
+### 3.1 Balancing Variable Design
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  밸런싱의 핵심 = 의미 있는 선택                         │
+│  Core of balancing = meaningful choices                  │
 ├─────────────────────────────────────────────────────────┤
-│  ✅ 좋은 밸런스: 여러 전략이 viable                     │
-│  ❌ 나쁜 밸런스: 최적해가 명확 (no-brainer)             │
+│  ✅ Good balance: Multiple viable strategies             │
+│  ❌ Bad balance: One obvious optimal choice (no-brainer) │
 └─────────────────────────────────────────────────────────┘
 
-트레이드오프 설계:
-- 무기 A: 높은 데미지, 느린 공격 속도
-- 무기 B: 낮은 데미지, 빠른 공격 속도
-→ DPS는 비슷하지만, 상황에 따라 선호 다름
+Trade-off design:
+- Weapon A: High damage, slow attack speed
+- Weapon B: Low damage, fast attack speed
+→ Similar DPS, but different preferences per situation
 ```
 
-### 3.2 수치 밸런싱 기초
+### 3.2 Numerical Balancing Basics
 
 ```
-RPG 데미지 공식 예시:
+RPG Damage Formula Example:
 
-기본 공식:
-데미지 = (공격력 - 방어력) × 스킬 배율 × 크리티컬 배율
+Base formula:
+Damage = (Attack - Defense) × Skill Multiplier × Critical Multiplier
 
-변수:
-| 요소 | 범위 | 성장률 |
-|------|------|--------|
-| 기본 공격력 | 10-100 | +2/레벨 |
-| 방어력 | 5-50 | +1/레벨 |
-| 스킬 배율 | 1.0-3.0 | 고정 |
-| 크리티컬 확률 | 5-25% | +0.5%/레벨 |
-| 크리티컬 배율 | 1.5-2.5 | 장비 의존 |
+Variables:
+| Element | Range | Growth Rate |
+|---------|-------|-------------|
+| Base Attack | 10-100 | +2/level |
+| Defense | 5-50 | +1/level |
+| Skill Multiplier | 1.0-3.0 | Fixed |
+| Critical Chance | 5-25% | +0.5%/level |
+| Critical Multiplier | 1.5-2.5 | Gear-dependent |
 
-밸런스 체크:
-1. 레벨 1 vs 레벨 1: 예상 전투 시간?
-2. 레벨 10 vs 레벨 10: 스케일링 적절?
-3. 최고 레벨 vs 보스: 도전적이지만 공정?
+Balance checks:
+1. Level 1 vs Level 1: Expected fight duration?
+2. Level 10 vs Level 10: Scaling appropriate?
+3. Max level vs Boss: Challenging but fair?
 ```
 
-### 3.3 난이도 곡선
+### 3.3 Difficulty Curve
 
 ```
-이상적인 난이도 곡선:
+Ideal difficulty curve:
 
-난이도
+Difficulty
   │
   │                    ╭──────
   │              ╭─────╯
@@ -207,128 +207,128 @@ RPG 데미지 공식 예시:
   │     ╭───╯
   │  ───╯
   │──╯
-  └────────────────────────── 진행도
-     튜토리얼  초반  중반  후반
+  └────────────────────────── Progression
+     Tutorial  Early  Mid   Late
 
-핵심 원칙:
-1. 초반: 낮은 난이도 → 시스템 학습
-2. 중반: 점진적 상승 → 숙련 유도
-3. 후반: 급격한 상승 → 도전감 제공
-4. 스파이크: 보스/관문에서 일시적 상승
+Core principles:
+1. Early: Low difficulty → System learning
+2. Mid: Gradual increase → Mastery development
+3. Late: Steep increase → Challenge and achievement
+4. Spikes: Temporary spikes at bosses/gates
 ```
 
-### 3.4 경제 밸런싱
+### 3.4 Economy Balancing
 
 ```
-자원 순환 모델:
+Resource circulation model:
 
-획득 (Income)
-├── 시간당 기본 획득: 100
-├── 퀘스트 보상: 50-500
-├── 적 처치: 5-50
-└── 보물상자: 100-1000
+Income
+├── Base hourly income: 100
+├── Quest rewards: 50-500
+├── Enemy drops: 5-50
+└── Treasure chests: 100-1000
 
-소비 (Sink)
-├── 장비 구매: 500-5000
-├── 업그레이드: 100-1000
-├── 소모품: 50-200
-└── 수리비: 전투당 10-50
+Sinks
+├── Equipment purchase: 500-5000
+├── Upgrades: 100-1000
+├── Consumables: 50-200
+└── Repair costs: 10-50 per battle
 
-밸런스 체크:
-- 1시간 플레이 = 장비 1개 구매 가능?
-- 최고급 장비 = 합리적 플레이 시간 내?
-- 돈이 넘치거나 부족하지 않은가?
-```
-
----
-
-## 4. 플레이테스트 가이드
-
-### 4.1 테스트 유형
-
-| 유형 | 목적 | 시기 | 참가자 |
-|------|------|------|--------|
-| 내부 테스트 | 버그, 기본 재미 | 개발 중 상시 | 개발팀 |
-| 알파 테스트 | 핵심 메커닉 검증 | 프로토타입 후 | 친구/지인 |
-| 베타 테스트 | 밸런스, 콘텐츠 | 출시 전 | 외부 테스터 |
-| 출시 후 | 실제 유저 데이터 | 출시 후 | 실제 플레이어 |
-
-### 4.2 관찰 포인트
-
-```
-플레이테스트 체크리스트:
-
-□ 튜토리얼 이해했는가?
-□ 목표가 명확한가?
-□ 어디서 막혔는가?
-□ 어디서 재미있어 했는가?
-□ 어디서 지루해 했는가?
-□ 예상과 다르게 플레이한 부분?
-□ 자연스럽게 나온 질문?
-□ 게임을 끄고 싶어한 순간?
-□ 다시 하고 싶다고 했는가?
-```
-
-### 4.3 피드백 수집 질문
-
-```
-테스트 후 질문:
-
-1. 어떤 게임이라고 설명하겠어요?
-2. 가장 재미있었던 순간은?
-3. 가장 짜증났던 순간은?
-4. 이해가 안 됐던 부분은?
-5. 다시 플레이하고 싶어요? 왜?
-6. (기능 X)에 대해 어떻게 생각해요?
-7. 친구에게 추천할 의향은? (1-10)
+Balance checks:
+- 1 hour of play = Can buy 1 piece of equipment?
+- Top-tier equipment = Achievable in reasonable play time?
+- Economy not overflowing or starved?
 ```
 
 ---
 
-## 5. GDD 작성 팁
+## 4. Playtest Guide
+
+### 4.1 Test Types
+
+| Type | Purpose | Timing | Participants |
+|------|---------|--------|--------------|
+| Internal Test | Bugs, basic fun | During development | Dev team |
+| Alpha Test | Core mechanic validation | After prototype | Friends/acquaintances |
+| Beta Test | Balance, content | Pre-launch | External testers |
+| Post-Launch | Real user data | After launch | Actual players |
+
+### 4.2 Observation Points
+
+```
+Playtest checklist:
+
+□ Did they understand the tutorial?
+□ Were goals clear?
+□ Where did they get stuck?
+□ Where did they have fun?
+□ Where did they get bored?
+□ Did they play differently than expected?
+□ What questions came up naturally?
+□ When did they want to quit?
+□ Did they want to play again?
+```
+
+### 4.3 Feedback Collection Questions
+
+```
+Post-test questions:
+
+1. How would you describe this game to someone?
+2. What was the most fun moment?
+3. What was the most frustrating moment?
+4. What didn't you understand?
+5. Would you play again? Why?
+6. What do you think about [Feature X]?
+7. How likely would you recommend this to a friend? (1-10)
+```
+
+---
+
+## 5. GDD Writing Tips
 
 ### 5.1 Do's and Don'ts
 
 ```
 ✅ DO:
-- 구체적으로 작성 (숫자, 예시 포함)
-- 팀원 누구나 이해할 수 있게
-- 버전 관리 + 변경 이력
-- 시각 자료 활용 (목업, 플로우차트)
-- 정기적 업데이트
+- Write specifically (include numbers, examples)
+- Make it understandable for any team member
+- Version control + change history
+- Use visual aids (mockups, flowcharts)
+- Update regularly
 
 ❌ DON'T:
-- 모호한 표현 ("재미있게", "자연스럽게")
-- 한 번 쓰고 방치
-- 너무 긴 문서 (핵심만 먼저)
-- 구현 불가능한 비전
-- 변경에 대한 두려움
+- Vague language ("make it fun," "feel natural")
+- Write once and forget
+- Make it too long (core first)
+- Vision that can't be built
+- Fear of changes
 ```
 
-### 5.2 문서 관리
+### 5.2 Document Management
 
 ```
-GDD 버전 관리:
+GDD version management:
 
-v0.1 — 초기 컨셉 (1페이지)
-v0.5 — 핵심 메커닉 정의
-v1.0 — 프로토타입 기준 완성본
-v1.x — 개발 중 업데이트
-v2.0 — 출시 버전
+v0.1 — Initial concept (1 page)
+v0.5 — Core mechanic definition
+v1.0 — Complete version for prototype
+v1.x — Updates during development
+v2.0 — Release version
 
-변경 로그:
-| 날짜 | 버전 | 변경 내용 | 작성자 |
-|------|------|----------|--------|
-| 2024-01-15 | v1.1 | 점프 높이 조정 | @designer |
-| 2024-01-18 | v1.2 | 새 적 유형 추가 | @pm |
+Change log:
+| Date | Version | Change | Author |
+|------|---------|--------|--------|
+| 2024-01-15 | v1.1 | Adjusted jump height | @designer |
+| 2024-01-18 | v1.2 | Added new enemy type | @pm |
 ```
 
 ---
 
-## 관련 문서
+## Related Documents
 
-- [Game Dev Guide](./game-dev-guide.md) — 기술 가이드
-- [Knowledge Hub](./knowledge.md) — 게임 개발 지식 허브
+- [Game Dev Guide](./game-dev-guide.md) — Technical guide
+- [Knowledge Hub](./knowledge.md) — Game development knowledge hub
 
 ---
 

@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { readPreferences } from '../services/preferences.js';
 import { readConfig, resolveCodeRoot } from '../services/company-config.js';
@@ -271,22 +272,43 @@ ${docList}
 }
 
 /**
- * Load knowledge docs from a preset's knowledge/ directory.
+ * Load knowledge docs from a preset/agency's knowledge/ directory.
+ * 2-Layer Knowledge: merges docs from multiple sources (deduplicated by filename).
+ *
+ * Search order:
+ *   1. {companyRoot}/knowledge/presets/{presetId}/knowledge/  (legacy/local presets)
+ *   2. {companyRoot}/.tycono/agencies/{presetId}/knowledge/   (local agency install)
+ *   3. ~/.tycono/agencies/{presetId}/knowledge/               (global agency install)
+ *
  * Returns concatenated content (capped at 2000 chars per doc).
  */
 function loadPresetKnowledge(companyRoot: string, presetId: string): string | null {
-  const knowledgeDir = path.join(companyRoot, 'knowledge', 'presets', presetId, 'knowledge');
-  if (!fs.existsSync(knowledgeDir)) return null;
+  const candidateDirs = [
+    path.join(companyRoot, 'knowledge', 'presets', presetId, 'knowledge'),
+    path.join(companyRoot, '.tycono', 'agencies', presetId, 'knowledge'),
+    path.join(os.homedir(), '.tycono', 'agencies', presetId, 'knowledge'),
+  ];
 
+  // Collect docs from all sources, deduplicate by filename (first wins)
+  const seenFiles = new Set<string>();
   const parts: string[] = [];
-  try {
-    const entries = fs.readdirSync(knowledgeDir).filter(f => f.endsWith('.md'));
-    for (const file of entries.slice(0, 10)) { // Cap at 10 docs
-      const content = fs.readFileSync(path.join(knowledgeDir, file), 'utf-8');
-      const preview = content.slice(0, 2000);
-      parts.push(`## ${file}\n\n${preview}${content.length > 2000 ? '\n\n... (truncated)' : ''}`);
-    }
-  } catch { /* ignore */ }
+
+  for (const knowledgeDir of candidateDirs) {
+    if (!fs.existsSync(knowledgeDir)) continue;
+    try {
+      const entries = fs.readdirSync(knowledgeDir).filter(f => f.endsWith('.md'));
+      for (const file of entries) {
+        if (seenFiles.has(file)) continue; // deduplicate: first source wins
+        seenFiles.add(file);
+        if (seenFiles.size > 10) break; // Cap at 10 docs total
+
+        const content = fs.readFileSync(path.join(knowledgeDir, file), 'utf-8');
+        const preview = content.slice(0, 2000);
+        parts.push(`## ${file}\n\n${preview}${content.length > 2000 ? '\n\n... (truncated)' : ''}`);
+      }
+    } catch { /* ignore unreadable dirs */ }
+    if (seenFiles.size >= 10) break;
+  }
 
   return parts.length > 0 ? parts.join('\n\n---\n\n') : null;
 }

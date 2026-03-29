@@ -313,6 +313,30 @@ export function saveCompletedWave(waveId: string, directive: string): { ok: bool
       } catch { /* ignore */ }
     }
 
+    // Collect dispatch statistics across all sessions
+    const dispatchStats = {
+      attempted: 0,
+      succeeded: 0,
+      failed: 0,
+      errors: [] as Array<{ sourceRole: string; targetRole: string; error: string }>,
+    };
+    for (const role of rolesData) {
+      for (const e of role.events) {
+        if (e.type === 'dispatch:start') {
+          dispatchStats.attempted++;
+          dispatchStats.succeeded++;
+        } else if (e.type === 'dispatch:error') {
+          dispatchStats.attempted++;
+          dispatchStats.failed++;
+          dispatchStats.errors.push({
+            sourceRole: (e.data.sourceRole as string) ?? 'unknown',
+            targetRole: (e.data.targetRole as string) ?? 'unknown',
+            error: (e.data.error as string) ?? 'unknown',
+          });
+        }
+      }
+    }
+
     const waveJson: Record<string, unknown> = {
       id: baseName,
       directive,
@@ -323,6 +347,7 @@ export function saveCompletedWave(waveId: string, directive: string): { ok: bool
       sessionIds: allSessionIds,
     };
     if (existingPreset) waveJson.preset = existingPreset;
+    if (dispatchStats.attempted > 0) waveJson.dispatch = dispatchStats;
     fs.writeFileSync(jsonPath, JSON.stringify(waveJson, null, 2), 'utf-8');
 
     const relativePath = `.tycono/waves/${baseName}.json`;

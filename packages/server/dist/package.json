@@ -1,6 +1,6 @@
 {
   "name": "tycono-server",
-  "version": "0.1.0-beta.7",
+  "version": "0.1.0-beta.11",
   "description": "Tycono AI team orchestration server. Dispatch, supervise, and observe AI agents working as a team.",
   "type": "module",
   "bin": {
@@ -37,8 +37,15 @@
     "typescript": "^5.7.3"
   },
   "keywords": [
-    "ai", "tycono", "agent", "multi-agent", "orchestration",
-    "dispatch", "supervision", "agentic", "team"
+    "ai",
+    "tycono",
+    "agent",
+    "multi-agent",
+    "orchestration",
+    "dispatch",
+    "supervision",
+    "agentic",
+    "team"
   ],
   "author": "Tycono <hello@tycono.ai>",
   "license": "MIT",

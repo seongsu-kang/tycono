@@ -109,6 +109,18 @@ if roles:
 duration = data.get('duration')
 if duration:
     print(f'  Duration: {duration}s')
+dispatch = data.get('dispatch')
+if dispatch:
+    attempted = dispatch.get('attempted', 0)
+    succeeded = dispatch.get('succeeded', 0)
+    failed = dispatch.get('failed', 0)
+    print(f'  Dispatch: {succeeded}/{attempted} succeeded', end='')
+    if failed > 0:
+        print(f' ⚠️  {failed} FAILED')
+        for err in dispatch.get('errors', []):
+            print(f'    ❌ {err.get(\"sourceRole\",\"?\")} → {err.get(\"targetRole\",\"?\")}: {err.get(\"error\",\"?\")}')
+    else:
+        print()
 " 2>/dev/null || true
 fi
 

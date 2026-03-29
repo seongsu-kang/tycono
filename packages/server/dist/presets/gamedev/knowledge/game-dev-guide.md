@@ -6,176 +6,177 @@ tags: ["game", "gamedev", "canvas", "phaser", "webgl", "engine"]
 domain: engineering
 ---
 
-# Game Development Guide — 게임 개발 기술 가이드
+# Game Development Guide — Technical Reference
 
-> "좋은 게임 엔진을 선택하면 절반은 성공이다."
+> "Pick the right game engine and you're halfway there."
 
 ## TL;DR
 
-- **브라우저 게임**: Canvas 2D, Phaser, PixiJS
-- **3D/복잡한 게임**: Unity, Godot (WebGL export)
-- **핵심 개념**: 게임 루프, 물리 엔진, 입력 처리, 렌더링
-- **최적화**: 60fps 유지, 메모리 관리, 에셋 로딩
+- **Browser games**: Canvas 2D, Phaser, PixiJS
+- **3D/complex games**: Unity, Godot (WebGL export)
+- **Core concepts**: Game loop, physics engine, input handling, rendering
+- **Optimization**: Maintain 60fps, memory management, asset loading
 
 ---
 
-## 1. 기술 스택 선택
+## 1. Tech Stack Selection
 
-### 1.1 의사결정 매트릭스
+### 1.1 Decision Matrix
 
-| 기준 | Vanilla Canvas | Phaser | PixiJS | Unity WebGL |
-|------|---------------|--------|--------|-------------|
-| 학습 곡선 | 낮음 | 중간 | 중간 | 높음 |
-| 2D 게임 | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
-| 3D 게임 | ❌ | ❌ | ❌ | ⭐⭐⭐⭐⭐ |
-| 물리 엔진 | 직접 구현 | 내장 | 플러그인 | 내장 |
-| 파일 크기 | 최소 | ~1MB | ~500KB | 10MB+ |
-| 커뮤니티 | 대형 | 대형 | 중형 | 대형 |
+| Criteria | Vanilla Canvas | Phaser | PixiJS | Unity WebGL |
+|----------|---------------|--------|--------|-------------|
+| Learning curve | Low | Medium | Medium | High |
+| 2D games | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
+| 3D games | ❌ | ❌ | ❌ | ⭐⭐⭐⭐⭐ |
+| Physics engine | DIY | Built-in | Plugin | Built-in |
+| File size | Minimal | ~1MB | ~500KB | 10MB+ |
+| Community | Large | Large | Medium | Large |
 
-### 1.2 선택 가이드
+### 1.2 Selection Guide
 
 ```
-⛔ 라이브러리 선택 원칙:
-  - 상용 수준 게임이면 반드시 게임 프레임워크 사용 (Phaser/PixiJS)
-  - Vanilla Canvas는 학습/프로토타입에만
-  - "file://에서 실행해야 하니까 라이브러리 못 씀" = 잘못된 판단
-    → 라이브러리를 lib/ 폴더에 로컬 번들로 포함하면 file://에서도 동작
-    → 예: phaser.min.js를 다운로드 → lib/phaser.min.js로 저장
+⛔ Library selection principles:
+  - For production-quality games, always use a game framework (Phaser/PixiJS)
+  - Vanilla Canvas is for learning/prototypes only
+  - "Can't use libraries because it needs to run from file://" = wrong conclusion
+    → Bundle the library locally in a lib/ folder — works fine from file://
+    → e.g., download phaser.min.js → save as lib/phaser.min.js
           <script src="lib/phaser.min.js"></script>
 
 ┌─────────────────────────────────────────────────────────┐
-│  Vanilla Canvas 추천 (프로토타입/학습만)                 │
+│  Vanilla Canvas (prototypes/learning only)              │
 ├─────────────────────────────────────────────────────────┤
-│  - 매우 간단한 게임 (Snake, Pong)                       │
-│  - 학습 목적                                            │
-│  - ⛔ 상용 게임에는 비추천 — 같은 시간에 5~10배 나쁜 결과│
+│  - Very simple games (Snake, Pong)                      │
+│  - Learning purposes                                    │
+│  - ⛔ Not recommended for production — 5-10x worse      │
+│    results for the same time investment                  │
 └─────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────┐
-│  Phaser 추천                                           │
+│  Phaser Recommended                                     │
 ├─────────────────────────────────────────────────────────┤
-│  - 2D 아케이드/플랫포머/RPG                            │
-│  - 물리 엔진 필요 (Arcade Physics, Matter.js)          │
-│  - 에셋 로딩, 씬 관리 필요                              │
-│  - 풍부한 튜토리얼 원함                                 │
+│  - 2D arcade/platformer/RPG                             │
+│  - Physics engine needed (Arcade Physics, Matter.js)    │
+│  - Asset loading, scene management needed               │
+│  - Rich tutorials available                             │
 └─────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────┐
-│  PixiJS 추천                                           │
+│  PixiJS Recommended                                     │
 ├─────────────────────────────────────────────────────────┤
-│  - 고성능 2D 렌더링 필요                                │
-│  - 많은 스프라이트 (파티클, 슈팅)                       │
-│  - 커스텀 게임 로직 선호                                │
-│  - WebGL 최적화 필요                                    │
+│  - High-performance 2D rendering needed                 │
+│  - Many sprites (particles, shooters)                   │
+│  - Prefer custom game logic                             │
+│  - WebGL optimization needed                            │
 └─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 2. 게임 루프
+## 2. Game Loop
 
-### 2.1 기본 구조
+### 2.1 Basic Structure
 
 ```javascript
-// 기본 게임 루프
+// Basic game loop
 class Game {
     constructor() {
         this.lastTime = 0;
         this.running = false;
     }
-    
+
     start() {
         this.running = true;
         requestAnimationFrame((time) => this.loop(time));
     }
-    
+
     loop(currentTime) {
         if (!this.running) return;
-        
-        // Delta time 계산 (ms → seconds)
+
+        // Calculate delta time (ms → seconds)
         const deltaTime = (currentTime - this.lastTime) / 1000;
         this.lastTime = currentTime;
-        
-        // 게임 로직 순서
-        this.processInput();      // 1. 입력 처리
-        this.update(deltaTime);   // 2. 상태 업데이트
-        this.render();            // 3. 화면 렌더링
-        
+
+        // Game logic order
+        this.processInput();      // 1. Handle input
+        this.update(deltaTime);   // 2. Update state
+        this.render();            // 3. Render screen
+
         requestAnimationFrame((time) => this.loop(time));
     }
-    
+
     processInput() {
-        // 키보드, 마우스, 터치 입력 처리
+        // Handle keyboard, mouse, touch input
     }
-    
+
     update(dt) {
-        // 게임 로직, 물리, AI
-        // dt를 곱해서 프레임 독립적 이동
+        // Game logic, physics, AI
+        // Multiply by dt for frame-independent movement
         player.x += player.speed * dt;
     }
-    
+
     render() {
-        // 화면 그리기
+        // Draw to screen
         ctx.clearRect(0, 0, width, height);
-        // ... 스프라이트 그리기
+        // ... draw sprites
     }
 }
 ```
 
-### 2.2 고정 시간 스텝 (Fixed Timestep)
+### 2.2 Fixed Timestep
 
 ```javascript
-// 물리 시뮬레이션용 고정 스텝
-const FIXED_TIMESTEP = 1/60; // 60 FPS 물리
+// Fixed timestep for physics simulation
+const FIXED_TIMESTEP = 1/60; // 60 FPS physics
 let accumulator = 0;
 
 function gameLoop(currentTime) {
     const deltaTime = (currentTime - lastTime) / 1000;
     lastTime = currentTime;
-    
+
     accumulator += deltaTime;
-    
-    // 고정 간격으로 물리 업데이트
+
+    // Update physics at fixed intervals
     while (accumulator >= FIXED_TIMESTEP) {
         fixedUpdate(FIXED_TIMESTEP);
         accumulator -= FIXED_TIMESTEP;
     }
-    
-    // 남은 비율로 보간 렌더링
+
+    // Interpolated rendering with remaining fraction
     const alpha = accumulator / FIXED_TIMESTEP;
     render(alpha);
-    
+
     requestAnimationFrame(gameLoop);
 }
 ```
 
 ---
 
-## 3. 핵심 시스템
+## 3. Core Systems
 
-### 3.1 입력 처리
+### 3.1 Input Handling
 
 ```javascript
 class InputManager {
     constructor() {
         this.keys = {};
         this.mouse = { x: 0, y: 0, buttons: {} };
-        
+
         window.addEventListener('keydown', (e) => {
             this.keys[e.code] = true;
         });
         window.addEventListener('keyup', (e) => {
             this.keys[e.code] = false;
         });
-        // ... 마우스, 터치 이벤트
+        // ... mouse, touch events
     }
-    
+
     isKeyDown(code) {
         return this.keys[code] === true;
     }
-    
+
     isKeyPressed(code) {
-        // 이번 프레임에 눌렸는지 (1회 감지)
+        // Detect if pressed this frame (single trigger)
         if (this.keys[code] && !this.prevKeys[code]) {
             return true;
         }
@@ -183,7 +184,7 @@ class InputManager {
     }
 }
 
-// 사용
+// Usage
 if (input.isKeyDown('ArrowRight')) {
     player.x += speed * dt;
 }
@@ -192,10 +193,10 @@ if (input.isKeyPressed('Space')) {
 }
 ```
 
-### 3.2 충돌 감지 (AABB)
+### 3.2 Collision Detection (AABB)
 
 ```javascript
-// Axis-Aligned Bounding Box 충돌
+// Axis-Aligned Bounding Box collision
 function checkCollision(a, b) {
     return (
         a.x < b.x + b.width &&
@@ -205,7 +206,7 @@ function checkCollision(a, b) {
     );
 }
 
-// 원형 충돌
+// Circle collision
 function checkCircleCollision(a, b) {
     const dx = a.x - b.x;
     const dy = a.y - b.y;
@@ -214,7 +215,7 @@ function checkCircleCollision(a, b) {
 }
 ```
 
-### 3.3 스프라이트 애니메이션
+### 3.3 Sprite Animation
 
 ```javascript
 class AnimatedSprite {
@@ -223,10 +224,10 @@ class AnimatedSprite {
         this.frameWidth = frameWidth;
         this.frameHeight = frameHeight;
         this.currentFrame = 0;
-        this.animationSpeed = 0.1; // 초당 프레임 전환
+        this.animationSpeed = 0.1; // Seconds per frame
         this.elapsedTime = 0;
     }
-    
+
     update(dt) {
         this.elapsedTime += dt;
         if (this.elapsedTime >= this.animationSpeed) {
@@ -234,7 +235,7 @@ class AnimatedSprite {
             this.elapsedTime = 0;
         }
     }
-    
+
     draw(ctx, x, y) {
         const sx = this.currentFrame * this.frameWidth;
         ctx.drawImage(
@@ -248,53 +249,53 @@ class AnimatedSprite {
 
 ---
 
-## 4. 물리 엔진 기초
+## 4. Physics Engine Basics
 
-### 4.1 기본 물리
+### 4.1 Basic Physics
 
 ```javascript
 class PhysicsBody {
     constructor(x, y) {
         this.x = x;
         this.y = y;
-        this.vx = 0; // 속도 X
-        this.vy = 0; // 속도 Y
-        this.ax = 0; // 가속도 X
-        this.ay = 0; // 가속도 Y
+        this.vx = 0; // Velocity X
+        this.vy = 0; // Velocity Y
+        this.ax = 0; // Acceleration X
+        this.ay = 0; // Acceleration Y
         this.mass = 1;
         this.friction = 0.98;
-        this.gravity = 980; // 픽셀/초²
+        this.gravity = 980; // pixels/sec²
     }
-    
+
     applyForce(fx, fy) {
         this.ax += fx / this.mass;
         this.ay += fy / this.mass;
     }
-    
+
     update(dt) {
-        // 중력 적용
+        // Apply gravity
         this.vy += this.gravity * dt;
-        
-        // 가속도 → 속도
+
+        // Acceleration → Velocity
         this.vx += this.ax * dt;
         this.vy += this.ay * dt;
-        
-        // 마찰
+
+        // Friction
         this.vx *= this.friction;
         this.vy *= this.friction;
-        
-        // 속도 → 위치
+
+        // Velocity → Position
         this.x += this.vx * dt;
         this.y += this.vy * dt;
-        
-        // 가속도 리셋
+
+        // Reset acceleration
         this.ax = 0;
         this.ay = 0;
     }
 }
 ```
 
-### 4.2 플랫포머 물리
+### 4.2 Platformer Physics
 
 ```javascript
 class PlatformerPlayer extends PhysicsBody {
@@ -304,26 +305,26 @@ class PlatformerPlayer extends PhysicsBody {
         this.jumpForce = -500;
         this.moveSpeed = 300;
     }
-    
+
     update(dt, input, platforms) {
-        // 좌우 이동
+        // Horizontal movement
         if (input.isKeyDown('ArrowLeft')) {
             this.vx = -this.moveSpeed;
         } else if (input.isKeyDown('ArrowRight')) {
             this.vx = this.moveSpeed;
         } else {
-            this.vx *= 0.8; // 감속
+            this.vx *= 0.8; // Deceleration
         }
-        
-        // 점프 (땅에 있을 때만)
+
+        // Jump (only when grounded)
         if (input.isKeyPressed('Space') && this.onGround) {
             this.vy = this.jumpForce;
             this.onGround = false;
         }
-        
+
         super.update(dt);
-        
-        // 플랫폼 충돌
+
+        // Platform collision
         this.onGround = false;
         for (const platform of platforms) {
             if (this.checkPlatformCollision(platform)) {
@@ -338,27 +339,27 @@ class PlatformerPlayer extends PhysicsBody {
 
 ---
 
-## 5. 성능 최적화
+## 5. Performance Optimization
 
-### 5.1 체크리스트
+### 5.1 Checklist
 
-**렌더링:**
-- [ ] 오프스크린 캔버스로 복잡한 요소 캐싱
-- [ ] requestAnimationFrame 사용 (setInterval X)
-- [ ] 변경된 영역만 다시 그리기 (dirty rectangles)
-- [ ] 스프라이트 시트 사용 (개별 이미지 X)
+**Rendering:**
+- [ ] Cache complex elements with offscreen canvas
+- [ ] Use requestAnimationFrame (not setInterval)
+- [ ] Redraw only changed areas (dirty rectangles)
+- [ ] Use sprite sheets (not individual images)
 
-**로직:**
-- [ ] 공간 분할 (쿼드트리, 그리드)로 충돌 감지 최적화
-- [ ] 오브젝트 풀링 (탄환, 파티클)
-- [ ] 화면 밖 오브젝트 비활성화
+**Logic:**
+- [ ] Spatial partitioning (quadtree, grid) for collision detection
+- [ ] Object pooling (bullets, particles)
+- [ ] Deactivate off-screen objects
 
-**메모리:**
-- [ ] 오브젝트 풀로 GC 방지
-- [ ] 이미지 프리로딩
-- [ ] 큰 배열 재사용
+**Memory:**
+- [ ] Object pool to prevent GC
+- [ ] Image preloading
+- [ ] Reuse large arrays
 
-### 5.2 오브젝트 풀
+### 5.2 Object Pool
 
 ```javascript
 class BulletPool {
@@ -368,7 +369,7 @@ class BulletPool {
             this.pool.push({ active: false, x: 0, y: 0, vx: 0, vy: 0 });
         }
     }
-    
+
     get() {
         for (const bullet of this.pool) {
             if (!bullet.active) {
@@ -376,15 +377,15 @@ class BulletPool {
                 return bullet;
             }
         }
-        return null; // 풀 고갈
+        return null; // Pool exhausted
     }
-    
+
     release(bullet) {
         bullet.active = false;
     }
 }
 
-// 사용
+// Usage
 const bulletPool = new BulletPool(100);
 
 function fireBullet(x, y) {
@@ -399,10 +400,10 @@ function fireBullet(x, y) {
 
 ---
 
-## 6. Phaser 퀵스타트
+## 6. Phaser Quick Start
 
 ```javascript
-// Phaser 3 기본 설정
+// Phaser 3 basic setup
 const config = {
     type: Phaser.AUTO,
     width: 800,
@@ -431,20 +432,20 @@ function preload() {
 
 function create() {
     this.add.image(400, 300, 'sky');
-    
-    // 플랫폼 그룹
+
+    // Platform group
     const platforms = this.physics.add.staticGroup();
     platforms.create(400, 568, 'platform').setScale(2).refreshBody();
-    
-    // 플레이어
+
+    // Player
     this.player = this.physics.add.sprite(100, 450, 'player');
     this.player.setBounce(0.2);
     this.player.setCollideWorldBounds(true);
-    
-    // 충돌 설정
+
+    // Collision setup
     this.physics.add.collider(this.player, platforms);
-    
-    // 입력
+
+    // Input
     this.cursors = this.input.keyboard.createCursorKeys();
 }
 
@@ -456,7 +457,7 @@ function update() {
     } else {
         this.player.setVelocityX(0);
     }
-    
+
     if (this.cursors.up.isDown && this.player.body.touching.down) {
         this.player.setVelocityY(-330);
     }
@@ -465,10 +466,10 @@ function update() {
 
 ---
 
-## 관련 문서
+## Related Documents
 
-- [Game Design Doc](./game-design-doc.md) — 게임 기획
-- [Knowledge Hub](./knowledge.md) — 게임 개발 지식 허브
+- [Game Design Doc](./game-design-doc.md) — Game planning
+- [Knowledge Hub](./knowledge.md) — Game development knowledge hub
 
 ---
 
