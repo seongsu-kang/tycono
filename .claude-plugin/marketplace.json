@@ -1,0 +1,29 @@
+{
+  "name": "tycono",
+  "owner": {
+    "name": "Tycono",
+    "email": "hello@tycono.ai"
+  },
+  "metadata": {
+    "description": "AI team orchestration for Claude Code. Give Claude an AI team that plans, builds, tests, and ships.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "tycono",
+      "source": "./packages/plugin",
+      "description": "AI team orchestration. CTO, Engineer, QA, Designer work together while you watch in real-time.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Tycono",
+        "email": "hello@tycono.ai"
+      },
+      "homepage": "https://tycono.ai",
+      "repository": "https://github.com/seongsu-kang/tycono",
+      "license": "MIT",
+      "keywords": ["ai-team", "orchestration", "agency", "multi-agent", "gamedev", "startup"],
+      "category": "development-workflows",
+      "tags": ["ai-team", "orchestration", "agency", "multi-agent"]
+    }
+  ]
+}
