@@ -219,28 +219,58 @@ echo "  Directive: $DIRECTIVE"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# Stream initial events (first 10 seconds)
-echo "📡 Live stream (first 10s preview):"
-timeout 10 curl -s -N "${API_URL}/api/waves/${WAVE_ID}/stream" 2>/dev/null | while IFS= read -r line; do
-  # Parse SSE data lines
-  if [[ "$line" == data:* ]]; then
-    DATA="${line#data:}"
-    TYPE=$(echo "$DATA" | python3 -c "import sys,json; print(json.load(sys.stdin).get('type',''))" 2>/dev/null || echo "")
-    ROLE=$(echo "$DATA" | python3 -c "import sys,json; print(json.load(sys.stdin).get('roleId',''))" 2>/dev/null || echo "")
+# Poll wave status until completion (designed for run_in_background)
+# Claude Code runs this in background → user's session stays free
+# On completion, Claude Code auto-notifies: "Background command completed"
+echo "⏳ Monitoring wave progress..."
+POLL_INTERVAL=10
+LAST_STATUS=""
 
-    case "$TYPE" in
-      msg:start)     echo "  🟢 [$ROLE] Session started" ;;
-      dispatch:start)
-        TARGET=$(echo "$DATA" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('targetRoleId',''))" 2>/dev/null || echo "")
-        echo "  📋 [$ROLE → $TARGET] Dispatched"
+while true; do
+  WAVE_STATUS=$(curl -s "${API_URL}/api/waves/${WAVE_ID}" 2>/dev/null || echo "")
+  if [[ -z "$WAVE_STATUS" ]]; then
+    sleep "$POLL_INTERVAL"
+    continue
+  fi
+
+  STATUS=$(echo "$WAVE_STATUS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+
+  # Print status changes only
+  if [[ "$STATUS" != "$LAST_STATUS" ]]; then
+    LAST_STATUS="$STATUS"
+    case "$STATUS" in
+      running)  echo "🔄 Wave running..." ;;
+      stopped)
+        echo ""
+        echo "✅ Wave complete!"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        # Print summary
+        SESSIONS=$(echo "$WAVE_STATUS" | python3 -c "
+import sys, json
+w = json.load(sys.stdin)
+sessions = w.get('sessions', [])
+for s in sessions:
+  print(f\"  {s.get('roleId','?'):15s} {s.get('status','?')}\")
+" 2>/dev/null || echo "")
+        echo "$SESSIONS"
+        # Print dispatch stats if available
+        DISPATCH=$(echo "$WAVE_STATUS" | python3 -c "
+import sys, json
+w = json.load(sys.stdin)
+d = w.get('dispatch', {})
+if d:
+  print(f\"  Dispatch: {d.get('succeeded',0)} succeeded, {d.get('failed',0)} failed\")
+" 2>/dev/null || echo "")
+        if [[ -n "$DISPATCH" ]]; then echo "$DISPATCH"; fi
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        exit 0
         ;;
-      msg:done)      echo "  ✅ [$ROLE] Done" ;;
-      msg:error)     echo "  ❌ [$ROLE] Error" ;;
-      msg:text)      echo "  💬 [$ROLE] Working..." ;;
+      error)
+        echo "❌ Wave error!"
+        exit 1
+        ;;
     esac
   fi
-done || true
 
-echo ""
-echo "Wave is running in the background. Use /tycono-status to check progress."
-echo "The session will stay alive until the wave completes."
+  sleep "$POLL_INTERVAL"
+done
