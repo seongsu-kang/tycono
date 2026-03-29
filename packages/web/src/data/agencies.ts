@@ -99,6 +99,7 @@ function loadComingSoonAgencies(): Agency[] {
     "content-marketing",
     "devops-platform",
     "saas-growth",
+    "research-discovery",
   ]);
 
   const dirs = fs.readdirSync(presetsPath).filter((d) => {

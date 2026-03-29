@@ -6,208 +6,208 @@ tags: ["mvp", "checklist", "launch", "quality"]
 domain: engineering
 ---
 
-# MVP Checklist — 런칭 전 점검 목록
+# MVP Checklist — Pre-Launch Checklist
 
-> "MVP는 '최소'지만, '실행 불가'면 안 된다. 핵심 경로는 완벽해야 한다."
+> "An MVP is 'minimum,' but it can't be 'broken.' The critical path must work perfectly."
 
 ## TL;DR
 
-- **원칙**: 핵심 경로(Critical Path)는 100% 동작
-- **범위**: 부가 기능 < 핵심 기능 완성도
-- **기준**: "첫 10명 사용자가 포기하지 않을 정도"
+- **Principle**: Critical path must work 100%
+- **Scope**: Secondary features < Core feature completeness
+- **Bar**: "Good enough that your first 10 users won't give up"
 
 ---
 
-## 1. MVP 완성 기준
+## 1. MVP Completion Criteria
 
-### 1.1 "MVP"의 정의
+### 1.1 Defining "MVP"
 
 ```
-MVP ≠ 버그투성이 프로토타입
-MVP = 핵심 가치를 검증할 수 있는 최소 제품
+MVP ≠ Buggy prototype
+MVP = Minimum product that can validate core value
 
-├── 핵심 기능: 100% 동작
-├── 부가 기능: 스킵 가능
-├── UI/UX: "이해 가능" 수준
-└── 성능: "인내 가능" 수준
+├── Core features: 100% working
+├── Secondary features: Can skip
+├── UI/UX: "Understandable" level
+└── Performance: "Tolerable" level
 ```
 
-### 1.2 핵심 경로 정의
+### 1.2 Define the Critical Path
 
-MVP 런칭 전, "핵심 경로"를 명확히 정의:
+Before MVP launch, clearly define the "critical path":
 
 ```markdown
-## 핵심 경로 (Critical Path)
+## Critical Path
 
-1. 사용자가 [시작 지점]에 도착
-2. [핵심 액션 1] 수행
-3. [핵심 액션 2] 수행
-4. [가치 전달 순간] 경험
-5. (선택) 재방문 또는 공유
+1. User arrives at [entry point]
+2. Performs [core action 1]
+3. Performs [core action 2]
+4. Experiences [value delivery moment]
+5. (Optional) Returns or shares
 
-예시 — 노트 앱:
-1. 랜딩 페이지 방문
-2. 가입/로그인
-3. 새 노트 생성
-4. 노트 저장 후 다시 열기 ← 가치 전달
-5. (선택) 노트 공유
+Example — Note app:
+1. Visit landing page
+2. Sign up / Log in
+3. Create new note
+4. Save note and reopen it ← Value delivery
+5. (Optional) Share note
 ```
 
 ---
 
-## 2. 런칭 전 체크리스트
+## 2. Pre-Launch Checklist
 
-### 2.1 핵심 기능 (P0 — 반드시)
+### 2.1 Core Features (P0 — Must Have)
 
-- [ ] **핵심 경로 전체 동작**: 시작부터 가치 전달까지 끊김 없음
-- [ ] **가입/로그인 동작**: 이메일 또는 소셜 로그인
-- [ ] **핵심 액션 완료 가능**: 앱의 주요 기능 1~2개
-- [ ] **데이터 저장 확인**: 새로고침해도 데이터 유지
-- [ ] **에러 시 안내 메시지**: 빈 화면이나 무한 로딩 없음
+- [ ] **Full critical path works**: No breaks from start to value delivery
+- [ ] **Sign up/login works**: Email or social login
+- [ ] **Core action completable**: 1-2 main features of the app
+- [ ] **Data persistence verified**: Data survives page refresh
+- [ ] **Error messaging**: No blank screens or infinite loading
 
-### 2.2 사용성 (P1 — 권장)
+### 2.2 Usability (P1 — Recommended)
 
-- [ ] **첫 화면에서 다음 행동 명확**: CTA 버튼 또는 안내
-- [ ] **핵심 경로 3클릭 이내**: 가치 도달까지 단계 최소화
-- [ ] **로딩 인디케이터**: 작업 중임을 알 수 있음
-- [ ] **모바일 기본 동작**: 반응형 또는 모바일 우선 (타겟에 따라)
-- [ ] **에러 복구 가능**: 뒤로가기, 다시 시도 가능
+- [ ] **Clear next action on first screen**: CTA button or guidance
+- [ ] **Critical path within 3 clicks**: Minimize steps to value
+- [ ] **Loading indicators**: User knows something is happening
+- [ ] **Basic mobile support**: Responsive or mobile-first (depending on target)
+- [ ] **Error recovery**: Back button, retry possible
 
-### 2.3 신뢰 & 보안 (P0 — 반드시)
+### 2.3 Trust & Security (P0 — Must Have)
 
-- [ ] **HTTPS 적용**: SSL 인증서
-- [ ] **비밀번호 해싱**: 평문 저장 절대 금지
-- [ ] **개인정보 최소 수집**: 필요한 것만
-- [ ] **기본 이용약관/개인정보처리방침**: 템플릿이라도 있어야 함
-- [ ] **연락처 명시**: 이메일 또는 폼
+- [ ] **HTTPS enabled**: SSL certificate
+- [ ] **Password hashing**: Never store plaintext
+- [ ] **Minimal personal data collection**: Only what's needed
+- [ ] **Basic Terms of Service / Privacy Policy**: Even a template
+- [ ] **Contact info visible**: Email or contact form
 
-### 2.4 측정 (P1 — 권장)
+### 2.4 Measurement (P1 — Recommended)
 
-- [ ] **분석 도구 설치**: GA4, Mixpanel, PostHog 등
-- [ ] **핵심 이벤트 트래킹**: 가입, 핵심 액션, 완료
-- [ ] **에러 모니터링**: Sentry 또는 비슷한 도구
-- [ ] **피드백 수집 방법**: 이메일, 채팅, 폼
+- [ ] **Analytics tool installed**: GA4, Mixpanel, PostHog, etc.
+- [ ] **Core event tracking**: Signup, core action, completion
+- [ ] **Error monitoring**: Sentry or similar
+- [ ] **Feedback collection method**: Email, chat, form
 
-### 2.5 운영 (P2 — 선택)
+### 2.5 Operations (P2 — Optional)
 
-- [ ] **배포 자동화**: GitHub → Vercel/Railway 등
-- [ ] **환경 분리**: 개발 / 프로덕션 (최소한 DB라도)
-- [ ] **백업**: DB 자동 백업 (BaaS 사용 시 기본 포함)
-- [ ] **모니터링**: 서버 상태, 에러율
-
----
-
-## 3. 품질 vs 속도 매트릭스
-
-### 3.1 이 단계에서 투자할 것 / 스킵할 것
-
-| 영역 | 투자 | 스킵 |
-|------|------|------|
-| **핵심 기능** | 완벽하게 동작 | - |
-| **에러 핸들링** | 핵심 경로만 | 엣지 케이스 |
-| **UI** | 이해 가능 | 예쁨 |
-| **성능** | 참을 만함 (3초 내) | 최적화 |
-| **테스트** | 핵심 경로 수동 테스트 | 자동화 테스트 |
-| **코드 품질** | 동작 우선 | 리팩토링 |
-| **문서화** | 없음 | - |
-
-### 3.2 기술 부채 관리
-
-```
-MVP 런칭 시점:
-  ├── 핵심 기능: 기술 부채 최소
-  ├── 부가 기능: 기술 부채 허용
-  └── 인프라: 수동 작업 허용
-
-런칭 후 2주 내:
-  └── 기술 부채 목록 작성 (tasks.md에 기록)
-
-PMF 확인 후:
-  └── 리팩토링 시작
-```
+- [ ] **Automated deployment**: GitHub → Vercel/Railway, etc.
+- [ ] **Environment separation**: Dev / Production (at least DB)
+- [ ] **Backups**: Auto DB backup (included with most BaaS)
+- [ ] **Monitoring**: Server status, error rate
 
 ---
 
-## 4. 런칭 당일 체크리스트
+## 3. Quality vs Speed Matrix
 
-### 4.1 배포 직전
+### 3.1 What to Invest In / What to Skip at This Stage
 
-- [ ] 프로덕션 환경에서 핵심 경로 테스트
-- [ ] 환경 변수 확인 (API 키, DB URL 등)
-- [ ] HTTPS 동작 확인
-- [ ] 에러 모니터링 동작 확인
+| Area | Invest | Skip |
+|------|--------|------|
+| **Core features** | Must work perfectly | - |
+| **Error handling** | Critical path only | Edge cases |
+| **UI** | Understandable | Pretty |
+| **Performance** | Tolerable (< 3 seconds) | Optimization |
+| **Testing** | Manual test critical path | Automated tests |
+| **Code quality** | Working first | Refactoring |
+| **Documentation** | None | - |
 
-### 4.2 배포 직후
-
-- [ ] 랜딩 페이지 접속 확인
-- [ ] 가입 → 핵심 액션 → 완료 흐름 확인
-- [ ] 분석 도구에 이벤트 찍히는지 확인
-- [ ] 첫 사용자에게 알림 (이메일, 메시지)
-
-### 4.3 첫 24시간
-
-- [ ] 에러 로그 모니터링
-- [ ] 사용자 피드백 수집 채널 열기
-- [ ] 심각한 버그 즉시 수정
-- [ ] 첫 사용자 5명에게 직접 연락
-
----
-
-## 5. "Done" 기준
-
-### 5.1 MVP가 "완료"된 상태
+### 3.2 Technical Debt Management
 
 ```
-✅ 핵심 경로 100% 동작
-✅ 첫 10명 사용자가 가치 전달 순간 도달 가능
-✅ 데이터 수집 가능 (분석 + 피드백)
-✅ 치명적 보안 이슈 없음
-✅ 연락처 명시됨
+At MVP launch:
+  ├── Core features: Minimal tech debt
+  ├── Secondary features: Tech debt acceptable
+  └── Infrastructure: Manual work acceptable
 
-❌ 완벽한 UI/UX
-❌ 모든 엣지 케이스 처리
-❌ 100% 테스트 커버리지
-❌ 완벽한 문서화
-```
+Within 2 weeks after launch:
+  └── Document tech debt list (record in tasks.md)
 
-### 5.2 Go / No-Go 결정
-
-| 상태 | 결정 |
-|------|------|
-| P0 전부 ✅, P1 80%+ ✅ | 🚀 **Go** |
-| P0 전부 ✅, P1 50%+ ✅ | ⚠️ Go (주의) |
-| P0에 ❌ 있음 | 🛑 **No-Go** |
-
----
-
-## 6. 런칭 후 첫 주
-
-### 6.1 매일 확인
-
-- [ ] 신규 가입 수
-- [ ] 핵심 액션 완료율
-- [ ] 에러 발생 건수
-- [ ] 사용자 피드백 (채팅, 이메일)
-
-### 6.2 첫 주 목표
-
-```
-목표:
-  - 10명 이상 가입
-  - 5명 이상 핵심 액션 완료
-  - 3명 이상 피드백 수집
-  - 치명적 버그 0개 유지
-
-달성 시: 다음 사이클 계획
-미달성 시: 원인 분석 → 피벗 또는 재시도
+After PMF is confirmed:
+  └── Start refactoring
 ```
 
 ---
 
-## 관련 문서
+## 4. Launch Day Checklist
 
-- [Lean Startup](./lean-startup.md) — Build-Measure-Learn 방법론
-- [Tech Stack Guide](./tech-stack-guide.md) — 기술 선택 가이드
+### 4.1 Pre-Deploy
+
+- [ ] Test critical path in production environment
+- [ ] Verify environment variables (API keys, DB URL, etc.)
+- [ ] Confirm HTTPS is working
+- [ ] Verify error monitoring is active
+
+### 4.2 Post-Deploy
+
+- [ ] Verify landing page loads
+- [ ] Walk through signup → core action → completion flow
+- [ ] Confirm analytics events are firing
+- [ ] Notify first users (email, messages)
+
+### 4.3 First 24 Hours
+
+- [ ] Monitor error logs
+- [ ] Open user feedback channel
+- [ ] Fix critical bugs immediately
+- [ ] Personally contact first 5 users
+
+---
+
+## 5. "Done" Criteria
+
+### 5.1 When the MVP Is "Complete"
+
+```
+✅ Critical path works 100%
+✅ First 10 users can reach value delivery moment
+✅ Data collection possible (analytics + feedback)
+✅ No critical security issues
+✅ Contact info displayed
+
+❌ Perfect UI/UX
+❌ All edge cases handled
+❌ 100% test coverage
+❌ Perfect documentation
+```
+
+### 5.2 Go / No-Go Decision
+
+| State | Decision |
+|-------|----------|
+| All P0 ✅, P1 80%+ ✅ | 🚀 **Go** |
+| All P0 ✅, P1 50%+ ✅ | ⚠️ Go (with caution) |
+| Any P0 ❌ | 🛑 **No-Go** |
+
+---
+
+## 6. First Week After Launch
+
+### 6.1 Daily Checks
+
+- [ ] New signups
+- [ ] Core action completion rate
+- [ ] Error count
+- [ ] User feedback (chat, email)
+
+### 6.2 First Week Goals
+
+```
+Targets:
+  - 10+ signups
+  - 5+ core action completions
+  - 3+ pieces of feedback collected
+  - 0 critical bugs
+
+If met: Plan next cycle
+If not met: Root cause analysis → Pivot or retry
+```
+
+---
+
+## Related Documents
+
+- [Lean Startup](./lean-startup.md) — Build-Measure-Learn methodology
+- [Tech Stack Guide](./tech-stack-guide.md) — Tech selection guide
 
 ---
 

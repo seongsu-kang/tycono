@@ -8,17 +8,17 @@ domain: business
 
 # Lean Startup — Build-Measure-Learn
 
-> "진짜 위험은 잘못된 제품을 만드는 것이다. 빨리 실패하고 빨리 배워라."
+> "The real risk is building the wrong product. Fail fast, learn fast."
 
 ## TL;DR
 
-- **핵심**: 가설 → 실험 → 검증 → 피벗/진행 사이클
-- **목표**: 최소 리소스로 최대 학습
-- **도구**: Wizard of Oz MVP, Concierge MVP, Landing Page MVP
+- **Core**: Hypothesis > Experiment > Validate > Pivot/Proceed cycle
+- **Goal**: Maximum learning with minimum resources
+- **Tools**: Wizard of Oz MVP, Concierge MVP, Landing Page MVP
 
 ---
 
-## 1. Build-Measure-Learn 사이클
+## 1. Build-Measure-Learn Cycle
 
 ```
 ┌─────────────────────────────────────────┐
@@ -31,180 +31,181 @@ domain: business
 └─────────────────────────────────────────┘
 ```
 
-### 1.1 Build (만들기)
+### 1.1 Build
 
-**원칙**: 가설 검증에 필요한 "최소한"만 만든다.
+**Principle**: Only build the "minimum" needed to validate the hypothesis.
 
-| MVP 유형 | 설명 | 적합한 상황 |
-|----------|------|------------|
-| **Wizard of Oz** | 자동화처럼 보이지만 실제로는 수동 | AI/자동화 서비스 검증 |
-| **Concierge** | 1:1 수동 서비스 제공 | 서비스 가치 검증 |
-| **Landing Page** | 기능 설명 + 이메일 수집 | 시장 수요 검증 |
-| **Fake Door** | 버튼만 있고 기능은 없음 | 기능 관심도 측정 |
-| **Prototype** | 작동하는 최소 버전 | 사용성 검증 |
+| MVP Type | Description | Best For |
+|----------|-------------|----------|
+| **Wizard of Oz** | Looks automated but is actually manual | Validating AI/automation services |
+| **Concierge** | 1:1 manual service delivery | Validating service value |
+| **Landing Page** | Feature description + email collection | Validating market demand |
+| **Fake Door** | Button exists but feature doesn't | Measuring feature interest |
+| **Prototype** | Minimal working version | Validating usability |
 
-### 1.2 Measure (측정)
+### 1.2 Measure
 
-**필수 지표**:
+**Essential Metrics**:
 
 ```
 ┌──────────────────────────────────────────┐
-│  AARRR Funnel (해적 지표)                │
+│  AARRR Funnel (Pirate Metrics)           │
 ├──────────────────────────────────────────┤
-│  Acquisition  — 어떻게 찾아왔나?         │
-│  Activation   — 첫 경험이 좋았나?        │
-│  Retention    — 다시 왔나?               │
-│  Revenue      — 돈을 냈나?               │
-│  Referral     — 추천했나?                │
+│  Acquisition  — How did they find us?    │
+│  Activation   — Was the first experience │
+│                 good?                    │
+│  Retention    — Did they come back?      │
+│  Revenue      — Did they pay?            │
+│  Referral     — Did they recommend?      │
 └──────────────────────────────────────────┘
 ```
 
-**MVP 단계 핵심 지표**:
+**Key MVP Metrics**:
 
-| 지표 | 계산 | 기준선 |
-|------|------|--------|
-| **Activation Rate** | 가입 후 핵심 액션 완료 / 가입 | 40%+ |
-| **Sean Ellis Test** | "이 제품 없으면 매우 실망" 응답 | 40%+ |
-| **NPS** | 추천 의향 (0-10) | 50+ |
+| Metric | Calculation | Baseline |
+|--------|-------------|----------|
+| **Activation Rate** | Core action after signup / Signups | 40%+ |
+| **Sean Ellis Test** | "Very disappointed without this product" responses | 40%+ |
+| **NPS** | Recommendation intent (0-10) | 50+ |
 
-### 1.3 Learn (학습)
+### 1.3 Learn
 
-**판단 프레임워크**:
+**Decision Framework**:
 
 ```
-가설: "{고객}은 {문제}를 겪고 있고, {솔루션}이 해결할 것이다"
+Hypothesis: "{Customer} has {problem}, and {solution} will solve it"
 
-검증 결과:
-  ✅ 가설 검증됨 → 확장 (Scale)
-  ❌ 가설 기각됨 → 피벗 (Pivot)
-  ⚠️ 불확실 → 추가 실험 필요
+Validation result:
+  ✅ Hypothesis validated → Scale
+  ❌ Hypothesis rejected → Pivot
+  ⚠️ Inconclusive → More experiments needed
 ```
 
-**피벗 유형**:
+**Pivot Types**:
 
-| 유형 | 설명 | 예시 |
-|------|------|------|
-| **Zoom-in** | 기능 일부가 전체가 됨 | Flickr (게임 → 사진) |
-| **Zoom-out** | 제품이 기능 일부가 됨 | - |
-| **Customer Segment** | 다른 고객군 타겟 | YouTube (데이팅 → 영상) |
-| **Customer Need** | 같은 고객, 다른 문제 | - |
-| **Platform** | 앱 → 플랫폼 또는 반대 | - |
-| **Channel** | 다른 유통 채널 | - |
-| **Value Capture** | 다른 수익 모델 | - |
+| Type | Description | Example |
+|------|-------------|---------|
+| **Zoom-in** | A feature becomes the whole product | Flickr (game → photos) |
+| **Zoom-out** | Product becomes just a feature | - |
+| **Customer Segment** | Different target customer | YouTube (dating → video) |
+| **Customer Need** | Same customer, different problem | - |
+| **Platform** | App → Platform or vice versa | - |
+| **Channel** | Different distribution channel | - |
+| **Value Capture** | Different revenue model | - |
 
 ---
 
-## 2. 가설 작성 템플릿
+## 2. Hypothesis Templates
 
 ### 2.1 Problem Hypothesis
 
 ```markdown
-## 문제 가설
+## Problem Hypothesis
 
-**고객 세그먼트**: [누구?]
-**문제**: [무엇?]
-**현재 대안**: [어떻게 해결 중?]
-**증거**: [왜 이게 진짜 문제라고 생각?]
+**Customer Segment**: [Who?]
+**Problem**: [What?]
+**Current Alternatives**: [How are they solving it now?]
+**Evidence**: [Why do we think this is a real problem?]
 
-### 검증 방법
-- [ ] 고객 인터뷰 N명
-- [ ] 설문조사 N명
-- [ ] 기존 데이터 분석
+### Validation Method
+- [ ] Customer interviews (N people)
+- [ ] Survey (N respondents)
+- [ ] Existing data analysis
 
-### 성공 기준
-- 인터뷰 대상 60%+ 가 문제를 언급
-- 현재 대안에 불만족 표현
+### Success Criteria
+- 60%+ of interviewees mention the problem
+- Express dissatisfaction with current alternatives
 ```
 
 ### 2.2 Solution Hypothesis
 
 ```markdown
-## 솔루션 가설
+## Solution Hypothesis
 
-**핵심 기능**: [무엇?]
-**가치 제안**: [왜 기존 대안보다 나은가?]
-**차별화**: [경쟁자와 뭐가 다른가?]
+**Core Feature**: [What?]
+**Value Proposition**: [Why better than alternatives?]
+**Differentiation**: [What's different from competitors?]
 
-### 검증 방법
-- [ ] Wizard of Oz MVP 테스트
-- [ ] A/B 테스트
-- [ ] 프로토타입 사용성 테스트
+### Validation Method
+- [ ] Wizard of Oz MVP test
+- [ ] A/B test
+- [ ] Prototype usability test
 
-### 성공 기준
+### Success Criteria
 - Activation Rate 40%+
-- 재사용 의향 70%+
+- Re-use intent 70%+
 ```
 
 ---
 
-## 3. 고객 인터뷰 가이드
+## 3. Customer Interview Guide
 
-### 3.1 인터뷰 구조 (30분)
+### 3.1 Interview Structure (30 minutes)
 
 ```
-[5분] 배경 질문
-  - 역할, 일상, 관련 경험
+[5 min] Background questions
+  - Role, daily routine, relevant experience
 
-[15분] 문제 탐색
-  - 마지막으로 [X] 했을 때 이야기해주세요
-  - 가장 어려웠던 부분은?
-  - 어떻게 해결했나요?
+[15 min] Problem exploration
+  - Tell me about the last time you did [X]
+  - What was the hardest part?
+  - How did you solve it?
 
-[5분] 솔루션 반응 (선택)
-  - [데모/목업] 보여주기
-  - 첫인상은?
-  - 언제 사용하겠어요?
+[5 min] Solution reaction (optional)
+  - Show [demo/mockup]
+  - First impressions?
+  - When would you use this?
 
-[5분] 마무리
-  - 다른 분 소개해주실 수 있나요?
-  - 추가 질문 있으시면?
+[5 min] Wrap-up
+  - Could you introduce someone else?
+  - Any questions?
 ```
 
-### 3.2 피해야 할 질문
+### 3.2 Questions to Avoid
 
-| ❌ 나쁜 질문 | ✅ 좋은 질문 |
-|-------------|-------------|
-| "이 기능 쓰시겠어요?" | "마지막으로 이 문제를 겪었을 때 어떻게 했나요?" |
-| "이게 좋아요?" | "이게 없으면 어떻게 하시겠어요?" |
-| "얼마 내시겠어요?" | "지금 비슷한 걸 위해 얼마나 쓰세요?" |
+| ❌ Bad Question | ✅ Good Question |
+|----------------|-----------------|
+| "Would you use this feature?" | "What did you do last time you faced this problem?" |
+| "Do you like it?" | "What would you do without this?" |
+| "How much would you pay?" | "How much do you spend on something similar now?" |
 
 ---
 
-## 4. 실행 체크리스트
+## 4. Execution Checklist
 
-### 4.1 Week 1: 가설 수립
+### 4.1 Week 1: Hypothesis Development
 
-- [ ] 문제 가설 작성
-- [ ] 타겟 고객 정의 (구체적으로)
-- [ ] 고객 인터뷰 5명+ 확보
-- [ ] 인터뷰 스크립트 준비
+- [ ] Write problem hypothesis
+- [ ] Define target customer (be specific)
+- [ ] Line up 5+ customer interviews
+- [ ] Prepare interview script
 
-### 4.2 Week 2: 검증
+### 4.2 Week 2: Validation
 
-- [ ] 고객 인터뷰 5명 완료
-- [ ] 인터뷰 요약 및 패턴 도출
-- [ ] 문제 가설 검증/수정
-- [ ] MVP 유형 결정
+- [ ] Complete 5 customer interviews
+- [ ] Summarize interviews and extract patterns
+- [ ] Validate/revise problem hypothesis
+- [ ] Decide on MVP type
 
 ### 4.3 Week 3-4: Build & Measure
 
-- [ ] MVP 개발 (최소 기능만)
-- [ ] 측정 지표 설정
-- [ ] 첫 사용자 10명 확보
-- [ ] 데이터 수집 및 분석
+- [ ] Develop MVP (minimum features only)
+- [ ] Set up measurement metrics
+- [ ] Acquire first 10 users
+- [ ] Collect and analyze data
 
-### 4.4 결정
+### 4.4 Decision
 
-- [ ] 학습 정리
-- [ ] 피벗/진행 결정
-- [ ] 다음 사이클 계획
+- [ ] Consolidate learnings
+- [ ] Decide: pivot or proceed
+- [ ] Plan next cycle
 
 ---
 
-## 관련 문서
+## Related Documents
 
-- [MVP Checklist](./mvp-checklist.md) — 런칭 전 점검
-- [Tech Stack Guide](./tech-stack-guide.md) — 빠른 개발 스택
+- [MVP Checklist](./mvp-checklist.md) — Pre-launch checklist
+- [Tech Stack Guide](./tech-stack-guide.md) — Fast development stacks
 
 ---
 

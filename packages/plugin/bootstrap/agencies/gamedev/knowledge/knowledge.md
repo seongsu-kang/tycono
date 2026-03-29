@@ -7,103 +7,103 @@ domain: engineering
 
 # Game Development Knowledge
 
-> 컨셉에서 플레이 가능한 게임까지 — 재미를 설계하고 구현하라
+> From concept to playable game — design the fun and build it
 
 ## TL;DR
 
-- **철학**: 재미는 설계하는 것이다, 반복 테스트가 핵심
-- **프레임워크**: 컨셉 → GDD → 프로토타입 → 플레이테스트 → 폴리싱
-- **목표**: 빠르게 플레이 가능한 버전 만들고, 재미를 검증
-- **원칙**: "완벽한 게임보다 플레이 가능한 게임"
+- **Philosophy**: Fun is designed, not discovered. Iterative testing is the key.
+- **Framework**: Concept > GDD > Prototype > Playtest > Polish
+- **Goal**: Get to a playable version fast, then validate the fun
+- **Principle**: "A playable game beats a perfect game"
 
 ---
 
-## 지식 구조
+## Knowledge Structure
 
-| 문서 | 내용 | 담당 Role |
-|------|------|----------|
-| [Game Dev Guide](./game-dev-guide.md) | 게임 루프, 물리 엔진, Canvas/WebGL, 프레임워크 | CTO, Engineer |
-| [Game Design Doc](./game-design-doc.md) | GDD 템플릿, 밸런싱 방법론, 난이도 곡선 | PM, Designer |
+| Document | Content | Role |
+|----------|---------|------|
+| [Game Dev Guide](./game-dev-guide.md) | Game loop, physics engine, Canvas/WebGL, frameworks | CTO, Engineer |
+| [Game Design Doc](./game-design-doc.md) | GDD template, balancing methodology, difficulty curves | PM, Designer |
 
 ---
 
-## 핵심 원칙
+## Core Principles
 
-### 1. 핵심 루프를 먼저 검증하라
+### 1. Validate the Core Loop First
 
-> "30초 플레이 루프가 재미없으면, 30시간도 재미없다."
+> "If the 30-second play loop isn't fun, 30 hours won't be either."
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  Core Loop (30초)                                      │
-│  행동 → 보상 → 진행 → 행동 → ...                       │
+│  Core Loop (30 seconds)                                 │
+│  Action → Reward → Progress → Action → ...              │
 ├─────────────────────────────────────────────────────────┤
-│  예: 슈팅 게임                                         │
-│  조준 → 발사 → 적 처치 → 점수 획득 → 다음 적 출현     │
+│  Example: Shooter                                       │
+│  Aim → Shoot → Kill enemy → Score points → Next enemy   │
 └─────────────────────────────────────────────────────────┘
 
-이 루프가 재미있어야 나머지를 추가할 가치가 있다.
+This loop must be fun before anything else is worth adding.
 ```
 
-### 2. 프로토타입은 못생겨도 된다
+### 2. Prototypes Can Be Ugly
 
-| 잘못된 접근 | 올바른 접근 |
-|------------|-----------|
-| "그래픽부터 완벽하게" | "플레이스홀더로 핵심 재미 검증" |
-| "모든 기능 다 넣고 테스트" | "핵심 메커닉 1개로 테스트" |
-| "출시 품질로 프로토타입" | "종이 프로토타입도 OK" |
+| Wrong Approach | Right Approach |
+|----------------|----------------|
+| "Perfect the graphics first" | "Validate core fun with placeholders" |
+| "Add all features then test" | "Test one core mechanic at a time" |
+| "Ship-quality prototype" | "Paper prototypes are fine" |
 
-### 3. 플레이테스트가 진실을 말해준다
+### 3. Playtesting Tells the Truth
 
 ```
-개발자가 생각하는 재미 ≠ 플레이어가 느끼는 재미
+What the developer thinks is fun ≠ What the player feels is fun
 
-플레이테스트 규칙:
-✅ 관찰하라 (행동, 표정, 막히는 지점)
-✅ 질문하라 (왜 그렇게 했어요?)
-✅ 개입하지 마라 (설명하지 말고 관찰)
-❌ 내 의도를 설명하지 마라
+Playtest rules:
+✅ Observe (behavior, expressions, stuck points)
+✅ Ask questions ("why did you do that?")
+✅ Don't intervene (watch, don't explain)
+❌ Don't explain your intentions
 ```
 
 ---
 
-## 게임 개발 프로세스
+## Game Development Process
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  Phase 1: 컨셉 (1-2일)                                 │
-│  ├─ 핵심 아이디어 정의                                  │
-│  ├─ 레퍼런스 게임 분석                                  │
-│  └─ 1페이지 컨셉 문서                                   │
+│  Phase 1: Concept (1-2 days)                            │
+│  ├─ Define core idea                                    │
+│  ├─ Analyze reference games                             │
+│  └─ One-page concept document                           │
 ├─────────────────────────────────────────────────────────┤
-│  Phase 2: GDD + 디자인 (2-3일)                         │
-│  ├─ 게임 디자인 문서 작성                               │
-│  ├─ 핵심 메커닉 정의                                    │
-│  └─ 아트 스타일 방향                                    │
+│  Phase 2: GDD + Design (2-3 days)                       │
+│  ├─ Write game design document                          │
+│  ├─ Define core mechanics                               │
+│  └─ Art style direction                                 │
 ├─────────────────────────────────────────────────────────┤
-│  Phase 3: 프로토타입 (3-5일)                           │
-│  ├─ 핵심 루프 구현                                      │
-│  ├─ 플레이스홀더 아트                                   │
-│  └─ 첫 플레이테스트                                     │
+│  Phase 3: Prototype (3-5 days)                          │
+│  ├─ Implement core loop                                 │
+│  ├─ Placeholder art                                     │
+│  └─ First playtest                                      │
 ├─────────────────────────────────────────────────────────┤
-│  Phase 4: 이터레이션 (1-2주)                           │
-│  ├─ 피드백 기반 수정                                    │
-│  ├─ 기능 추가/제거                                      │
-│  └─ 반복 플레이테스트                                   │
+│  Phase 4: Iteration (1-2 weeks)                         │
+│  ├─ Feedback-driven changes                             │
+│  ├─ Add/remove features                                 │
+│  └─ Repeated playtesting                                │
 ├─────────────────────────────────────────────────────────┤
-│  Phase 5: 폴리싱 (3-5일)                               │
-│  ├─ 아트/사운드 완성                                    │
-│  ├─ UI/UX 개선                                         │
-│  └─ 버그 수정, 밸런싱                                   │
+│  Phase 5: Polish (3-5 days)                             │
+│  ├─ Finalize art/sound                                  │
+│  ├─ UI/UX improvements                                  │
+│  └─ Bug fixes, balancing                                │
 └─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 관련 문서
+## Related Documents
 
-- [Game Dev Guide](./game-dev-guide.md) — 기술 가이드
-- [Game Design Doc](./game-design-doc.md) — GDD와 밸런싱
+- [Game Dev Guide](./game-dev-guide.md) — Technical guide
+- [Game Design Doc](./game-design-doc.md) — GDD and balancing
 
 ---
 

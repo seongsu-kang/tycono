@@ -1,23 +1,23 @@
-# startup-mvp — Official Tycono Agency
-# 초기 창업자를 위한 MVP 개발팀
+# startup-mvp — Official Tycono Preset
+# MVP Development Team for Early-Stage Founders
 
-spec: agency/v1
+spec: preset/v1
 id: startup-mvp
 name: "Startup MVP Team"
 tagline: "From idea to launch in weeks"
 version: "1.0.0"
 
 description: |
-  아이디어를 빠르게 MVP로 만들고 첫 사용자를 확보하기 위한 팀.
-  린스타트업 방법론 + 기술 선택 가이드 + 빠른 실행에 최적화.
-  "완벽한 제품"이 아닌 "학습을 위한 최소 제품"에 집중.
+  A team built to turn ideas into MVPs fast and acquire your first users.
+  Optimized for lean startup methodology + tech stack guidance + rapid execution.
+  Focused on "minimum product for learning," not "perfect product."
 
 author:
   id: tycono
   name: "Tycono Official"
   verified: true
 
-# 분류
+# Classification
 category: engineering
 industry: general
 stage: idea
@@ -26,25 +26,25 @@ use_case:
   - rapid-prototyping
   - idea-validation
 
-# 팀 구성 — Role ID만. 상세는 전사 roles/{id}/role.yaml
+# Team — Role IDs only. Details in global roles/{id}/role.yaml
 roles:
   - cto
   - engineer
   - pm
 
-# Knowledge — 전사 AKB에 설치될 추천 문서 (번들 아님)
+# Knowledge — Recommended docs to install in the company AKB (not bundled)
 recommended_knowledge:
   - lean-startup.md
   - tech-stack-guide.md
   - mvp-checklist.md
 
-# 가격 (Official = Free)
+# Pricing (Official = Free)
 pricing:
   type: one-time
   price: 0
   wave_scoped_tier: pro
 
-# 메타데이터
+# Metadata
 tags: [mvp, startup, lean, prototype, launch]
 languages: [en, ko]
 
@@ -54,14 +54,14 @@ stats:
   reviews: 0
   waves_used: 0
 
-# Wave-scoped 전용
+# Wave-scoped only
 wave_scoped:
   recommended_tasks:
-    - "MVP 기능 설계"
-    - "기술 스택 결정"
-    - "프로토타입 개발"
-    - "첫 사용자 확보 전략"
-    - "랜딩페이지 제작"
+    - "MVP feature scoping"
+    - "Tech stack decision"
+    - "Prototype development"
+    - "First user acquisition strategy"
+    - "Landing page creation"
   task_keywords: [mvp, prototype, tech-stack, launch, landing, idea, validation]
   avg_wave_duration: "2-6 hours"
   complexity: medium

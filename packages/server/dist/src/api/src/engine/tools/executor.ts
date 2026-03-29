@@ -540,7 +540,10 @@ async function heartbeatWatch(
     unsubscribers.push(() => stream.unsubscribe(handler));
   }
 
-  // Wait for duration or early return
+  // Pre-compute waveId for directive checking during poll loop
+  const waveIdForPoll = findWaveIdForSessions(sessionIds);
+
+  // Wait for duration or early return (also breaks on pending CEO directive)
   await new Promise<void>((resolve) => {
     const timeout = setTimeout(resolve, durationSec * 1000);
     const checkInterval = setInterval(() => {
@@ -548,6 +551,15 @@ async function heartbeatWatch(
         clearTimeout(timeout);
         clearInterval(checkInterval);
         resolve();
+        return;
+      }
+      // Early-return on pending CEO directive — don't block for 180s when user is waiting
+      if (waveIdForPoll && supervisorHeartbeat.getPendingDirectives(waveIdForPoll).length > 0) {
+        earlyReturn = true;
+        clearTimeout(timeout);
+        clearInterval(checkInterval);
+        resolve();
+        return;
       }
     }, 500); // Check every 500ms
     // Ensure cleanup even if early
