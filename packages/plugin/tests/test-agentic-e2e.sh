@@ -186,29 +186,35 @@ if [[ -f "$START_WAVE" ]]; then
   assert_contains "Has awaiting_input detection" "$SCRIPT_CONTENT" "awaiting_input"
   assert_contains "Has error detection" "$SCRIPT_CONTENT" "msg:error"
   assert_contains "Has dispatch:error detection" "$SCRIPT_CONTENT" "dispatch:error"
-  assert_contains "Has osascript notification" "$SCRIPT_CONTENT" "osascript"
-  assert_contains "Has NOTIFY_PID saved" "$SCRIPT_CONTENT" "NOTIFY_PID"
+  assert_contains "Has TYCONO ALERT output" "$SCRIPT_CONTENT" "TYCONO ALERT"
+  assert_contains "Has curl response instruction" "$SCRIPT_CONTENT" "api/sessions"
+  assert_contains "Has wave completion detection" "$SCRIPT_CONTENT" "wave:done"
 else
   echo "  [SKIP] start-wave.sh not found"
   SKIP=$((SKIP + 1))
 fi
 
 # =============================================================================
-# TC-AGENT-6: cancel.sh cleans up notification listener
+# TC-AGENT-6: start-wave.sh stays alive for SSE (no early exit)
 # =============================================================================
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "TC-AGENT-6: cancel.sh notification cleanup"
+echo "TC-AGENT-6: start-wave.sh SSE monitor stays alive"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-CANCEL_SH="${SCRIPTS_DIR}/cancel.sh"
-
-if [[ -f "$CANCEL_SH" ]]; then
-  CANCEL_CONTENT=$(cat "$CANCEL_SH")
-  assert_contains "Cancel kills NOTIFY_PID" "$CANCEL_CONTENT" "NOTIFY_PID"
-  assert_contains "Cancel checks process alive" "$CANCEL_CONTENT" "kill -0"
+if [[ -f "$START_WAVE" ]]; then
+  # Verify the script doesn't exit before SSE loop — curl is in foreground (not &)
+  assert_contains "SSE curl is foreground (no &)" "$SCRIPT_CONTENT" 'curl -sN "${API_URL}/api/waves/${WAVE_ID}/stream"'
+  # Verify no background subshell for notification
+  if echo "$SCRIPT_CONTENT" | grep -q "NOTIFY_PID"; then
+    echo "  [FAIL] Should not have NOTIFY_PID (old macOS pattern)"
+    FAIL=$((FAIL + 1))
+  else
+    echo "  [PASS] No NOTIFY_PID (SSE is inline, not background)"
+    PASS=$((PASS + 1))
+  fi
 else
-  echo "  [SKIP] cancel.sh not found"
+  echo "  [SKIP] start-wave.sh not found"
   SKIP=$((SKIP + 1))
 fi
 
