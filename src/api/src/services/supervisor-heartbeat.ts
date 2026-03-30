@@ -35,7 +35,7 @@ interface SupervisorState {
   preset?: string;
   supervisorSessionId: string | null;
   executionId: string | null;
-  status: 'starting' | 'running' | 'restarting' | 'stopped' | 'error';
+  status: 'starting' | 'running' | 'restarting' | 'stopped' | 'error' | 'awaiting_approval';
   crashCount: number;
   maxCrashRetries: number;
   restartTimer: ReturnType<typeof setTimeout> | null;
@@ -231,8 +231,11 @@ class SupervisorHeartbeat {
     // Record user message in wave conversation history
     appendWaveMessage(waveId, { role: 'user', content: text });
 
-    // If supervisor is stopped (agent finished or idle wave), wake it up
-    if (state.status === 'stopped') {
+    // If supervisor is stopped or awaiting approval, wake it up
+    if (state.status === 'stopped' || state.status === 'awaiting_approval') {
+      if (state.status === 'awaiting_approval') {
+        console.log(`[Supervisor] Directive received while awaiting approval for wave ${waveId}. Restarting supervisor.`);
+      }
       // Update the wave's directive if it was empty (idle wave first message)
       if (!state.directive) {
         state.directive = text;
@@ -774,6 +777,12 @@ ${state.continuous ? `## Continuous Improvement Mode (ON)
       } else if (event.type === 'msg:error') {
         exec.stream.unsubscribe(subscriber);
         this.onSupervisorCrash(state, String(event.data.message ?? 'unknown error'));
+      } else if (event.type === 'approval:needed') {
+        // BUG-APPROVAL-DIRECTIVE-LOSS: CEO outputs [APPROVAL_NEEDED] then exits.
+        // Don't complete the wave — transition to awaiting_approval so directive can restart supervisor.
+        console.log(`[Supervisor] CEO awaiting approval for wave ${state.waveId}. Wave stays alive for directive.`);
+        state.status = 'awaiting_approval';
+        // Don't unsubscribe — CEO process will emit msg:done next, which we need to catch
       } else if (event.type === 'msg:awaiting_input') {
         // BUG-016: turn:limit causes awaiting_input — treat as done-guard
         // If all children are done → complete wave. Otherwise restart supervisor.
@@ -787,6 +796,13 @@ ${state.continuous ? `## Continuous Improvement Mode (ON)
   }
 
   private onSupervisorDone(state: SupervisorState): void {
+    // BUG-APPROVAL-DIRECTIVE-LOSS: If CEO exited after [APPROVAL_NEEDED],
+    // don't complete the wave. Wait for user directive to restart supervisor.
+    if (state.status === 'awaiting_approval') {
+      console.log(`[Supervisor] CEO done with approval pending for wave ${state.waveId}. Wave stays alive for directive.`);
+      return;
+    }
+
     // Check if there are still running or paused C-Level sessions for this wave
     const waveSessions = listSessions().filter(s => s.waveId === state.waveId && s.id !== state.supervisorSessionId);
     const runningChildren = waveSessions.filter(s => {

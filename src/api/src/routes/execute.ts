@@ -833,11 +833,14 @@ function handleWaveDirective(waveId: string, body: Record<string, unknown>, res:
   }
 
   if (!directive) {
-    jsonResponse(res, 404, { error: `No active supervisor for wave ${waveId}` });
+    jsonResponse(res, 404, { error: `No active supervisor for wave ${waveId}. The wave may have been cleaned up.` });
     return;
   }
 
-  jsonResponse(res, 200, { directive });
+  // Provide status context so caller knows what's happening
+  const state = supervisorHeartbeat.getState(waveId);
+  const status = state?.status ?? 'unknown';
+  jsonResponse(res, 200, { directive, supervisorStatus: status });
 }
 
 /* ─── POST /api/waves/:waveId/question ──────── */
