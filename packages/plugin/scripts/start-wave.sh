@@ -141,9 +141,9 @@ if [[ -z "$API_URL" ]]; then
     SERVER_PID=$!
   fi
 
-  # Wait for server to be ready (max 30s)
+  # Wait for server to be ready (max 60s — npx cold start can be slow)
   echo "⏳ Waiting for server..."
-  for i in $(seq 1 30); do
+  for i in $(seq 1 60); do
     if [[ -f "$HEADLESS_JSON" ]]; then
       EXISTING_PORT=$(python3 -c "import json; print(json.load(open('$HEADLESS_JSON'))['port'])" 2>/dev/null || echo "")
       if [[ -n "$EXISTING_PORT" ]]; then
@@ -159,7 +159,7 @@ if [[ -z "$API_URL" ]]; then
   done
 
   if [[ -z "$API_URL" ]]; then
-    echo "❌ Failed to start Tycono server after 30s" >&2
+    echo "❌ Failed to start Tycono server after 60s" >&2
     kill "$SERVER_PID" 2>/dev/null || true
     exit 1
   fi
