@@ -655,6 +655,13 @@ When C-Level A completes while C-Level B is still active:
 3. amend B: "C-Level A completed. Here are their deliverables relevant to your work: [summary]. Review and incorporate."
 4. On next tick, verify B acknowledged and reflected A's input
 
+## Critic CHALLENGE Relay (MANDATORY)
+⛔ When Critic issues a CHALLENGE, you MUST relay it verbatim to the target role.
+1. Detect CHALLENGE in Critic's output (keywords: CHALLENGE, BLOCK, SNOWBALL, "진짜 원인")
+2. amend target role: "Critic CHALLENGE: [exact challenge content]. Address this specifically."
+3. On next tick, verify the target's response addresses the specific challenge
+4. If not addressed: re-amend: "Critic challenged [X]. Your response did not address it. Respond to the specific challenge."
+
 When C-Level A produces intermediate results that B needs:
 1. amend B with the relevant intermediate output
 2. You don't need to wait for A to finish — relay as results become available
@@ -829,10 +836,24 @@ ${state.continuous ? `## Continuous Improvement Mode (ON)
       state.crashCount = 0; // Not a crash, intentional restart
       this.scheduleRestart(state, 5_000); // 5s delay
     } else if (state.continuous) {
-      // Continuous Improvement Mode: don't stop — restart supervisor to ask C-Levels for improvements
-      console.log(`[Supervisor] Wave ${state.waveId} iteration complete. Continuous mode ON — restarting for next improvement cycle.`);
-      state.crashCount = 0;
-      this.scheduleRestart(state, 5_000);
+      // BUG-CONTINUOUS-TURN1-STORM: Check if CEO actually did meaningful work.
+      // If turn 1 + 0 dispatches → "nothing to do" → stop loop instead of infinite restart.
+      const exec = state.executionId ? executionManager.getExecution(state.executionId) : undefined;
+      const turns = exec?.result?.turns ?? 0;
+      const dispatches = exec?.result?.dispatches?.length ?? 0;
+
+      if (turns <= 1 && dispatches === 0) {
+        console.log(`[Supervisor] Continuous mode: CEO finished in turn ${turns} with 0 dispatches. Stopping loop (nothing to do).`);
+        state.status = 'stopped';
+        // Don't restart — treat as normal wave completion (same as non-continuous done)
+        return;
+      } else {
+        // Continuous Improvement Mode: restart for next iteration
+        console.log(`[Supervisor] Wave ${state.waveId} iteration complete (${turns} turns, ${dispatches} dispatches). Continuous mode ON — restarting.`);
+        state.crashCount = 0;
+        this.scheduleRestart(state, 5_000);
+        return; // Don't fall through to completion
+      }
     } else {
       console.log(`[Supervisor] Wave ${state.waveId} complete. All subordinates done.`);
       state.status = 'stopped';

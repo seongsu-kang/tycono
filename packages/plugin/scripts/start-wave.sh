@@ -117,12 +117,40 @@ if [[ -f "$HEADLESS_JSON" ]]; then
   EXISTING_PID=$(python3 -c "import json; print(json.load(open('$HEADLESS_JSON'))['pid'])" 2>/dev/null || echo "")
 
   if [[ -n "$EXISTING_PID" ]] && kill -0 "$EXISTING_PID" 2>/dev/null; then
-    API_URL="http://localhost:${EXISTING_PORT}"
-    echo "🔗 Connected to existing Tycono server (port $EXISTING_PORT)"
-  else
+    # PID alive — verify server actually responds
+    if curl -s --max-time 3 "http://localhost:${EXISTING_PORT}/api/health" >/dev/null 2>&1; then
+      API_URL="http://localhost:${EXISTING_PORT}"
+      echo "🔗 Connected to existing Tycono server (port $EXISTING_PORT)"
+    else
+      echo "⏳ Server process alive but not ready. Waiting..."
+      # Wait up to 30s for existing server to become ready
+      for i in $(seq 1 30); do
+        if curl -s --max-time 2 "http://localhost:${EXISTING_PORT}/api/health" >/dev/null 2>&1; then
+          API_URL="http://localhost:${EXISTING_PORT}"
+          echo "🔗 Connected to existing Tycono server (port $EXISTING_PORT)"
+          break
+        fi
+        sleep 1
+      done
+    fi
+  fi
+
+  if [[ -z "$API_URL" ]] && [[ -f "$HEADLESS_JSON" ]]; then
     # Stale headless.json — clean up
     rm -f "$HEADLESS_JSON"
   fi
+
+fi
+
+# Fallback: check common ports in case headless.json is missing/stale but server is running
+if [[ -z "$API_URL" ]]; then
+  for PORT_CHECK in 4321 4322 4323; do
+    if curl -s --max-time 2 "http://localhost:${PORT_CHECK}/api/health" >/dev/null 2>&1; then
+      API_URL="http://localhost:${PORT_CHECK}"
+      echo "🔗 Found existing Tycono server on port $PORT_CHECK"
+      break
+    fi
+  done
 fi
 
 # Start server if not running
