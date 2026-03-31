@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "tycono": {
-      "command": "npx",
-      "args": ["tsx", "./tycono-channel.ts"]
-    }
-  }
-}

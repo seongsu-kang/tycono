@@ -193,6 +193,18 @@ if [[ -z "$API_URL" ]]; then
   fi
 fi
 
+# --- Check for active waves (BUG-CONCURRENT protection) ---
+ACTIVE_WAVES=$(curl -s "${API_URL}/api/waves/active" 2>/dev/null || echo "[]")
+ACTIVE_COUNT=$(echo "$ACTIVE_WAVES" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(len(d) if isinstance(d,list) else 0)" 2>/dev/null || echo "0")
+
+if [[ "$ACTIVE_COUNT" -gt 0 ]]; then
+  echo ""
+  echo "⚠️  Warning: $ACTIVE_COUNT active wave(s) already running on this server."
+  echo "   Starting a new wave may cause resource conflicts."
+  echo "   Use /tycono:tycono-status to check current waves."
+  echo ""
+fi
+
 # --- Create Wave ---
 
 # Build JSON payload
