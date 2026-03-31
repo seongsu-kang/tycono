@@ -601,6 +601,20 @@ class ExecutionManager {
             this.finalizeSessionMessage(execution, 'done', result);
           }
 
+          // Emit dispatch:done on parent's stream (monni VOC: parent needs completion signal)
+          if (params.parentSessionId) {
+            const parentExec = this.getActiveExecution(params.parentSessionId);
+            if (parentExec) {
+              parentExec.stream.emit('dispatch:done', parentExec.roleId, {
+                targetRoleId: params.roleId,
+                childSessionId: params.sessionId,
+                output: result.output.slice(-1000),
+                turns: result.turns,
+                tokens: result.totalTokens,
+              });
+            }
+          }
+
           if (!params.parentSessionId && result) {
             const totalTokens = (result.totalTokens?.input ?? 0) + (result.totalTokens?.output ?? 0);
             const bonus = Math.min(2000, Math.max(500, Math.round(totalTokens / 500)));
