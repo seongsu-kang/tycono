@@ -185,31 +185,47 @@ function handleJobsRequest(url: string, method: string, req: IncomingMessage, re
     return;
   }
 
-  // GET /api/jobs/:id — internal only
+  // GET /api/jobs/:id — internal only (dispatch bridge --check)
   const jobMatch = reqPath.match(/^\/api\/jobs\/([^/]+)$/);
   if (method === 'GET' && jobMatch) {
     const id = jobMatch[1];
     const exec = executionManager.getExecution(id) ?? executionManager.getActiveExecution(id);
     if (!exec) {
-      // Try reading from stream file directly
+      // Fallback: read from activity-stream file on disk
       if (ActivityStream.exists(id)) {
         const events = ActivityStream.readAll(id);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ id, events }));
+        const doneEvent = [...events].reverse().find(e => e.type === 'msg:done' || e.type === 'msg:error');
+        const output = doneEvent?.data?.output as string ?? '';
+        const status = doneEvent?.type === 'msg:done' ? 'done' : doneEvent?.type === 'msg:error' ? 'error' : 'unknown';
+        jsonResponse(res, 200, { id, status, output, fromStream: true });
       } else {
-        res.writeHead(404);
-        res.end(JSON.stringify({ error: 'Not found' }));
+        jsonResponse(res, 404, { error: 'Not found' });
       }
     } else {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
+      // Include output from result if available
+      const output = exec.result?.output?.slice(-2000) ?? '';
+      jsonResponse(res, 200, {
         id: exec.id,
         roleId: exec.roleId,
         task: exec.task,
         status: exec.status,
         sessionId: exec.sessionId,
         createdAt: exec.createdAt,
-      }));
+        output,
+      });
+    }
+    return;
+  }
+
+  // GET /api/jobs/:id/history — activity-stream events (dispatch bridge get_result)
+  const historyMatch = reqPath.match(/^\/api\/jobs\/([^/]+)\/history$/);
+  if (method === 'GET' && historyMatch) {
+    const id = historyMatch[1];
+    if (ActivityStream.exists(id)) {
+      const events = ActivityStream.readAll(id);
+      jsonResponse(res, 200, { id, events });
+    } else {
+      jsonResponse(res, 404, { error: 'Stream not found' });
     }
     return;
   }

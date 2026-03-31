@@ -677,7 +677,7 @@ class ExecutionManager {
           if (!hasActiveSibling) {
             execution.stream.close();
           }
-        }, 30_000).unref();
+        }, 300_000).unref(); // 5 min — prevents HTTP 410 on dispatch --check
       });
   }
 
@@ -1086,7 +1086,7 @@ Your job: monitor progress, course-correct if needed, wait for completion, then 
         setTimeout(() => {
           this.executions.delete(execution.id);
           execution.stream.close();
-        }, 30_000).unref();
+        }, 300_000).unref(); // 5 min — prevents HTTP 410 on dispatch --check
       }
 
       return execution;
