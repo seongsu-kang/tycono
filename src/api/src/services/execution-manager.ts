@@ -884,6 +884,19 @@ Your job: monitor progress, course-correct if needed, wait for completion, then 
     return this.recoverExecutionFromStream(sessionId);
   }
 
+  /** Find the latest completed execution for a session (for auto-amend lookup) */
+  getCompletedExecution(sessionId: string): { task: string; cliSessionId?: string } | undefined {
+    let latest: Execution | undefined;
+    for (const exec of this.executions.values()) {
+      if (exec.sessionId === sessionId && exec.status === 'done') {
+        if (!latest || exec.createdAt > latest.createdAt) {
+          latest = exec;
+        }
+      }
+    }
+    return latest ? { task: latest.task, cliSessionId: latest.cliSessionId } : undefined;
+  }
+
   listExecutions(filter?: { status?: ExecStatus; roleId?: string; active?: boolean }): Array<{
     id: string;
     type: ExecType;

@@ -23,6 +23,7 @@ import { earnCoinsInternal } from './coins.js';
 import { appendFollowUpToWave } from '../services/wave-tracker.js';
 import { waveMultiplexer } from '../services/wave-multiplexer.js';
 import { supervisorHeartbeat } from '../services/supervisor-heartbeat.js';
+import { decideDispatchOrAmend } from '../services/dispatch-classifier.js';
 
 /* ─── Auto-attach child executions to wave multiplexer ── */
 executionManager.onExecutionCreated((exec) => {
@@ -234,7 +235,7 @@ function handleJobsRequest(url: string, method: string, req: IncomingMessage, re
 
 /* ─── POST /api/jobs ─────────────────────── */
 
-function handleStartJob(body: Record<string, unknown>, res: ServerResponse): void {
+async function handleStartJob(body: Record<string, unknown>, res: ServerResponse): Promise<void> {
   const type = (body.type as string) ?? 'assign';
   const roleId = body.roleId as string;
   const task = body.task as string;
@@ -316,6 +317,35 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
     console.warn(`[Dispatch:Error] ${errorMsg} (parent=${parentSessionId ?? 'none'}, wave=${waveId ?? 'none'})`);
     jsonResponse(res, 403, { error: `${errorMsg}.` });
     return;
+  }
+
+  // Auto-amend: check if we should amend an existing session instead of creating a new one
+  if (!readOnly && waveId) {
+    try {
+      const decision = await decideDispatchOrAmend(waveId, roleId, sourceRole, task);
+      if (decision.action === 'amend' && decision.prevSessionId) {
+        console.log(`[AutoAmend] Converting dispatch to amend: ${roleId} → ${decision.prevSessionId} (${decision.reason})`);
+        const amendedExec = executionManager.continueSession(
+          decision.prevSessionId,
+          `[FOLLOW-UP from ${sourceRole}] ${task}`,
+          sourceRole,
+        );
+        if (amendedExec) {
+          jsonResponse(res, 200, {
+            sessionId: decision.prevSessionId,
+            executionId: amendedExec.id,
+            status: 'running',
+            autoAmend: true,
+            reason: decision.reason,
+          });
+          return;
+        }
+        // continueSession failed — fall through to new dispatch
+        console.warn(`[AutoAmend] continueSession failed for ${decision.prevSessionId}, falling back to new dispatch`);
+      }
+    } catch (err) {
+      console.warn('[AutoAmend] Decision failed, proceeding with new dispatch:', err);
+    }
   }
 
   const sessionSource: 'wave' | 'dispatch' = waveId ? 'wave' : 'dispatch';
