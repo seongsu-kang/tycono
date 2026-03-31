@@ -1,0 +1,319 @@
+{
+  "config": {
+    "startingGold": 200,
+    "lives": 20,
+    "gridWidth": 15,
+    "gridHeight": 10,
+    "speedOptions": [1, 2, 3],
+    "sellRefundRate": 0.5
+  },
+  "towers": {
+    "arrow": {
+      "name": "Arrow Tower",
+      "description": "Fast attack, reliable single-target damage dealer.",
+      "levels": [
+        {
+          "level": 1,
+          "damage": 10,
+          "range": 3.0,
+          "fireRate": 1.5,
+          "cost": 50,
+          "upgradeCost": null,
+          "dps": 15.0
+        },
+        {
+          "level": 2,
+          "damage": 18,
+          "range": 3.5,
+          "fireRate": 1.8,
+          "cost": null,
+          "upgradeCost": 35,
+          "dps": 32.4
+        },
+        {
+          "level": 3,
+          "damage": 30,
+          "range": 4.0,
+          "fireRate": 2.2,
+          "cost": null,
+          "upgradeCost": 45,
+          "dps": 66.0
+        }
+      ]
+    },
+    "cannon": {
+      "name": "Cannon Tower",
+      "description": "Slow attack with splash damage. Effective against clustered enemies.",
+      "levels": [
+        {
+          "level": 1,
+          "damage": 40,
+          "range": 2.5,
+          "fireRate": 0.5,
+          "splashRadius": 1.0,
+          "cost": 150,
+          "upgradeCost": null,
+          "dps": 20.0
+        },
+        {
+          "level": 2,
+          "damage": 70,
+          "range": 3.0,
+          "fireRate": 0.6,
+          "splashRadius": 1.3,
+          "cost": null,
+          "upgradeCost": 100,
+          "dps": 42.0
+        },
+        {
+          "level": 3,
+          "damage": 110,
+          "range": 3.5,
+          "fireRate": 0.7,
+          "splashRadius": 1.6,
+          "cost": null,
+          "upgradeCost": 120,
+          "dps": 77.0
+        }
+      ]
+    },
+    "slow": {
+      "name": "Slow Tower",
+      "description": "Utility tower that slows enemies, amplifying other towers.",
+      "levels": [
+        {
+          "level": 1,
+          "damage": 0,
+          "range": 2.5,
+          "fireRate": 1.0,
+          "slowPercent": 30,
+          "slowDuration": 2.0,
+          "cost": 100,
+          "upgradeCost": null
+        },
+        {
+          "level": 2,
+          "damage": 0,
+          "range": 3.0,
+          "fireRate": 1.0,
+          "slowPercent": 45,
+          "slowDuration": 2.5,
+          "cost": null,
+          "upgradeCost": 65
+        },
+        {
+          "level": 3,
+          "damage": 5,
+          "range": 3.5,
+          "fireRate": 1.2,
+          "slowPercent": 60,
+          "slowDuration": 3.0,
+          "cost": null,
+          "upgradeCost": 80
+        }
+      ]
+    },
+    "sniper": {
+      "name": "Sniper Tower",
+      "description": "Long range, high single-target damage. Anti-boss specialist.",
+      "levels": [
+        {
+          "level": 1,
+          "damage": 80,
+          "range": 6.0,
+          "fireRate": 0.3,
+          "cost": 200,
+          "upgradeCost": null,
+          "dps": 24.0
+        },
+        {
+          "level": 2,
+          "damage": 140,
+          "range": 7.0,
+          "fireRate": 0.35,
+          "cost": null,
+          "upgradeCost": 130,
+          "dps": 49.0
+        },
+        {
+          "level": 3,
+          "damage": 220,
+          "range": 8.0,
+          "fireRate": 0.4,
+          "cost": null,
+          "upgradeCost": 160,
+          "dps": 88.0
+        }
+      ]
+    }
+  },
+  "enemies": {
+    "scout": {
+      "name": "Scout",
+      "hp": 30,
+      "speed": 2.0,
+      "reward": 5,
+      "abilities": []
+    },
+    "soldier": {
+      "name": "Soldier",
+      "hp": 80,
+      "speed": 1.2,
+      "reward": 10,
+      "abilities": []
+    },
+    "tank": {
+      "name": "Tank",
+      "hp": 200,
+      "speed": 0.6,
+      "reward": 25,
+      "abilities": [
+        {
+          "name": "Armored",
+          "description": "Takes 20% reduced damage from Arrow towers",
+          "damageReduction": {
+            "source": "arrow",
+            "percent": 20
+          }
+        }
+      ]
+    },
+    "healer": {
+      "name": "Healer",
+      "hp": 60,
+      "speed": 1.0,
+      "reward": 15,
+      "abilities": [
+        {
+          "name": "Heal Aura",
+          "description": "Heals all enemies within range for 5 HP/sec",
+          "healPerSecond": 5,
+          "healRange": 1.5
+        }
+      ]
+    },
+    "boss": {
+      "name": "Boss",
+      "hp": null,
+      "speed": 0.5,
+      "reward": 100,
+      "abilities": [
+        {
+          "name": "Fortified",
+          "description": "Immune to slow effects above 40%",
+          "maxSlowPercent": 40
+        },
+        {
+          "name": "Intimidate",
+          "description": "Towers within range have 25% reduced fire rate",
+          "fireRateReduction": 25,
+          "intimidateRange": 1.5
+        }
+      ],
+      "hpByWave": {
+        "5": 800,
+        "10": 1500
+      }
+    }
+  },
+  "waves": [
+    {
+      "waveNumber": 1,
+      "name": "First Contact",
+      "enemies": [
+        { "type": "scout", "count": 8, "spawnInterval": 1.5 }
+      ],
+      "completionBonus": 20
+    },
+    {
+      "waveNumber": 2,
+      "name": "Reinforcements",
+      "enemies": [
+        { "type": "scout", "count": 5, "spawnInterval": 1.5 },
+        { "type": "soldier", "count": 4, "spawnInterval": 2.0 }
+      ],
+      "completionBonus": 30
+    },
+    {
+      "waveNumber": 3,
+      "name": "Marching Orders",
+      "enemies": [
+        { "type": "scout", "count": 3, "spawnInterval": 1.2 },
+        { "type": "soldier", "count": 6, "spawnInterval": 1.8 }
+      ],
+      "completionBonus": 40
+    },
+    {
+      "waveNumber": 4,
+      "name": "Heavy Armor",
+      "enemies": [
+        { "type": "soldier", "count": 8, "spawnInterval": 1.5 },
+        { "type": "tank", "count": 2, "spawnInterval": 3.0 }
+      ],
+      "completionBonus": 50
+    },
+    {
+      "waveNumber": 5,
+      "name": "The Warden",
+      "enemies": [
+        { "type": "soldier", "count": 4, "spawnInterval": 1.5 },
+        { "type": "tank", "count": 3, "spawnInterval": 2.5 },
+        { "type": "boss", "count": 1, "spawnInterval": 5.0 }
+      ],
+      "completionBonus": 75
+    },
+    {
+      "waveNumber": 6,
+      "name": "Field Medics",
+      "enemies": [
+        { "type": "soldier", "count": 6, "spawnInterval": 1.5 },
+        { "type": "tank", "count": 4, "spawnInterval": 2.5 },
+        { "type": "healer", "count": 2, "spawnInterval": 3.0 }
+      ],
+      "completionBonus": 60
+    },
+    {
+      "waveNumber": 7,
+      "name": "Sustained Assault",
+      "enemies": [
+        { "type": "soldier", "count": 4, "spawnInterval": 1.5 },
+        { "type": "tank", "count": 5, "spawnInterval": 2.0 },
+        { "type": "healer", "count": 3, "spawnInterval": 2.5 }
+      ],
+      "completionBonus": 70
+    },
+    {
+      "waveNumber": 8,
+      "name": "Swarm Tactics",
+      "enemies": [
+        { "type": "scout", "count": 8, "spawnInterval": 0.8 },
+        { "type": "soldier", "count": 6, "spawnInterval": 1.2 },
+        { "type": "tank", "count": 3, "spawnInterval": 2.5 },
+        { "type": "healer", "count": 2, "spawnInterval": 3.0 }
+      ],
+      "completionBonus": 80
+    },
+    {
+      "waveNumber": 9,
+      "name": "The Gauntlet",
+      "enemies": [
+        { "type": "scout", "count": 6, "spawnInterval": 0.6 },
+        { "type": "soldier", "count": 6, "spawnInterval": 1.0 },
+        { "type": "tank", "count": 6, "spawnInterval": 1.8 },
+        { "type": "healer", "count": 4, "spawnInterval": 2.0 }
+      ],
+      "completionBonus": 90
+    },
+    {
+      "waveNumber": 10,
+      "name": "Sentinel's Last Stand",
+      "enemies": [
+        { "type": "soldier", "count": 4, "spawnInterval": 1.5 },
+        { "type": "tank", "count": 4, "spawnInterval": 2.0 },
+        { "type": "healer", "count": 3, "spawnInterval": 2.5 },
+        { "type": "boss", "count": 2, "spawnInterval": 6.0 }
+      ],
+      "completionBonus": 150
+    }
+  ]
+}
