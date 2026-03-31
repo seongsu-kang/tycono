@@ -636,6 +636,36 @@ ${cLevelList}
 5. **Done condition**: ALL subordinates must be done before you report done
 6. **Crash resilience**: If you restart, digest catches you up
 
+## ⛔ Amend-First Rule (COST CRITICAL — G-10)
+**When a C-Level needs follow-up work on the SAME topic, ALWAYS amend instead of re-dispatch.**
+
+Re-dispatch creates a new session that reloads ALL context from scratch (~3M tokens = ~$45).
+Amend sends instructions to the existing session — near-zero additional cost.
+
+| Situation | Action | Why |
+|-----------|--------|-----|
+| Critic CHALLENGE on Scout's work | **amend** Scout | Scout already has the code loaded |
+| Validator FAIL on Scout's output | **amend** Scout | Scout knows what it changed |
+| Need different work from same role | **dispatch** new | Genuinely new scope |
+| Role crashed or timed out | **dispatch** new | Session is dead |
+
+**Decision rule**: If the follow-up references files/code the role already touched → **amend**.
+Only dispatch a NEW session when the task is genuinely unrelated to previous work.
+
+**Wrong** (costs $45 per re-dispatch):
+\`\`\`
+dispatch scout "fix token mapping"     → ses-001 (3M tokens)
+# Critic challenges...
+dispatch scout "fix token mapping again" → ses-002 (3M tokens, WASTED)
+\`\`\`
+
+**Correct** (costs ~$0.01):
+\`\`\`
+dispatch scout "fix token mapping"     → ses-001 (3M tokens)
+# Critic challenges...
+amend ses-001 "Critic found issue: [challenge]. Fix the token mapping."
+\`\`\`
+
 ## Supervisor Guidelines
 - G-01: After amending a C-Level, verify on next tick that they reflected it. If not, escalate to CEO directive priority.
 - G-02: If a C-Level crashes 3+ times consecutively, stop dispatching them and report to CEO.

@@ -655,7 +655,23 @@ python3 "$SUPERVISION_CMD" watch ses-aaa${subordinates.length > 1 ? ',ses-bbb' :
 ### ⛔ CRITICAL Rules
 - **NEVER re-dispatch the same task.** If --check shows RUNNING, just keep polling.
 - **NEVER dispatch and immediately finish.** The dispatch→check→review loop must continue until ALL work is complete.
-- **Save the job ID** from each dispatch to use with --check.`;
+- **Save the job ID** from each dispatch to use with --check.
+
+### ⛔ Amend-First Rule (COST CRITICAL)
+When a subordinate needs follow-up work on the SAME topic, **amend instead of re-dispatch**.
+Re-dispatch creates a new session that reloads ALL context from scratch (expensive).
+Amend sends instructions to the existing session — near-zero additional cost.
+
+\`\`\`bash
+# ❌ WRONG: re-dispatch (wastes tokens reloading context)
+python3 "$DISPATCH_CMD" ${exampleSubId} "fix the bug again"
+
+# ✅ CORRECT: amend existing session (keeps context, near-zero cost)
+python3 "$SUPERVISION_CMD" amend ses-xxx "Critic found issue: [details]. Fix it."
+\`\`\`
+
+**When to amend**: Follow-up on same files/code the role already touched.
+**When to dispatch new**: Genuinely unrelated new task scope.`;
 
   // C-level roles get mandatory delegation rules
   if (isCLevel) {
