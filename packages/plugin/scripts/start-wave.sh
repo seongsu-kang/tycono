@@ -203,6 +203,12 @@ if [[ "$ACTIVE_COUNT" -gt 0 ]]; then
   echo "   Starting a new wave may cause resource conflicts."
   echo "   Use /tycono:tycono-status to check current waves."
   echo ""
+  # Non-interactive (headless/plugin): block concurrent wave to prevent BUG-CONCURRENT
+  if [[ ! -t 0 ]]; then
+    echo "❌ Blocking new wave — active wave detected in non-interactive mode."
+    echo "   Stop the existing wave first: /tycono:tycono-cancel"
+    exit 1
+  fi
 fi
 
 # --- Create Wave ---

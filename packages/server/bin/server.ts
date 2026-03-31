@@ -148,13 +148,36 @@ export async function main(args: string[]): Promise<void> {
   const host = process.env.HOST || '0.0.0.0';
   server.listen(port, host);
 
-  // Graceful shutdown
-  const shutdown = () => {
+  // Graceful shutdown with active wave guard (BUG-CONCURRENT protection)
+  let forceShutdown = false;
+  let forceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const doShutdown = () => {
     console.log('\n  Shutting down...');
     try { fs.unlinkSync(headlessPath); } catch {}
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(1), 5000);
   };
+
+  const shutdown = async () => {
+    try {
+      const { getActiveWaveCount } = await import('../../src/api/src/create-server.js');
+      const activeCount = getActiveWaveCount();
+
+      if (activeCount > 0 && !forceShutdown) {
+        console.log(`\n  ⚠️  ${activeCount} active wave(s) running. Press Ctrl+C again within 5s to force shutdown.`);
+        forceShutdown = true;
+        forceTimer = setTimeout(() => { forceShutdown = false; }, 5000);
+        return;
+      }
+    } catch {
+      // If we can't check, proceed with shutdown
+    }
+
+    if (forceTimer) clearTimeout(forceTimer);
+    doShutdown();
+  };
+
   process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  process.on('SIGTERM', doShutdown);
 }

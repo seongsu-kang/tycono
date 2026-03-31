@@ -15,8 +15,15 @@ import { extractKeywords, searchRelatedDocs } from './knowledge-gate.js';
 
 /* ─── Types ──────────────────────────────────── */
 
+export interface PromptSection {
+  text: string;
+  cacheable: boolean;
+}
+
 export interface AssembledContext {
   systemPrompt: string;
+  /** Structured sections for prompt caching — cacheable sections get cache_control */
+  sections: PromptSection[];
   task: string;
   sourceRole: string;
   targetRole: string;
@@ -52,60 +59,62 @@ export function assembleContext(
   task: string,
   sourceRole: string,
   orgTree: OrgTree,
-  options?: { teamStatus?: TeamStatus; targetRoles?: string[]; presetId?: string },
+  options?: { teamStatus?: TeamStatus; targetRoles?: string[]; presetId?: string; priorDispatches?: Array<{ roleId: string; task: string; result: string }> },
 ): AssembledContext {
   const node = orgTree.nodes.get(roleId);
   if (!node) {
     throw new Error(`Role not found in org tree: ${roleId}`);
   }
 
-  const sections: string[] = [];
+  const taggedSections: PromptSection[] = [];
+  // Helper: push with cacheability tag
+  const pushSection = (text: string, cacheable: boolean) => taggedSections.push({ text, cacheable });
 
-  // 1. Company Rules (CLAUDE.md + custom-rules.md + company.md)
+  // 1. Company Rules (CLAUDE.md + custom-rules.md + company.md) — CACHEABLE
   const companyRules = loadCompanyRules(companyRoot);
   if (companyRules) {
-    sections.push(companyRules);
+    pushSection(companyRules, true);
   }
 
-  // 2. Org Context
-  sections.push(buildOrgContextSection(orgTree, node));
+  // 2. Org Context — CACHEABLE (static per role)
+  pushSection(buildOrgContextSection(orgTree, node), true);
 
-  // 3. Role Persona
-  sections.push(buildPersonaSection(node));
+  // 3. Role Persona — CACHEABLE
+  pushSection(buildPersonaSection(node), true);
 
-  // 4. Authority Rules
-  sections.push(buildAuthoritySection(node));
+  // 4. Authority Rules — CACHEABLE
+  pushSection(buildAuthoritySection(node), true);
 
-  // 5. Knowledge Scope
-  sections.push(buildKnowledgeSection(node));
+  // 5. Knowledge Scope — CACHEABLE
+  pushSection(buildKnowledgeSection(node), true);
 
-  // 6. SKILL.md (Role-specific + equipped shared skills)
+  // 6. SKILL.md (Role-specific + equipped shared skills) — CACHEABLE
   const skillContent = loadSkillMd(companyRoot, roleId);
   if (skillContent) {
-    sections.push('# Skills & Tools\n\n' + skillContent);
+    pushSection('# Skills & Tools\n\n' + skillContent, true);
   }
 
-  // 6b. Shared Skills (from role.yaml skills field)
+  // 6b. Shared Skills (from role.yaml skills field) — CACHEABLE
   const sharedSkills = loadSharedSkills(companyRoot, node.skills);
   if (sharedSkills) {
-    sections.push('# Equipped Skills\n\n' + sharedSkills);
+    pushSection('# Equipped Skills\n\n' + sharedSkills, true);
   }
 
-  // 7. Hub Docs (요약)
+  // 7. Hub Docs (요약) — CACHEABLE
   const hubSummary = loadHubSummaries(companyRoot, node);
   if (hubSummary) {
-    sections.push('# Reference Documents\n\n' + hubSummary);
+    pushSection('# Reference Documents\n\n' + hubSummary, true);
   }
 
-  // 8. CEO Decisions (전사 공지)
+  // 8. CEO Decisions (전사 공지) — CACHEABLE
   const ceoDecisions = loadCeoDecisions(companyRoot);
   if (ceoDecisions) {
-    sections.push('# CEO Decisions (전사 공지)\n\n' + ceoDecisions);
+    pushSection('# CEO Decisions (전사 공지)\n\n' + ceoDecisions, true);
   }
 
-  // 9. Code Root (코드 프로젝트 경로)
+  // 9. Code Root (코드 프로젝트 경로) — CACHEABLE (static per company)
   const codeRoot = resolveCodeRoot(companyRoot);
-  sections.push(`# Code Project
+  pushSection(`# Code Project
 
 The code repository is located at: \`${codeRoot}\` (env: $TYCONO_CODE_ROOT)
 The AKB (knowledge) directory is at: \`${companyRoot}\` (env: $TYCONO_AKB_ROOT)
@@ -116,19 +125,36 @@ Use the code repository path for all source code work (reading, writing, buildin
 - Your cwd is already set to the code repository. When creating worktrees, use relative paths or \`$TYCONO_CODE_ROOT\`.
 - **NEVER run \`git worktree add\` in \`$TYCONO_AKB_ROOT\`** — the AKB directory is not a code repository.
 - Recommended worktree path: \`$TYCONO_CODE_ROOT/.worktrees/{branch-name}\`
-- Example: \`git worktree add .worktrees/feature-xyz -b feature/xyz\` (from cwd, which is already code repo)`);
+- Example: \`git worktree add .worktrees/feature-xyz -b feature/xyz\` (from cwd, which is already code repo)`, true);
 
-  // 10. Pre-Knowledging: 작업 관련 문서 자동 탐색
+  // 10. Pre-Knowledging: 작업 관련 문서 자동 탐색 — NOT cacheable (task-dependent)
   const preKSection = buildPreKnowledgingSection(companyRoot, task);
   if (preKSection) {
-    sections.push(preKSection);
+    pushSection(preKSection, false);
   }
 
-  // 11. Preset Knowledge (wave-scoped preset docs)
+  // 11. Preset Knowledge (wave-scoped preset docs) — CACHEABLE (static per wave)
   if (options?.presetId && options.presetId !== 'default') {
     const presetKnowledge = loadPresetKnowledge(companyRoot, options.presetId);
     if (presetKnowledge) {
-      sections.push('# Preset Knowledge\n\n' + presetKnowledge);
+      pushSection('# Preset Knowledge\n\n' + presetKnowledge, true);
+    }
+  }
+
+  // 12. Handoff Summary — NOT cacheable (dynamic per dispatch)
+  if (options?.priorDispatches && options.priorDispatches.length > 0) {
+    const sameRole = options.priorDispatches.filter(d => d.roleId === roleId);
+    if (sameRole.length > 0) {
+      const summaries = sameRole.map((d, i) =>
+        `### Session ${i + 1}\n**Task**: ${d.task.slice(0, 200)}\n**Result**: ${d.result.slice(0, 500)}`
+      ).join('\n\n');
+      pushSection(`# Previous Session Results (Handoff Summary)
+
+This role has been dispatched ${sameRole.length} time(s) before in this wave. **DO NOT repeat completed work.**
+
+${summaries}
+
+> Build on these results. Skip investigation that was already done. Focus on NEW or UNFINISHED items only.`, false);
     }
   }
 
@@ -141,23 +167,23 @@ Use the code repository path for all source code work (reading, writing, buildin
     subordinates = subordinates.filter(id => options.targetRoles!.includes(id));
   }
 
-  // Supervision prompt (SV-11, SV-12: C-Level heartbeat mode)
+  // Supervision prompt (SV-11, SV-12: C-Level heartbeat mode) — CACHEABLE
   const heartbeatEnabled = node.heartbeat?.enabled === true;
   if (heartbeatEnabled && subordinates.length > 0) {
-    sections.push(buildSupervisionSection(node));
+    pushSection(buildSupervisionSection(node), true);
   }
 
-  // Knowledge consistency management (C-Level responsibility)
+  // Knowledge consistency management (C-Level responsibility) — CACHEABLE
   if (node.level === 'c-level') {
-    sections.push(buildKnowledgeManagementSection(roleId));
+    pushSection(buildKnowledgeManagementSection(roleId), true);
   }
 
-  // Dispatch 도구 안내 (하위 Role이 있는 경우)
+  // Dispatch 도구 안내 (하위 Role이 있는 경우) — NOT cacheable (teamStatus varies)
   if (subordinates.length > 0) {
-    sections.push(buildDispatchSection(orgTree, roleId, subordinates, options?.teamStatus));
+    pushSection(buildDispatchSection(orgTree, roleId, subordinates, options?.teamStatus), false);
   } else if (node.level === 'c-level') {
     // C-level with no subordinates — clarify authority boundaries
-    sections.push(`# Team Structure
+    pushSection(`# Team Structure
 
 ⚠️ **You have no direct reports.** You are an individual contributor at the C-level.
 
@@ -165,21 +191,21 @@ Use the code repository path for all source code work (reading, writing, buildin
 - You CAN consult other roles for information (see Consult section below)
 - You MUST do the work yourself — research, analyze, write, decide
 - If implementation requires another role (e.g., engineering work), recommend it to CEO
-- Make decisions within your authority autonomously — do NOT ask CEO for decisions you can make yourself`);
+- Make decisions within your authority autonomously — do NOT ask CEO for decisions you can make yourself`, true);
   }
 
-  // Consult 도구 안내 (상담 가능한 Role이 있는 경우)
+  // Consult 도구 안내 — CACHEABLE
   const consultSection = buildConsultSection(orgTree, roleId);
   if (consultSection) {
-    sections.push(consultSection);
+    pushSection(consultSection, true);
   }
 
-  // Language preference (default: English)
+  // Language preference — CACHEABLE
   const prefs = readPreferences(companyRoot);
   const lang = prefs.language && prefs.language !== 'auto' ? prefs.language : 'en';
   const langNames: Record<string, string> = { en: 'English', ko: 'Korean (한국어)', ja: 'Japanese (日本語)' };
   const langName = langNames[lang] ?? lang;
-  sections.push(`# Language (CRITICAL)
+  pushSection(`# Language (CRITICAL)
 
 You MUST respond in **${langName}**.
 
@@ -191,10 +217,10 @@ This applies to ALL output without exception:
 - Git commit messages and PR descriptions
 
 Code (variable names, comments in code) may remain in English for readability.
-Everything else MUST be in ${langName}.`);
+Everything else MUST be in ${langName}.`, true);
 
-  // Execution behavior rules (prevents infinite exploration loops in -p mode)
-  sections.push(`# Execution Rules (CRITICAL)
+  // Execution behavior rules — CACHEABLE
+  pushSection(`# Execution Rules (CRITICAL)
 
 ## Interpreting Tasks
 - A [CEO Wave] is a directive from the CEO. Interpret it based on your role's expertise.
@@ -230,12 +256,13 @@ Everything else MUST be in ${langName}.`);
 - Use a descriptive commit message: \`git commit -m "type(scope): description"\`
 - Common types: feat, fix, refactor, test, chore
 - This ensures your work is not lost in uncommitted changes.
-- Do NOT push — just commit locally. Your superior or the system handles push/PR.`);
+- Do NOT push — just commit locally. Your superior or the system handles push/PR.`, true);
 
-  const systemPrompt = sections.join('\n\n---\n\n');
+  const systemPrompt = taggedSections.map(s => s.text).join('\n\n---\n\n');
 
   return {
     systemPrompt,
+    sections: taggedSections,
     task,
     sourceRole,
     targetRole: roleId,

@@ -47,6 +47,8 @@ export interface RunnerConfig {
   env?: Record<string, string>;
   /** Wave-scoped preset ID for knowledge injection */
   presetId?: string;
+  /** Handoff summary: prior dispatch results in this wave (for context carry-over) */
+  priorDispatches?: Array<{ roleId: string; task: string; result: string }>;
   /** CLI session ID for --resume (context continuity across turn limits) */
   cliSessionId?: string;
   /** SV-7: Supervision — abort a running session */

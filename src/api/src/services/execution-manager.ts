@@ -274,6 +274,24 @@ class ExecutionManager {
       ...(execution.ports.hmr && { VITE_HMR_PORT: String(execution.ports.hmr) }),
     } : {};
 
+    // Handoff summary: collect prior dispatch results for this wave
+    const priorDispatches: Array<{ roleId: string; task: string; result: string }> = [];
+    const execSession = getSession(params.sessionId);
+    if (execSession?.waveId) {
+      for (const [, exec] of this.executions) {
+        if (exec.status === 'done' && exec.result && exec.sessionId !== params.sessionId) {
+          const s = getSession(exec.sessionId);
+          if (s?.waveId === execSession.waveId) {
+            priorDispatches.push({
+              roleId: exec.roleId,
+              task: exec.task,
+              result: exec.result.output?.slice(0, 500) ?? '',
+            });
+          }
+        }
+      }
+    }
+
     const handle = this.runner.execute(
       {
         companyRoot: COMPANY_ROOT,
@@ -291,6 +309,7 @@ class ExecutionManager {
         codeRoot: resolveCodeRoot(COMPANY_ROOT),
         attachments: params.attachments,
         cliSessionId: params.cliSessionId,
+        priorDispatches,
         env: {
           ...process.env,
           ...portEnv,

@@ -39,10 +39,17 @@ import { AnthropicProvider, type LLMProvider } from './engine/llm-adapter.js';
 import { readConfig } from './services/company-config.js';
 import { ensureClaudeMd } from './services/claude-md-manager.js';
 
+import { supervisorHeartbeat } from './services/supervisor-heartbeat.js';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const isProd = process.env.NODE_ENV === 'production';
 const corsOrigin = isProd ? true : /^http:\/\/localhost:\d+$/;
+
+/** Get count of active waves (for shutdown guard) */
+export function getActiveWaveCount(): number {
+  return supervisorHeartbeat.listActive().length;
+}
 
 /* ─── Raw HTTP handler for import-knowledge SSE ─── */
 

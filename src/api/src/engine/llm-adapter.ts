@@ -56,9 +56,12 @@ export interface ChatOptions {
   maxTokens?: number;
 }
 
+/** System prompt: plain string or structured blocks with cache_control for prompt caching */
+export type SystemPrompt = string | Array<{ type: 'text'; text: string; cache_control?: { type: 'ephemeral' } }>;
+
 export interface LLMProvider {
   chat(
-    systemPrompt: string,
+    systemPrompt: SystemPrompt,
     messages: LLMMessage[],
     tools?: ToolDefinition[],
     signal?: AbortSignal,
@@ -66,7 +69,7 @@ export interface LLMProvider {
   ): Promise<LLMResponse>;
 
   chatStream?(
-    systemPrompt: string,
+    systemPrompt: SystemPrompt,
     messages: LLMMessage[],
     tools: ToolDefinition[] | undefined,
     callbacks: StreamCallbacks,
@@ -90,7 +93,7 @@ export class AnthropicProvider implements LLMProvider {
    * Send a message and get a complete response (non-streaming)
    */
   async chat(
-    systemPrompt: string,
+    systemPrompt: SystemPrompt,
     messages: LLMMessage[],
     tools?: ToolDefinition[],
     signal?: AbortSignal,
@@ -99,7 +102,7 @@ export class AnthropicProvider implements LLMProvider {
     const params: Anthropic.MessageCreateParamsNonStreaming = {
       model: this.model,
       max_tokens: options?.maxTokens ?? 8192,
-      system: systemPrompt,
+      system: systemPrompt as Anthropic.MessageCreateParams['system'],
       messages: messages.map((m) => ({
         role: m.role,
         content: m.content as Anthropic.MessageCreateParams['messages'][0]['content'],
@@ -130,7 +133,7 @@ export class AnthropicProvider implements LLMProvider {
    * Send a message with streaming (for SSE)
    */
   async chatStream(
-    systemPrompt: string,
+    systemPrompt: SystemPrompt,
     messages: LLMMessage[],
     tools: ToolDefinition[] | undefined,
     callbacks: StreamCallbacks,
@@ -139,7 +142,7 @@ export class AnthropicProvider implements LLMProvider {
       model: this.model,
       max_tokens: 8192,
       stream: true,
-      system: systemPrompt,
+      system: systemPrompt as Anthropic.MessageCreateParams['system'],
       messages: messages.map((m) => ({
         role: m.role,
         content: m.content as Anthropic.MessageCreateParams['messages'][0]['content'],
