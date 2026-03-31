@@ -513,6 +513,21 @@ class ExecutionManager {
             timestamp: Date.now(),
           });
           sendApprovalNotification(params.roleId, approvalQuestion);
+
+          // BUG-APPROVAL belt-and-suspenders: directly notify supervisor (don't rely solely on stream)
+          // This ensures approval state is set even if stream watcher was lost (e.g., stream closed by cleanup)
+          if (params.roleId === 'ceo') {
+            const session = getSession(execution.sessionId);
+            if (session?.waveId) {
+              import('./supervisor-heartbeat.js').then(({ supervisorHeartbeat }) => {
+                const state = supervisorHeartbeat.getState(session.waveId!);
+                if (state && state.status !== 'awaiting_approval') {
+                  console.log(`[Approval] Direct supervisor notification: wave ${session.waveId} → awaiting_approval`);
+                  state.status = 'awaiting_approval';
+                }
+              }).catch(() => { /* avoid circular import crash */ });
+            }
+          }
         }
 
         if (hardLimitReached) {
@@ -651,10 +666,17 @@ class ExecutionManager {
 
         // OOM prevention: remove completed execution from memory after delay
         // (delay allows getActiveExecution to find it briefly for multiplexer/recovery)
+        // BUG-APPROVAL fix: Don't close stream if a continuation is running on the same session
+        // (closing the stream kills watcher subscribers, breaking supervisor event delivery)
         setTimeout(() => {
           this.executions.delete(execution.id);
-          // Also close the ActivityStream to free subscribers + file handles
-          execution.stream.close();
+          // Only close stream if no other active execution shares this session
+          const hasActiveSibling = [...this.executions.values()].some(
+            e => e.sessionId === execution.sessionId && e.id !== execution.id && (e.status === 'running' || e.status === 'awaiting_input'),
+          );
+          if (!hasActiveSibling) {
+            execution.stream.close();
+          }
         }, 30_000).unref();
       });
   }
