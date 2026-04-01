@@ -162,7 +162,7 @@ if [[ -z "$API_URL" ]]; then
   if [[ -z "$TYCONO_BIN" ]]; then
     # Use npx as fallback — @latest ensures the newest server features
     # (dispatch, 2-Layer Knowledge, etc.) without manual version bumps
-    npx tycono-server@latest &
+    npx tycono-server@0.1.0 &
     SERVER_PID=$!
   else
     "$TYCONO_BIN" &
