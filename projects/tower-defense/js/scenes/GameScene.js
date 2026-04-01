@@ -98,12 +98,10 @@ var GameScene = new Phaser.Class({
     pauseBtn.on('pointerdown', function() {
       self.paused = !self.paused;
       self.pauseText.setText(self.paused ? 'RESUME' : 'PAUSE');
-      if (self.paused) {
-        self.physics.pause();
-        self.time.paused = true;
-      } else {
-        self.physics.resume();
-        self.time.paused = false;
+      pauseBtn.setFillStyle(self.paused ? 0x228B22 : 0x333333);
+      // Pause/resume spawn timers
+      for (var t = 0; t < self.spawnTimers.length; t++) {
+        if (self.spawnTimers[t]) self.spawnTimers[t].paused = self.paused;
       }
     });
 
@@ -116,8 +114,10 @@ var GameScene = new Phaser.Class({
     speedBtn.on('pointerdown', function() {
       self.gameSpeed = self.gameSpeed === 1 ? 2 : 1;
       self.speedText.setText(self.gameSpeed + 'x');
+      self.speedText.setColor(self.gameSpeed === 2 ? '#FFD700' : '#ffffff');
+      speedBtn.setFillStyle(self.gameSpeed === 2 ? 0x444400 : 0x333333);
+      // Affect spawn timers
       self.time.timeScale = self.gameSpeed;
-      self.tweens.timeScale = self.gameSpeed;
     });
 
     // Back button
@@ -502,14 +502,10 @@ var GameScene = new Phaser.Class({
       (function(enemyGroup) {
         var spawned = 0;
         var timer = self.time.addEvent({
-          delay: enemyGroup.interval / self.gameSpeed,
+          delay: enemyGroup.interval,
           callback: function() {
-            if (self.gameOver || self.paused) return;
+            if (self.gameOver) return;
             self.spawnEnemy(enemyGroup.type);
-            spawned++;
-            if (spawned >= enemyGroup.count) {
-              timer.remove();
-            }
           },
           repeat: enemyGroup.count - 1
         });
@@ -549,7 +545,7 @@ var GameScene = new Phaser.Class({
   update: function(time, delta) {
     if (this.paused || this.gameOver) return;
 
-    var adjustedDelta = delta;
+    var adjustedDelta = delta * this.gameSpeed;
 
     // Update enemies
     this.updateEnemies(adjustedDelta);
@@ -647,7 +643,7 @@ var GameScene = new Phaser.Class({
       var towerDef = TOWER_DATA[tower.type];
       var stats = towerDef.levels[tower.level];
 
-      if (time - tower.lastFired < stats.fireRate) continue;
+      if (time - tower.lastFired < stats.fireRate / this.gameSpeed) continue;
 
       // Find closest enemy in range
       var closestEnemy = null;

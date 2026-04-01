@@ -35,7 +35,7 @@ interface SupervisorState {
   preset?: string;
   supervisorSessionId: string | null;
   executionId: string | null;
-  status: 'starting' | 'running' | 'restarting' | 'stopped' | 'error';
+  status: 'starting' | 'running' | 'restarting' | 'stopped' | 'error' | 'awaiting_approval';
   crashCount: number;
   maxCrashRetries: number;
   restartTimer: ReturnType<typeof setTimeout> | null;
@@ -231,8 +231,11 @@ class SupervisorHeartbeat {
     // Record user message in wave conversation history
     appendWaveMessage(waveId, { role: 'user', content: text });
 
-    // If supervisor is stopped (agent finished or idle wave), wake it up
-    if (state.status === 'stopped') {
+    // If supervisor is stopped or awaiting approval, wake it up
+    if (state.status === 'stopped' || state.status === 'awaiting_approval') {
+      if (state.status === 'awaiting_approval') {
+        console.log(`[Supervisor] Directive received while awaiting approval for wave ${waveId}. Restarting supervisor.`);
+      }
       // Update the wave's directive if it was empty (idle wave first message)
       if (!state.directive) {
         state.directive = text;
@@ -633,6 +636,36 @@ ${cLevelList}
 5. **Done condition**: ALL subordinates must be done before you report done
 6. **Crash resilience**: If you restart, digest catches you up
 
+## ⛔ Amend-First Rule (COST CRITICAL — G-10)
+**When a C-Level needs follow-up work on the SAME topic, ALWAYS amend instead of re-dispatch.**
+
+Re-dispatch creates a new session that reloads ALL context from scratch (~3M tokens = ~$45).
+Amend sends instructions to the existing session — near-zero additional cost.
+
+| Situation | Action | Why |
+|-----------|--------|-----|
+| Critic CHALLENGE on Scout's work | **amend** Scout | Scout already has the code loaded |
+| Validator FAIL on Scout's output | **amend** Scout | Scout knows what it changed |
+| Need different work from same role | **dispatch** new | Genuinely new scope |
+| Role crashed or timed out | **dispatch** new | Session is dead |
+
+**Decision rule**: If the follow-up references files/code the role already touched → **amend**.
+Only dispatch a NEW session when the task is genuinely unrelated to previous work.
+
+**Wrong** (costs $45 per re-dispatch):
+\`\`\`
+dispatch scout "fix token mapping"     → ses-001 (3M tokens)
+# Critic challenges...
+dispatch scout "fix token mapping again" → ses-002 (3M tokens, WASTED)
+\`\`\`
+
+**Correct** (costs ~$0.01):
+\`\`\`
+dispatch scout "fix token mapping"     → ses-001 (3M tokens)
+# Critic challenges...
+amend ses-001 "Critic found issue: [challenge]. Fix the token mapping."
+\`\`\`
+
 ## Supervisor Guidelines
 - G-01: After amending a C-Level, verify on next tick that they reflected it. If not, escalate to CEO directive priority.
 - G-02: If a C-Level crashes 3+ times consecutively, stop dispatching them and report to CEO.
@@ -651,6 +684,13 @@ When C-Level A completes while C-Level B is still active:
 2. Summarize the key decisions, artifacts, and constraints from A's work
 3. amend B: "C-Level A completed. Here are their deliverables relevant to your work: [summary]. Review and incorporate."
 4. On next tick, verify B acknowledged and reflected A's input
+
+## Critic CHALLENGE Relay (MANDATORY)
+⛔ When Critic issues a CHALLENGE, you MUST relay it verbatim to the target role.
+1. Detect CHALLENGE in Critic's output (keywords: CHALLENGE, BLOCK, SNOWBALL, "진짜 원인")
+2. amend target role: "Critic CHALLENGE: [exact challenge content]. Address this specifically."
+3. On next tick, verify the target's response addresses the specific challenge
+4. If not addressed: re-amend: "Critic challenged [X]. Your response did not address it. Respond to the specific challenge."
 
 When C-Level A produces intermediate results that B needs:
 1. amend B with the relevant intermediate output
@@ -774,6 +814,12 @@ ${state.continuous ? `## Continuous Improvement Mode (ON)
       } else if (event.type === 'msg:error') {
         exec.stream.unsubscribe(subscriber);
         this.onSupervisorCrash(state, String(event.data.message ?? 'unknown error'));
+      } else if (event.type === 'approval:needed') {
+        // BUG-APPROVAL-DIRECTIVE-LOSS: CEO outputs [APPROVAL_NEEDED] then exits.
+        // Don't complete the wave — transition to awaiting_approval so directive can restart supervisor.
+        console.log(`[Supervisor] CEO awaiting approval for wave ${state.waveId}. Wave stays alive for directive.`);
+        state.status = 'awaiting_approval';
+        // Don't unsubscribe — CEO process will emit msg:done next, which we need to catch
       } else if (event.type === 'msg:awaiting_input') {
         // BUG-016: turn:limit causes awaiting_input — treat as done-guard
         // If all children are done → complete wave. Otherwise restart supervisor.
@@ -787,6 +833,13 @@ ${state.continuous ? `## Continuous Improvement Mode (ON)
   }
 
   private onSupervisorDone(state: SupervisorState): void {
+    // BUG-APPROVAL-DIRECTIVE-LOSS: If CEO exited after [APPROVAL_NEEDED],
+    // don't complete the wave. Wait for user directive to restart supervisor.
+    if (state.status === 'awaiting_approval') {
+      console.log(`[Supervisor] CEO done with approval pending for wave ${state.waveId}. Wave stays alive for directive.`);
+      return;
+    }
+
     // Check if there are still running or paused C-Level sessions for this wave
     const waveSessions = listSessions().filter(s => s.waveId === state.waveId && s.id !== state.supervisorSessionId);
     const runningChildren = waveSessions.filter(s => {
@@ -813,10 +866,24 @@ ${state.continuous ? `## Continuous Improvement Mode (ON)
       state.crashCount = 0; // Not a crash, intentional restart
       this.scheduleRestart(state, 5_000); // 5s delay
     } else if (state.continuous) {
-      // Continuous Improvement Mode: don't stop — restart supervisor to ask C-Levels for improvements
-      console.log(`[Supervisor] Wave ${state.waveId} iteration complete. Continuous mode ON — restarting for next improvement cycle.`);
-      state.crashCount = 0;
-      this.scheduleRestart(state, 5_000);
+      // BUG-CONTINUOUS-TURN1-STORM: Check if CEO actually did meaningful work.
+      // If turn 1 + 0 dispatches → "nothing to do" → stop loop instead of infinite restart.
+      const exec = state.executionId ? executionManager.getExecution(state.executionId) : undefined;
+      const turns = exec?.result?.turns ?? 0;
+      const dispatches = exec?.result?.dispatches?.length ?? 0;
+
+      if (turns <= 1 && dispatches === 0) {
+        console.log(`[Supervisor] Continuous mode: CEO finished in turn ${turns} with 0 dispatches. Stopping loop (nothing to do).`);
+        state.status = 'stopped';
+        // Don't restart — treat as normal wave completion (same as non-continuous done)
+        return;
+      } else {
+        // Continuous Improvement Mode: restart for next iteration
+        console.log(`[Supervisor] Wave ${state.waveId} iteration complete (${turns} turns, ${dispatches} dispatches). Continuous mode ON — restarting.`);
+        state.crashCount = 0;
+        this.scheduleRestart(state, 5_000);
+        return; // Don't fall through to completion
+      }
     } else {
       console.log(`[Supervisor] Wave ${state.waveId} complete. All subordinates done.`);
       state.status = 'stopped';

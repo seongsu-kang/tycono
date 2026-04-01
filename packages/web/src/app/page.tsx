@@ -2,6 +2,8 @@ import Link from "next/link";
 import { agencies } from "@/data/agencies";
 import { AgencyCard } from "@/components/agency-card";
 import { LandingAnimations } from "@/components/landing-animations";
+import { PlaceholderImage, SlideShowPlaceholder } from "@/components/placeholder-image";
+import { EmailCTA } from "@/components/email-cta";
 
 const featured = agencies.filter((a) => !a.comingSoon).slice(0, 3);
 const comingSoon = agencies.filter((a) => a.comingSoon).slice(0, 4);
@@ -89,7 +91,7 @@ export default function HomePage() {
           <div className="reveal mt-12 text-center">
             <p className="text-sm text-base-500 mb-4">Started as an AI office tycoon game. The agents were too useful to keep in a game.</p>
             <div className="rounded-xl overflow-hidden max-w-md mx-auto opacity-60 hover:opacity-100 transition-opacity duration-500 border border-base-700/20">
-              <img src="assets/hero-office.png" alt="Where it started — pixel office tycoon" className="w-full h-auto" loading="lazy" />
+              <PlaceholderImage alt="Where it started — pixel office tycoon" category="office" className="rounded-xl" />
             </div>
             <p className="text-xs text-base-600 mt-2">The pixel office lives on: <code className="text-accent/60">npx tycono --classic</code></p>
           </div>
@@ -340,14 +342,17 @@ export default function HomePage() {
               <div className="flex-1 pb-4">
                 <h3 className="text-xl font-semibold text-base-50 mb-2">Build your team</h3>
                 <p className="text-base-400 mb-4">Guided setup wizard. Pick your AI engine, name your company, choose a team template.</p>
-                <div className="slideshow max-w-lg aspect-[560/500]">
-                  <img src="assets/wizard-1-engine.png" alt="Step 1: AI Engine Setup" loading="lazy" />
-                  <img src="assets/wizard-2-project.png" alt="Step 2: Company Info" loading="lazy" />
-                  <img src="assets/wizard-3-team.png" alt="Step 3: Project Setup" loading="lazy" />
-                  <img src="assets/wizard-4-review.png" alt="Step 4: Knowledge Strategy" loading="lazy" />
-                  <img src="assets/wizard-5-done.png" alt="Step 5: Team Template" loading="lazy" />
-                  <img src="assets/wizard-6-office.png" alt="Step 6: Company Created" loading="lazy" />
-                </div>
+                <SlideShowPlaceholder
+                  className="max-w-lg"
+                  items={[
+                    { alt: "AI Engine Setup" },
+                    { alt: "Company Info" },
+                    { alt: "Project Setup" },
+                    { alt: "Knowledge Strategy" },
+                    { alt: "Team Template" },
+                    { alt: "Company Created" },
+                  ]}
+                />
               </div>
             </div>
 
@@ -359,14 +364,14 @@ export default function HomePage() {
               <div className="flex-1">
                 <h3 className="text-xl font-semibold text-base-50 mb-2">Watch them work</h3>
                 <p className="text-base-400 mb-4">Give orders from the CEO desk. Watch tasks flow through your organization in real time.</p>
-                <div className="rounded-xl overflow-hidden max-w-2xl border border-base-700/30 warm-glow mb-4">
-                  <img src="assets/hero-office.png" alt="Isometric office view — AI agents at their desks" className="w-full h-auto" loading="lazy" />
+                <div className="rounded-xl overflow-hidden max-w-2xl warm-glow mb-4">
+                  <PlaceholderImage alt="Isometric office view — AI agents at their desks" category="office" className="rounded-xl" />
                 </div>
-                <div className="rounded-xl overflow-hidden max-w-2xl border border-base-700/30 warm-glow mb-4">
-                  <img src="assets/wave-dispatch.png" alt="CEO Wave — dispatch directives to your entire organization" className="w-full h-auto" loading="lazy" />
+                <div className="rounded-xl overflow-hidden max-w-2xl warm-glow mb-4">
+                  <PlaceholderImage alt="CEO Wave — dispatch directives to your entire organization" category="terminal" className="rounded-xl" />
                 </div>
-                <div className="rounded-xl overflow-hidden max-w-2xl border border-base-700/30 warm-glow">
-                  <img src="assets/sidepanel-chat.png" alt="Side panel — talking with CTO, real-time task progress" className="w-full h-auto" loading="lazy" />
+                <div className="rounded-xl overflow-hidden max-w-2xl warm-glow">
+                  <PlaceholderImage alt="Side panel — talking with CTO, real-time task progress" category="terminal" className="rounded-xl" />
                 </div>
               </div>
             </div>
@@ -413,8 +418,8 @@ export default function HomePage() {
               <div className="w-2 h-2 rounded-full bg-accent animate-pulse"></div>
               <p className="text-accent font-mono text-xs uppercase tracking-wider">Wave in action</p>
             </div>
-            <div className="rounded-xl overflow-hidden border border-base-700/30 warm-glow mb-6">
-              <img src="assets/feature-wave-full.png" alt="CEO dispatches a wave" className="w-full h-auto" loading="lazy" />
+            <div className="rounded-xl overflow-hidden warm-glow mb-6">
+              <PlaceholderImage alt="CEO dispatches a wave" category="terminal" className="rounded-xl" />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               {[
@@ -432,18 +437,14 @@ export default function HomePage() {
               ))}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="rounded-lg overflow-hidden border border-base-700/20 group">
-                <div className="aspect-[16/10] overflow-hidden">
-                  <img src="assets/feature-save-game.png" alt="Save Game — git commit" className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300" loading="lazy" />
-                </div>
+              <div className="rounded-lg overflow-hidden border border-base-700/20">
+                <PlaceholderImage alt="Save Game — git commit" category="terminal" className="rounded-t-lg" aspectRatio="16/10" />
                 <div className="bg-base-900/80 px-3 py-2">
                   <p className="text-xs text-base-400">Save Game &mdash; every change is version-controlled</p>
                 </div>
               </div>
-              <div className="rounded-lg overflow-hidden border border-base-700/20 group">
-                <div className="aspect-[16/10] overflow-hidden">
-                  <img src="assets/sidepanel-chat.png" alt="Team chat" className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-300" loading="lazy" />
-                </div>
+              <div className="rounded-lg overflow-hidden border border-base-700/20">
+                <PlaceholderImage alt="Team chat" category="terminal" className="rounded-t-lg" aspectRatio="16/10" />
                 <div className="bg-base-900/80 px-3 py-2">
                   <p className="text-xs text-base-400">Team chat &mdash; agents discuss and debate autonomously</p>
                 </div>
@@ -528,10 +529,8 @@ export default function HomePage() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <div className="rounded-xl overflow-hidden border border-base-700/30 warm-glow mb-3">
-                  <div className="aspect-[16/10] overflow-hidden">
-                    <img src="assets/feature-knowledge.png" alt="Knowledge Base" className="w-full h-full object-cover object-top" loading="lazy" />
-                  </div>
+                <div className="rounded-xl overflow-hidden warm-glow mb-3">
+                  <PlaceholderImage alt="Knowledge Base" category="terminal" className="rounded-xl" aspectRatio="16/10" />
                 </div>
                 <div className="px-1">
                   <p className="text-sm font-semibold text-base-200 mb-1">Auto-organized, relation-based knowledge</p>
@@ -539,10 +538,8 @@ export default function HomePage() {
                 </div>
               </div>
               <div>
-                <div className="rounded-xl overflow-hidden border border-base-700/30 warm-glow mb-3">
-                  <div className="aspect-[16/10] overflow-hidden">
-                    <img src="assets/feature-stats.png" alt="Company Stats" className="w-full h-full object-cover object-top" loading="lazy" />
-                  </div>
+                <div className="rounded-xl overflow-hidden warm-glow mb-3">
+                  <PlaceholderImage alt="Company Stats" category="terminal" className="rounded-xl" aspectRatio="16/10" />
                 </div>
                 <div className="px-1">
                   <p className="text-sm font-semibold text-base-200 mb-1">Every token accounted for</p>
@@ -579,28 +576,28 @@ export default function HomePage() {
               <p className="text-purple-400 font-mono text-xs uppercase tracking-wider">Your office, your way</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
-              <div className="md:col-span-3 rounded-xl overflow-hidden border border-base-700/30 warm-glow">
-                <img src="assets/feature-role-profile.png" alt="Role Profile" className="w-full h-auto" loading="lazy" />
+              <div className="md:col-span-3 rounded-xl overflow-hidden warm-glow">
+                <PlaceholderImage alt="Role Profile" category="feature" className="rounded-xl" />
               </div>
-              <div className="md:col-span-2 rounded-xl overflow-hidden border border-base-700/30 warm-glow">
-                <img src="assets/feature-forge.png" alt="Character Forge" className="w-full h-auto" loading="lazy" />
+              <div className="md:col-span-2 rounded-xl overflow-hidden warm-glow">
+                <PlaceholderImage alt="Character Forge" category="feature" className="rounded-xl" />
               </div>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="col-span-2 rounded-lg overflow-hidden border border-base-700/20 group">
-                <img src="assets/feature-edit-mode.png" alt="Edit Mode" className="w-full h-auto group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+              <div className="col-span-2 rounded-lg overflow-hidden border border-base-700/20">
+                <PlaceholderImage alt="Edit Mode" category="office" className="rounded-t-lg" aspectRatio="16/10" />
                 <div className="bg-base-900/80 px-3 py-2">
                   <p className="text-xs text-base-400">Drag furniture, rearrange rooms</p>
                 </div>
               </div>
-              <div className="rounded-lg overflow-hidden border border-base-700/20 group">
-                <img src="assets/detail-office-room.png" alt="Pixel-art agents" className="w-full h-auto group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+              <div className="rounded-lg overflow-hidden border border-base-700/20">
+                <PlaceholderImage alt="Pixel-art agents" category="office" className="rounded-t-lg" aspectRatio="1/1" />
                 <div className="bg-base-900/80 px-3 py-2">
                   <p className="text-xs text-base-400">Pixel-art agents</p>
                 </div>
               </div>
-              <div className="rounded-lg overflow-hidden border border-base-700/20 group">
-                <img src="assets/feature-decisions.png" alt="Decision Log" className="w-full h-auto group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+              <div className="rounded-lg overflow-hidden border border-base-700/20">
+                <PlaceholderImage alt="Decision Log" category="feature" className="rounded-t-lg" aspectRatio="1/1" />
                 <div className="bg-base-900/80 px-3 py-2">
                   <p className="text-xs text-base-400">Decision log</p>
                 </div>
@@ -937,6 +934,10 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* ==================== Email CTA ==================== */}
+      <div className="section-divider"></div>
+      <EmailCTA />
 
       {/* ==================== CTA ==================== */}
       <div className="section-divider"></div>

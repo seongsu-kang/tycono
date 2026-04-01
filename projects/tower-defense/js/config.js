@@ -10,13 +10,17 @@ window.GAME_CONFIG = {
   TOTAL_HEIGHT: 600
 };
 
-// Unlocked levels (persisted in localStorage)
-window.GameState = {
-  unlockedLevel: parseInt(localStorage.getItem('td_unlocked') || '1', 10),
-  unlockLevel: function(level) {
-    if (level > this.unlockedLevel) {
-      this.unlockedLevel = level;
-      localStorage.setItem('td_unlocked', String(level));
+// Unlocked levels (localStorage with fallback for file:// restrictions)
+window.GameState = (function() {
+  var stored = 1;
+  try { stored = parseInt(localStorage.getItem('td_unlocked') || '1', 10); } catch(e) {}
+  return {
+    unlockedLevel: stored,
+    unlockLevel: function(level) {
+      if (level > this.unlockedLevel) {
+        this.unlockedLevel = level;
+        try { localStorage.setItem('td_unlocked', String(level)); } catch(e) {}
+      }
     }
-  }
-};
+  };
+})();

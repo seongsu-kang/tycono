@@ -2,6 +2,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { COMPANY_ROOT } from '../services/file-reader.js';
+import { autoSelectPreset } from '../services/preset-loader.js';
+import { readConfig } from '../services/company-config.js';
 // activity-tracker removed — executionManager is Single Source of Truth
 import { buildOrgTree, canDispatchTo, getSubordinates } from '../engine/org-tree.js';
 import { createRunner, type RunnerResult } from '../engine/runners/index.js';
@@ -21,6 +23,7 @@ import { earnCoinsInternal } from './coins.js';
 import { appendFollowUpToWave } from '../services/wave-tracker.js';
 import { waveMultiplexer } from '../services/wave-multiplexer.js';
 import { supervisorHeartbeat } from '../services/supervisor-heartbeat.js';
+import { decideDispatchOrAmend } from '../services/dispatch-classifier.js';
 
 /* ─── Auto-attach child executions to wave multiplexer ── */
 executionManager.onExecutionCreated((exec) => {
@@ -182,31 +185,47 @@ function handleJobsRequest(url: string, method: string, req: IncomingMessage, re
     return;
   }
 
-  // GET /api/jobs/:id — internal only
+  // GET /api/jobs/:id — internal only (dispatch bridge --check)
   const jobMatch = reqPath.match(/^\/api\/jobs\/([^/]+)$/);
   if (method === 'GET' && jobMatch) {
     const id = jobMatch[1];
     const exec = executionManager.getExecution(id) ?? executionManager.getActiveExecution(id);
     if (!exec) {
-      // Try reading from stream file directly
+      // Fallback: read from activity-stream file on disk
       if (ActivityStream.exists(id)) {
         const events = ActivityStream.readAll(id);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ id, events }));
+        const doneEvent = [...events].reverse().find(e => e.type === 'msg:done' || e.type === 'msg:error');
+        const output = doneEvent?.data?.output as string ?? '';
+        const status = doneEvent?.type === 'msg:done' ? 'done' : doneEvent?.type === 'msg:error' ? 'error' : 'unknown';
+        jsonResponse(res, 200, { id, status, output, fromStream: true });
       } else {
-        res.writeHead(404);
-        res.end(JSON.stringify({ error: 'Not found' }));
+        jsonResponse(res, 404, { error: 'Not found' });
       }
     } else {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
+      // Include output from result if available
+      const output = exec.result?.output?.slice(-2000) ?? '';
+      jsonResponse(res, 200, {
         id: exec.id,
         roleId: exec.roleId,
         task: exec.task,
         status: exec.status,
         sessionId: exec.sessionId,
         createdAt: exec.createdAt,
-      }));
+        output,
+      });
+    }
+    return;
+  }
+
+  // GET /api/jobs/:id/history — activity-stream events (dispatch bridge get_result)
+  const historyMatch = reqPath.match(/^\/api\/jobs\/([^/]+)\/history$/);
+  if (method === 'GET' && historyMatch) {
+    const id = historyMatch[1];
+    if (ActivityStream.exists(id)) {
+      const events = ActivityStream.readAll(id);
+      jsonResponse(res, 200, { id, events });
+    } else {
+      jsonResponse(res, 404, { error: 'Stream not found' });
     }
     return;
   }
@@ -232,7 +251,7 @@ function handleJobsRequest(url: string, method: string, req: IncomingMessage, re
 
 /* ─── POST /api/jobs ─────────────────────── */
 
-function handleStartJob(body: Record<string, unknown>, res: ServerResponse): void {
+async function handleStartJob(body: Record<string, unknown>, res: ServerResponse): Promise<void> {
   const type = (body.type as string) ?? 'assign';
   const roleId = body.roleId as string;
   const task = body.task as string;
@@ -314,6 +333,35 @@ function handleStartJob(body: Record<string, unknown>, res: ServerResponse): voi
     console.warn(`[Dispatch:Error] ${errorMsg} (parent=${parentSessionId ?? 'none'}, wave=${waveId ?? 'none'})`);
     jsonResponse(res, 403, { error: `${errorMsg}.` });
     return;
+  }
+
+  // Auto-amend: check if we should amend an existing session instead of creating a new one
+  if (!readOnly && waveId) {
+    try {
+      const decision = await decideDispatchOrAmend(waveId, roleId, sourceRole, task);
+      if (decision.action === 'amend' && decision.prevSessionId) {
+        console.log(`[AutoAmend] Converting dispatch to amend: ${roleId} → ${decision.prevSessionId} (${decision.reason})`);
+        const amendedExec = executionManager.continueSession(
+          decision.prevSessionId,
+          `[FOLLOW-UP from ${sourceRole}] ${task}`,
+          sourceRole,
+        );
+        if (amendedExec) {
+          jsonResponse(res, 200, {
+            sessionId: decision.prevSessionId,
+            executionId: amendedExec.id,
+            status: 'running',
+            autoAmend: true,
+            reason: decision.reason,
+          });
+          return;
+        }
+        // continueSession failed — fall through to new dispatch
+        console.warn(`[AutoAmend] continueSession failed for ${decision.prevSessionId}, falling back to new dispatch`);
+      }
+    } catch (err) {
+      console.warn('[AutoAmend] Decision failed, proceeding with new dispatch:', err);
+    }
   }
 
   const sessionSource: 'wave' | 'dispatch' = waveId ? 'wave' : 'dispatch';
@@ -762,7 +810,21 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
 
   const targetRoles = body.targetRoles as string[] | undefined;
   const continuous = body.continuous === true;
-  const preset = body.preset as string | undefined;
+  let preset = body.preset as string | undefined;
+
+  // Agency resolution priority: --agency flag > config.defaultAgency > auto-select
+  if (!preset) {
+    const config = readConfig(COMPANY_ROOT);
+    if (config.defaultAgency) {
+      preset = config.defaultAgency;
+      console.log(`[Wave] Using default agency: ${preset} (from .tycono/config.json)`);
+    } else {
+      preset = autoSelectPreset(COMPANY_ROOT, directive);
+      if (preset) {
+        console.log(`[Wave] Auto-selected agency: ${preset} (from directive keywords)`);
+      }
+    }
+  }
 
   // Always supervisor mode — CEO supervises C-Levels
   handleWaveSupervisor(directive, targetRoles, continuous, req, res, preset);
@@ -817,11 +879,14 @@ function handleWaveDirective(waveId: string, body: Record<string, unknown>, res:
   }
 
   if (!directive) {
-    jsonResponse(res, 404, { error: `No active supervisor for wave ${waveId}` });
+    jsonResponse(res, 404, { error: `No active supervisor for wave ${waveId}. The wave may have been cleaned up.` });
     return;
   }
 
-  jsonResponse(res, 200, { directive });
+  // Provide status context so caller knows what's happening
+  const state = supervisorHeartbeat.getState(waveId);
+  const status = state?.status ?? 'unknown';
+  jsonResponse(res, 200, { directive, supervisorStatus: status });
 }
 
 /* ─── POST /api/waves/:waveId/question ──────── */

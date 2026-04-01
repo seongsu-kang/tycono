@@ -274,6 +274,24 @@ class ExecutionManager {
       ...(execution.ports.hmr && { VITE_HMR_PORT: String(execution.ports.hmr) }),
     } : {};
 
+    // Handoff summary: collect prior dispatch results for this wave
+    const priorDispatches: Array<{ roleId: string; task: string; result: string }> = [];
+    const execSession = getSession(params.sessionId);
+    if (execSession?.waveId) {
+      for (const [, exec] of this.executions) {
+        if (exec.status === 'done' && exec.result && exec.sessionId !== params.sessionId) {
+          const s = getSession(exec.sessionId);
+          if (s?.waveId === execSession.waveId) {
+            priorDispatches.push({
+              roleId: exec.roleId,
+              task: exec.task,
+              result: exec.result.output?.slice(0, 500) ?? '',
+            });
+          }
+        }
+      }
+    }
+
     const handle = this.runner.execute(
       {
         companyRoot: COMPANY_ROOT,
@@ -291,6 +309,7 @@ class ExecutionManager {
         codeRoot: resolveCodeRoot(COMPANY_ROOT),
         attachments: params.attachments,
         cliSessionId: params.cliSessionId,
+        priorDispatches,
         env: {
           ...process.env,
           ...portEnv,
@@ -494,6 +513,21 @@ class ExecutionManager {
             timestamp: Date.now(),
           });
           sendApprovalNotification(params.roleId, approvalQuestion);
+
+          // BUG-APPROVAL belt-and-suspenders: directly notify supervisor (don't rely solely on stream)
+          // This ensures approval state is set even if stream watcher was lost (e.g., stream closed by cleanup)
+          if (params.roleId === 'ceo') {
+            const session = getSession(execution.sessionId);
+            if (session?.waveId) {
+              import('./supervisor-heartbeat.js').then(({ supervisorHeartbeat }) => {
+                const state = supervisorHeartbeat.getState(session.waveId!);
+                if (state && state.status !== 'awaiting_approval') {
+                  console.log(`[Approval] Direct supervisor notification: wave ${session.waveId} → awaiting_approval`);
+                  state.status = 'awaiting_approval';
+                }
+              }).catch(() => { /* avoid circular import crash */ });
+            }
+          }
         }
 
         if (hardLimitReached) {
@@ -567,6 +601,20 @@ class ExecutionManager {
             this.finalizeSessionMessage(execution, 'done', result);
           }
 
+          // Emit dispatch:done on parent's stream (monni VOC: parent needs completion signal)
+          if (params.parentSessionId) {
+            const parentExec = this.getActiveExecution(params.parentSessionId);
+            if (parentExec) {
+              parentExec.stream.emit('dispatch:done', parentExec.roleId, {
+                targetRoleId: params.roleId,
+                childSessionId: params.sessionId,
+                output: result.output.slice(-1000),
+                turns: result.turns,
+                tokens: result.totalTokens,
+              });
+            }
+          }
+
           if (!params.parentSessionId && result) {
             const totalTokens = (result.totalTokens?.input ?? 0) + (result.totalTokens?.output ?? 0);
             const bonus = Math.min(2000, Math.max(500, Math.round(totalTokens / 500)));
@@ -632,11 +680,18 @@ class ExecutionManager {
 
         // OOM prevention: remove completed execution from memory after delay
         // (delay allows getActiveExecution to find it briefly for multiplexer/recovery)
+        // BUG-APPROVAL fix: Don't close stream if a continuation is running on the same session
+        // (closing the stream kills watcher subscribers, breaking supervisor event delivery)
         setTimeout(() => {
           this.executions.delete(execution.id);
-          // Also close the ActivityStream to free subscribers + file handles
-          execution.stream.close();
-        }, 30_000).unref();
+          // Only close stream if no other active execution shares this session
+          const hasActiveSibling = [...this.executions.values()].some(
+            e => e.sessionId === execution.sessionId && e.id !== execution.id && (e.status === 'running' || e.status === 'awaiting_input'),
+          );
+          if (!hasActiveSibling) {
+            execution.stream.close();
+          }
+        }, 300_000).unref(); // 5 min — prevents HTTP 410 on dispatch --check
       });
   }
 
@@ -843,6 +898,19 @@ Your job: monitor progress, course-correct if needed, wait for completion, then 
     return this.recoverExecutionFromStream(sessionId);
   }
 
+  /** Find the latest completed execution for a session (for auto-amend lookup) */
+  getCompletedExecution(sessionId: string): { task: string; cliSessionId?: string } | undefined {
+    let latest: Execution | undefined;
+    for (const exec of this.executions.values()) {
+      if (exec.sessionId === sessionId && exec.status === 'done') {
+        if (!latest || exec.createdAt > latest.createdAt) {
+          latest = exec;
+        }
+      }
+    }
+    return latest ? { task: latest.task, cliSessionId: latest.cliSessionId } : undefined;
+  }
+
   listExecutions(filter?: { status?: ExecStatus; roleId?: string; active?: boolean }): Array<{
     id: string;
     type: ExecType;
@@ -1032,7 +1100,7 @@ Your job: monitor progress, course-correct if needed, wait for completion, then 
         setTimeout(() => {
           this.executions.delete(execution.id);
           execution.stream.close();
-        }, 30_000).unref();
+        }, 300_000).unref(); // 5 min — prevents HTTP 410 on dispatch --check
       }
 
       return execution;

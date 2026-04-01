@@ -1,4 +1,4 @@
-import { AnthropicProvider, type LLMProvider, type LLMMessage, type ToolResult, type MessageContent } from './llm-adapter.js';
+import { AnthropicProvider, type LLMProvider, type LLMMessage, type ToolResult, type MessageContent, type SystemPrompt } from './llm-adapter.js';
 import { type OrgTree, getSubordinates } from './org-tree.js';
 import { assembleContext, type TeamStatus } from './context-assembler.js';
 import { validateDispatch, validateConsult } from './authority-validator.js';
@@ -30,6 +30,7 @@ export interface AgentConfig {
   attachments?: ImageAttachment[];  // Image attachments for vision
   targetRoles?: string[];          // Selective dispatch scope
   presetId?: string;               // Wave-scoped preset for knowledge injection
+  priorDispatches?: Array<{ roleId: string; task: string; result: string }>;  // Handoff summary
   // Callbacks
   onText?: (text: string) => void;
   onToolExec?: (name: string, input: Record<string, unknown>) => void;
@@ -163,10 +164,31 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
   const llm = config.llm ?? new AnthropicProvider();
 
   // 1. Assemble context
-  const context = assembleContext(companyRoot, roleId, task, sourceRole, orgTree, { teamStatus: config.teamStatus, targetRoles: config.targetRoles, presetId: config.presetId });
+  const context = assembleContext(companyRoot, roleId, task, sourceRole, orgTree, { teamStatus: config.teamStatus, targetRoles: config.targetRoles, presetId: config.presetId, priorDispatches: config.priorDispatches });
 
   // Trace: capture assembled prompt for debugging
   config.onPromptAssembled?.(context.systemPrompt, task);
+
+  // Build cached system prompt from structured sections (for Anthropic prompt caching)
+  const cachedPrompt: SystemPrompt = (() => {
+    const blocks: Array<{ type: 'text'; text: string; cache_control?: { type: 'ephemeral' } }> = [];
+    let staticBuf = '';
+    for (const s of context.sections) {
+      if (s.cacheable) {
+        staticBuf += (staticBuf ? '\n\n---\n\n' : '') + s.text;
+      } else {
+        if (staticBuf) {
+          blocks.push({ type: 'text', text: staticBuf, cache_control: { type: 'ephemeral' } });
+          staticBuf = '';
+        }
+        blocks.push({ type: 'text', text: s.text });
+      }
+    }
+    if (staticBuf) {
+      blocks.push({ type: 'text', text: staticBuf, cache_control: { type: 'ephemeral' } });
+    }
+    return blocks.length > 0 ? blocks : context.systemPrompt;
+  })();
 
   // 2. Determine tools
   const subordinates = getSubordinates(orgTree, roleId);
@@ -221,6 +243,7 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
         sessionId: config.sessionId,
         model: config.model,
         tokenLedger: config.tokenLedger,
+        priorDispatches: dispatches, // Handoff: pass accumulated results to sub-agent
         onText: (text) => onText?.(`[${targetRoleId}] ${text}`),
         onToolExec,
       });
@@ -323,7 +346,7 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
     }
 
     // Call LLM
-    const response = await llm.chat(context.systemPrompt, messages, tools, abortSignal);
+    const response = await llm.chat(cachedPrompt, messages, tools, abortSignal);
     totalInput += response.usage.inputTokens;
     totalOutput += response.usage.outputTokens;
 
@@ -496,7 +519,7 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
         if (abortSignal?.aborted) break;
         turns++;
 
-        const supResponse = await llm.chat(context.systemPrompt, messages, tools, abortSignal);
+        const supResponse = await llm.chat(cachedPrompt, messages, tools, abortSignal);
         totalInput += supResponse.usage.inputTokens;
         totalOutput += supResponse.usage.outputTokens;
         config.tokenLedger?.record({
@@ -576,7 +599,7 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
 
       if (turns < maxTurns) {
         turns++;
-        const verifyResponse = await llm.chat(context.systemPrompt, messages, tools, abortSignal);
+        const verifyResponse = await llm.chat(cachedPrompt, messages, tools, abortSignal);
         totalInput += verifyResponse.usage.inputTokens;
         totalOutput += verifyResponse.usage.outputTokens;
         config.tokenLedger?.record({
@@ -622,7 +645,7 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
 
           if (turns < maxTurns) {
             turns++;
-            const summaryResponse = await llm.chat(context.systemPrompt, messages, tools, abortSignal);
+            const summaryResponse = await llm.chat(cachedPrompt, messages, tools, abortSignal);
             totalInput += summaryResponse.usage.inputTokens;
             totalOutput += summaryResponse.usage.outputTokens;
             config.tokenLedger?.record({
@@ -676,7 +699,7 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
         if (abortSignal?.aborted) break;
         turns++;
 
-        const postKResponse = await llm.chat(context.systemPrompt, messages, tools, abortSignal);
+        const postKResponse = await llm.chat(cachedPrompt, messages, tools, abortSignal);
         totalInput += postKResponse.usage.inputTokens;
         totalOutput += postKResponse.usage.outputTokens;
         config.tokenLedger?.record({
