@@ -7,9 +7,23 @@ AI Team Orchestration Engine
 
 <p align="center">
   <a href="https://www.npmjs.com/package/tycono"><img src="https://img.shields.io/npm/v/tycono.svg" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/tycono-server"><img src="https://img.shields.io/npm/v/tycono-server.svg" alt="server version" /></a>
   <a href="https://github.com/seongsu-kang/tycono/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/tycono.svg" alt="license" /></a>
-  <a href="https://www.npmjs.com/package/tycono"><img src="https://img.shields.io/node/v/tycono.svg" alt="node version" /></a>
 </p>
+
+### Real-World Results
+
+A crypto trading research team ran **13.5 hours of autonomous AI research** with zero human intervention:
+
+| Metric | Value |
+|--------|-------|
+| Duration | 13.5 hours, 0 human input |
+| Sessions | 174 agent sessions |
+| Hypotheses tested | 29 |
+| Cost | **$54 total ($2.5/hypothesis)** |
+| Critic catches | Prevented false-positive from reaching production |
+
+Cost comparison: Solo agent $50/task vs Tycono **$4/wave** (down from $1,342 during beta).
 
 ---
 
@@ -71,6 +85,34 @@ repeat     Until the wave is complete.
 ```
 
 Authority is enforced — engineers can't make CEO decisions, PMs can't merge code.
+
+---
+
+## Key Features (v0.1.0)
+
+### Auto-Amend — 70% cost reduction
+
+When a subordinate needs follow-up work, Tycono automatically continues the existing session instead of creating an expensive new one. A Haiku classifier decides whether each dispatch is a follow-up (amend) or genuinely new work (dispatch).
+
+### Dispatch Protocol
+
+Fire-and-forget async dispatch with real-time supervision. `dispatch:start` and `dispatch:done` events flow between parent and child sessions. Supervisors use heartbeat watch for progress monitoring.
+
+### Handoff Summary
+
+When the same role is re-dispatched, previous session results are automatically injected into the new context. No starting from scratch.
+
+### Prompt Caching
+
+System prompt sections are tagged as cacheable/dynamic. Static sections (role definition, skills, org structure) get `cache_control` for up to 90% input cost reduction on the Direct API runner.
+
+### Active Wave Guard
+
+Server shutdown checks for running waves before killing. Non-interactive environments block concurrent wave launches. Prevents data loss from accidental server kills.
+
+### Critic Role
+
+A Devil's Advocate role that challenges team conclusions. In production, a Critic caught a false-positive test result that would have been deployed, and blocked a diminishing-returns research loop.
 
 ---
 
