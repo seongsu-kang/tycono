@@ -1,0 +1,49 @@
+{
+  "name": "tycono-tui",
+  "version": "0.1.0",
+  "description": "Tycono Terminal UI — real-time AI team management in your terminal.",
+  "type": "module",
+  "bin": {
+    "tycono-tui": "./bin/tui.ts"
+  },
+  "files": [
+    "bin/",
+    "src/"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "tsx bin/tui.ts"
+  },
+  "dependencies": {
+    "ink": "^5.2.1",
+    "ink-select-input": "^6.2.0",
+    "ink-spinner": "^5.0.0",
+    "ink-text-input": "^6.0.0",
+    "react": "^18.3.1",
+    "yoga-layout": "3.1.0",
+    "tyconoforge": "^0.1.0-beta.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "react-devtools-core": "^4.28.5",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3"
+  },
+  "keywords": [
+    "ai",
+    "tycono",
+    "tui",
+    "terminal",
+    "ink",
+    "cli"
+  ],
+  "author": "Tycono <hello@tycono.ai>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/seongsu-kang/tycono.git",
+    "directory": "packages/tui"
+  }
+}
