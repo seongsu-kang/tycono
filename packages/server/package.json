@@ -1,6 +1,6 @@
 {
   "name": "tycono-server",
-  "version": "0.1.0-beta.8",
+  "version": "0.1.1-beta.0",
   "description": "Tycono AI team orchestration server. Dispatch, supervise, and observe AI agents working as a team.",
   "type": "module",
   "bin": {
@@ -15,7 +15,9 @@
     "node": ">=18"
   },
   "scripts": {
-    "start": "node bin/cli.js"
+    "start": "node bin/cli.js",
+    "dev": "tsx watch src/api/src/server.ts",
+    "test": "vitest run src/api/src/tests/smoke.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

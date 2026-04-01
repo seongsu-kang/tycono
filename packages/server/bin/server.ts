@@ -142,7 +142,7 @@ export async function main(args: string[]): Promise<void> {
   } catch {}
 
   // Start server
-  const { createHttpServer } = await import('../../src/api/src/create-server.js');
+  const { createHttpServer } = await import('../src/api/src/create-server.js');
   const server = createHttpServer();
 
   const host = process.env.HOST || '0.0.0.0';
@@ -161,7 +161,7 @@ export async function main(args: string[]): Promise<void> {
 
   const shutdown = async () => {
     try {
-      const { getActiveWaveCount } = await import('../../src/api/src/create-server.js');
+      const { getActiveWaveCount } = await import('../src/api/src/create-server.js');
       const activeCount = getActiveWaveCount();
 
       if (activeCount > 0 && !forceShutdown) {
