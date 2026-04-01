@@ -191,7 +191,7 @@ async function startServer(): Promise<void> {
   }
 
   // Import and start server
-  const { createHttpServer } = await import('../src/api/src/create-server.js');
+  const { createHttpServer } = await import('../packages/server/src/api/src/create-server.js');
   const server = createHttpServer();
 
   const host = process.env.HOST || '0.0.0.0';
@@ -258,13 +258,13 @@ async function startServerForTui(): Promise<void> {
     return true;
   }) as any;
 
-  const { createHttpServer } = await import('../src/api/src/create-server.js');
+  const { createHttpServer } = await import('../packages/server/src/api/src/create-server.js');
 
   // Startup orphan scan — mark stale 'active' sessions as interrupted
   // (server.ts does this for standalone mode, but TUI mode uses create-server directly)
   try {
-    const { listSessions, updateSession } = await import('../src/api/src/services/session-store.js');
-    const { ActivityStream } = await import('../src/api/src/services/activity-stream.js');
+    const { listSessions, updateSession } = await import('../packages/server/src/api/src/services/session-store.js');
+    const { ActivityStream } = await import('../packages/server/src/api/src/services/activity-stream.js');
     let orphaned = 0;
     for (const ses of listSessions()) {
       if (ses.status !== 'active') continue;
@@ -327,7 +327,7 @@ async function startServerForTui(): Promise<void> {
   // Graceful shutdown — mark active sessions as interrupted
   const shutdown = () => {
     try {
-      import('../src/api/src/services/session-store.js').then(({ listSessions, updateSession }) => {
+      import('../packages/server/src/api/src/services/session-store.js').then(({ listSessions, updateSession }) => {
         for (const ses of listSessions()) {
           if (ses.status === 'active') updateSession(ses.id, { status: 'interrupted' as any });
         }
@@ -353,7 +353,7 @@ async function startServerForTui(): Promise<void> {
   });
 
   // Start TUI — stdout.write is NOT intercepted, Ink has full control
-  const { startTui } = await import('../src/tui/index.tsx');
+  const { startTui } = await import('../packages/tui/src/index.tsx');
   await startTui({ port });
 }
 
@@ -392,7 +392,7 @@ export async function main(args: string[]): Promise<void> {
   // --attach: connect TUI to existing API server
   if (command === '--attach' || args.includes('--attach')) {
     const port = process.env.PORT ? Number(process.env.PORT) : 3000;
-    const { startTui } = await import('../src/tui/index.tsx');
+    const { startTui } = await import('../packages/tui/src/index.tsx');
     await startTui({ port });
     return;
   }
@@ -401,7 +401,7 @@ export async function main(args: string[]): Promise<void> {
   if (command === 'tui') {
     if (args.includes('--attach')) {
       const port = process.env.PORT ? Number(process.env.PORT) : 3000;
-      const { startTui } = await import('../src/tui/index.tsx');
+      const { startTui } = await import('../packages/tui/src/index.tsx');
       await startTui({ port });
       return;
     }

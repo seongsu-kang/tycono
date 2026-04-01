@@ -1,33 +1,36 @@
 {
   "name": "tycono",
   "version": "0.3.45-beta.1",
-  "description": "Build an AI company. Watch them work.",
+  "description": "Your AI team for solo builders. Run a full company with AI agents.",
   "type": "module",
   "bin": {
     "tycono": "./bin/cli.js"
   },
+  "workspaces": [
+    "packages/server",
+    "packages/pixel",
+    "packages/tui",
+    "packages/plugin"
+  ],
   "files": [
     "bin/",
-    "src/api/src/",
-    "src/api/package.json",
-    "src/shared/",
-    "src/tui/",
-    "src/web/dist/",
-    "templates/"
+    "packages/server/src/",
+    "packages/server/templates/",
+    "packages/server/bin/",
+    "packages/tui/src/",
+    "packages/pixel/dist/"
   ],
   "engines": {
     "node": ">=18"
   },
   "scripts": {
     "dev": "npm run dev:api & npm run dev:web",
-    "dev:api": "npm run dev --prefix src/api",
-    "dev:web": "npm run dev --prefix src/web",
-    "build": "npm run build:web && npm run build:forge",
-    "build:web": "npm run build --prefix src/web",
-    "build:forge": "cp node_modules/tyconoforge/dist/tyconoforge.js src/web/dist/tyconoforge.js",
+    "dev:api": "tsx watch packages/server/src/api/src/server.ts",
+    "dev:web": "npm run dev --prefix packages/pixel",
+    "build": "npm run build --prefix packages/pixel",
     "typecheck": "npm run typecheck:api && npm run typecheck:web",
-    "typecheck:api": "cd src/api && npx tsc --noEmit",
-    "typecheck:web": "cd src/web && npx tsc --noEmit",
+    "typecheck:api": "cd packages/server/src/api && npx tsc --noEmit",
+    "typecheck:web": "cd packages/pixel && npx tsc --noEmit",
     "start": "node bin/cli.js"
   },
   "dependencies": {
