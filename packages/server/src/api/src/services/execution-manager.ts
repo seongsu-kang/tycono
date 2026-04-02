@@ -348,7 +348,7 @@ class ExecutionManager {
             });
           }
         },
-        onDispatch: (subRoleId, subTask) => {
+        onDispatch: async (subRoleId, subTask) => {
           if (params.targetRoles && params.targetRoles.length > 0) {
             if (!params.targetRoles.includes(subRoleId)) {
               const errorMsg = `Dispatch to ${subRoleId} blocked — not in active target scope for this wave.`;
@@ -366,6 +366,32 @@ class ExecutionManager {
           // BUG-W02 fix: propagate waveId from parent session to child
           const parentSession = getSession(execution.sessionId);
           const parentWaveId = parentSession?.waveId;
+
+          // BUG-FORKBOMB: Role당 1세션 invariant — active/done 세션 있으면 amend
+          if (parentWaveId) {
+            const { decideDispatchOrAmend } = await import('./dispatch-classifier.js');
+            const decision = await decideDispatchOrAmend(parentWaveId, subRoleId, params.roleId, subTask);
+
+            if (decision.action === 'amend' && decision.prevSessionId) {
+              console.log(`[ExecMgr] AMEND instead of dispatch: ${subRoleId} → ${decision.prevSessionId} (${decision.reason})`);
+
+              if (decision.reason === 'role-already-active') {
+                // Active session — queue amendment
+                this.queueAmendment(decision.prevSessionId, `[FOLLOW-UP from ${params.roleId}] ${subTask}`);
+                return;
+              }
+
+              // Done session — continue
+              const amended = this.continueSession(
+                decision.prevSessionId,
+                `[FOLLOW-UP from ${params.roleId}] ${subTask}`,
+                params.roleId,
+              );
+              if (amended) return;
+              // continueSession failed — fall through to new dispatch
+              console.warn(`[ExecMgr] continueSession failed for ${decision.prevSessionId}, creating new session`);
+            }
+          }
 
           const childSession = createSession(subRoleId, {
             mode: 'do',
