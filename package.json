@@ -1,6 +1,6 @@
 {
   "name": "tycono",
-  "version": "0.3.45-beta.1",
+  "version": "0.3.45-beta.3",
   "description": "Your AI team for solo builders. Run a full company with AI agents.",
   "type": "module",
   "bin": {
@@ -14,7 +14,10 @@
   ],
   "files": [
     "bin/",
-    "packages/server/src/",
+    "packages/server/src/api/package.json",
+    "packages/server/src/api/src/",
+    "packages/server/src/core/",
+    "packages/server/src/shared/",
     "packages/server/templates/",
     "packages/server/bin/",
     "packages/tui/src/",
