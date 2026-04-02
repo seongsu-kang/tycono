@@ -843,11 +843,11 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
   const activeWaves = waveMultiplexer.getActiveWaves();
   if (activeWaves.length > 0) {
     const existingWave = activeWaves[0];
-    console.log(`[Wave] Active wave detected: ${existingWave.waveId}. Amending CEO instead of new wave.`);
+    console.log(`[Wave] Active wave detected: ${existingWave.id}. Amending CEO instead of new wave.`);
 
     // Find CEO session for existing wave
     const ceoSession = listSessions().find(
-      s => s.waveId === existingWave.waveId && s.roleId === 'ceo' && s.status === 'active',
+      s => s.waveId === existingWave.id && s.roleId === 'ceo' && s.status === 'active',
     );
 
     if (ceoSession) {
@@ -858,27 +858,27 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
       );
       if (amendedExec) {
         jsonResponse(res, 200, {
-          waveId: existingWave.waveId,
+          waveId: existingWave.id,
           sessionId: ceoSession.id,
           executionId: amendedExec.id,
           amended: true,
-          message: `Amended existing wave ${existingWave.waveId}`,
+          message: `Amended existing wave ${existingWave.id}`,
         });
         return;
       }
       // CEO is running — queue the amendment
       executionManager.queueAmendment(ceoSession.id, `[ADDITIONAL DIRECTIVE] ${directive}`);
       jsonResponse(res, 200, {
-        waveId: existingWave.waveId,
+        waveId: existingWave.id,
         sessionId: ceoSession.id,
         amended: true,
         queued: true,
-        message: `Amendment queued for active wave ${existingWave.waveId}`,
+        message: `Amendment queued for active wave ${existingWave.id}`,
       });
       return;
     }
     // No CEO session found — unusual, proceed with new wave
-    console.warn(`[Wave] Active wave ${existingWave.waveId} has no CEO session. Creating new wave.`);
+    console.warn(`[Wave] Active wave ${existingWave.id} has no CEO session. Creating new wave.`);
   }
 
   // Always supervisor mode — CEO supervises C-Levels
