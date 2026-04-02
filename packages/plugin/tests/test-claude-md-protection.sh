@@ -85,7 +85,7 @@ start_server_and_wait() {
   local dir="$1"
   local wait_secs="${2:-15}"
   cd "$dir"
-  npx tycono-server@0.1.1-beta.0 &
+  npx tycono-server@0.1.1-beta.1 &
   SERVER_PID=$!
   echo "  [INFO] Server started (PID=$SERVER_PID), waiting ${wait_secs}s..."
   sleep "$wait_secs"

@@ -400,7 +400,7 @@ if [[ -n "$TYCONO_BIN" ]] || command -v npx &>/dev/null; then
   if [[ -n "$TYCONO_BIN" ]]; then
     "$TYCONO_BIN" &
   else
-    npx tycono-server@0.1.1-beta.0 &
+    npx tycono-server@0.1.1-beta.1 &
   fi
   SERVER_PID=$!
 
