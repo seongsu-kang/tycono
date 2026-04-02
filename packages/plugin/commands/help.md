@@ -99,6 +99,42 @@ No need to poll `/tycono:tycono-status` — events come to you.
   { "defaultAgency": "your-agency-id" }
   ```
 
+## Headless / API Only Environment
+
+Plugin은 headless 서버에서도 동작합니다. **서버를 직접 띄울 필요 없음** — `/tycono`가 알아서 시작합니다.
+
+```
+# plugin만 설치하면 끝
+claude plugin install tycono
+
+# 바로 사용
+/tycono --agency research-discovery "가설 검증해"
+```
+
+서버 수동 관리가 필요할 때:
+```
+npx tycono-server@latest            # 서버만 시작 (headless)
+/tycono:tycono-status               # wave 상태 확인
+/tycono:tycono-cancel               # wave 중단
+```
+
+## Activity Streams (실시간 모니터링)
+
+각 role이 뭘 하는지 보려면:
+
+```bash
+# 파일로 직접 확인
+cat .tycono/activity-streams/ses-cto-*.jsonl | tail -5
+
+# SSE 스트림 구독 (실시간)
+curl -N http://localhost:{PORT}/api/waves/{WAVE_ID}/stream
+
+# 전체 active waves 조회
+curl http://localhost:{PORT}/api/waves/active
+```
+
+`/tycono:tycono-status`로도 요약을 볼 수 있습니다.
+
 ## Links
 
 - **Website**: [tycono.ai](https://tycono.ai)
