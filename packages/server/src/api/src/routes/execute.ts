@@ -356,7 +356,20 @@ async function handleStartJob(body: Record<string, unknown>, res: ServerResponse
           });
           return;
         }
-        // continueSession failed — fall through to new dispatch
+        // continueSession failed — if role is active, do NOT create new session (1-session invariant)
+        if (decision.reason === 'role-already-active') {
+          console.warn(`[Dispatch] ${roleId}: active session ${decision.prevSessionId} cannot be amended yet (running). Queued.`);
+          // Store as pending amendment on the session — will be processed when execution completes
+          executionManager.queueAmendment(decision.prevSessionId!, `[FOLLOW-UP from ${sourceRole}] ${task}`);
+          jsonResponse(res, 200, {
+            sessionId: decision.prevSessionId,
+            status: 'queued',
+            autoAmend: true,
+            reason: 'amendment-queued',
+          });
+          return;
+        }
+        // done session amend failed — fall through to new dispatch as last resort
         console.warn(`[AutoAmend] continueSession failed for ${decision.prevSessionId}, falling back to new dispatch`);
       }
     } catch (err) {
@@ -824,6 +837,48 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
         console.log(`[Wave] Auto-selected agency: ${preset} (from directive keywords)`);
       }
     }
+  }
+
+  // BUG-FORKBOMB: Check for active waves — amend existing CEO instead of creating new wave
+  const activeWaves = waveMultiplexer.getActiveWaves();
+  if (activeWaves.length > 0) {
+    const existingWave = activeWaves[0];
+    console.log(`[Wave] Active wave detected: ${existingWave.waveId}. Amending CEO instead of new wave.`);
+
+    // Find CEO session for existing wave
+    const ceoSession = listSessions().find(
+      s => s.waveId === existingWave.waveId && s.roleId === 'ceo' && s.status === 'active',
+    );
+
+    if (ceoSession) {
+      const amendedExec = executionManager.continueSession(
+        ceoSession.id,
+        `[ADDITIONAL DIRECTIVE] ${directive}`,
+        'user',
+      );
+      if (amendedExec) {
+        jsonResponse(res, 200, {
+          waveId: existingWave.waveId,
+          sessionId: ceoSession.id,
+          executionId: amendedExec.id,
+          amended: true,
+          message: `Amended existing wave ${existingWave.waveId}`,
+        });
+        return;
+      }
+      // CEO is running — queue the amendment
+      executionManager.queueAmendment(ceoSession.id, `[ADDITIONAL DIRECTIVE] ${directive}`);
+      jsonResponse(res, 200, {
+        waveId: existingWave.waveId,
+        sessionId: ceoSession.id,
+        amended: true,
+        queued: true,
+        message: `Amendment queued for active wave ${existingWave.waveId}`,
+      });
+      return;
+    }
+    // No CEO session found — unusual, proceed with new wave
+    console.warn(`[Wave] Active wave ${existingWave.waveId} has no CEO session. Creating new wave.`);
   }
 
   // Always supervisor mode — CEO supervises C-Levels

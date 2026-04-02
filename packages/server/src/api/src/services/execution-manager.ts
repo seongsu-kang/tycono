@@ -130,6 +130,7 @@ class ExecutionManager {
   private runner = createRunner();
   private nextId = 1;
   private executionCreatedListeners = new Set<(exec: Execution) => void>();
+  private pendingAmendments = new Map<string, string[]>(); // sessionId → queued tasks
 
   setRunner(newRunner: ExecutionRunner): void {
     this.runner = newRunner;
@@ -775,6 +776,11 @@ class ExecutionManager {
     if (session.roleId !== 'ceo' || session.source !== 'wave') {
       updateSession(execution.sessionId, { status: 'done' });
     }
+
+    // Process queued amendments (BUG-FORKBOMB: role당 1세션 invariant)
+    if (status === 'done') {
+      this.processPendingAmendments(execution.sessionId);
+    }
   }
 
   private cleanupOrphanedChildren(parentSessionId: string): void {
@@ -1019,6 +1025,37 @@ Your job: monitor progress, course-correct if needed, wait for completion, then 
     });
 
     return newExec;
+  }
+
+  /**
+   * Queue an amendment for a running session.
+   * Will be processed when the current execution completes.
+   */
+  queueAmendment(sessionId: string, task: string): void {
+    const queue = this.pendingAmendments.get(sessionId) ?? [];
+    queue.push(task);
+    this.pendingAmendments.set(sessionId, queue);
+    console.log(`[Dispatch] Queued amendment for ${sessionId} (${queue.length} pending)`);
+  }
+
+  /**
+   * Process pending amendments after execution completes.
+   * Called from finalization logic.
+   */
+  processPendingAmendments(sessionId: string): void {
+    const queue = this.pendingAmendments.get(sessionId);
+    if (!queue || queue.length === 0) return;
+
+    const task = queue.shift()!;
+    if (queue.length === 0) {
+      this.pendingAmendments.delete(sessionId);
+    }
+
+    console.log(`[Dispatch] Processing queued amendment for ${sessionId} (${queue.length} remaining)`);
+    // Use setTimeout to avoid recursive call stack during finalization
+    setTimeout(() => {
+      this.continueSession(sessionId, task);
+    }, 100);
   }
 
   getActiveExecutionForRole(roleId: string): Execution | undefined {

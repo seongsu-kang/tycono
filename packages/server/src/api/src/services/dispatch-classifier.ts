@@ -1,14 +1,18 @@
 /**
- * dispatch-classifier.ts — Haiku 기반 dispatch vs amend 판단
+ * dispatch-classifier.ts — Role당 1세션 Invariant
  *
- * 같은 wave 내에서 같은 role에 재dispatch 시,
- * Haiku가 "follow-up(amend)" vs "new scope(dispatch)" 판단.
- * 판단 결과를 JSONL에 기록하여 데이터 축적.
+ * Dispatch 시 같은 wave 내 같은 role의 기존 세션을 찾아:
+ * - active → amend (기존 세션에 추가 지시)
+ * - done → amend (이어서 작업)
+ * - error N회 → new (fresh start)
+ * - 없음 → new (첫 생성)
+ *
+ * Haiku classifier 제거 — deterministic 판단.
+ * BUG-FORKBOMB: CEO 무한 dispatch 루프 구조적 차단.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { COMPANY_ROOT } from './file-reader.js';
-import { readConfig } from './company-config.js';
 import { listSessions } from './session-store.js';
 import { executionManager } from './execution-manager.js';
 
@@ -19,95 +23,71 @@ export interface DispatchDecision {
   waveId: string;
   roleId: string;
   sourceRole: string;
-  prevTask: string;
   newTask: string;
   prevSessionId: string;
   decision: 'amend' | 'new';
   reason: string;
-  haiku: boolean;
 }
 
-/* ─── Haiku Classification ────────────── */
+/* ─── Constants ──────────────────────── */
 
-const CLASSIFY_SYSTEM = `You are a dispatch classifier for an AI team orchestration system.
+const ERROR_THRESHOLD = 3; // error 3회 초과 시 fresh session 허용
 
-Given a previous task and a new task for the SAME role in the SAME wave, decide:
-- A = AMEND (follow-up on same work — fix, refine, iterate on previous output)
-- N = NEW (genuinely different scope — unrelated to previous work)
-
-Examples:
-- prev: "fix token mapping", new: "Critic found bug in token mapping, fix it" → A
-- prev: "build grid system", new: "add sound effects" → N
-- prev: "implement battle system", new: "QA found bugs in battle, fix" → A
-- prev: "write API endpoints", new: "design database schema" → N
-
-Reply with ONLY "A" or "N".`;
-
-export async function classifyDispatch(
-  prevTask: string,
-  newTask: string,
-): Promise<'amend' | 'new'> {
-  try {
-    const config = readConfig(COMPANY_ROOT);
-    const engine = config.engine || process.env.EXECUTION_ENGINE || 'claude-cli';
-
-    const userMsg = `Previous task: ${prevTask.slice(0, 300)}\nNew task: ${newTask.slice(0, 300)}`;
-
-    if (engine === 'claude-cli') {
-      const { ClaudeCliProvider } = await import('../engine/llm-adapter.js');
-      const provider = new ClaudeCliProvider({ model: 'claude-haiku-4-5-20251001' });
-      const response = await provider.chat(CLASSIFY_SYSTEM, [{ role: 'user', content: userMsg }]);
-      const textBlock = response.content.find((c) => c.type === 'text') as { type: 'text'; text: string } | undefined;
-      const reply = textBlock?.text?.trim() ?? '';
-      return reply === 'A' ? 'amend' : 'new';
-    } else if (process.env.ANTHROPIC_API_KEY) {
-      const Anthropic = (await import('@anthropic-ai/sdk')).default;
-      const client = new Anthropic();
-      const response = await client.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1,
-        system: CLASSIFY_SYSTEM,
-        messages: [{ role: 'user', content: userMsg }],
-      });
-      const reply = (response.content[0] as { type: 'text'; text: string }).text.trim();
-      return reply === 'A' ? 'amend' : 'new';
-    }
-  } catch (err) {
-    console.warn('[DispatchClassifier] Haiku classification failed, defaulting to new:', err);
-  }
-  return 'new'; // fallback: 판단 불가 시 안전하게 새 dispatch
-}
-
-/* ─── Previous Session Finder ─────────── */
+/* ─── Session Finder ─────────────────── */
 
 export interface PrevSessionInfo {
   sessionId: string;
   task: string;
+  status: string;
   cliSessionId?: string;
+}
+
+/**
+ * 같은 wave 내에서 같은 role의 active 세션을 찾는다.
+ */
+export function findActiveSession(waveId: string, roleId: string): PrevSessionInfo | null {
+  const session = listSessions().find(
+    s => s.waveId === waveId && s.roleId === roleId && (s.status === 'active' || s.status === 'awaiting_input'),
+  );
+  if (!session) return null;
+
+  const exec = executionManager.getActiveExecution(session.id);
+  return {
+    sessionId: session.id,
+    task: exec?.task ?? '',
+    status: session.status,
+    cliSessionId: exec?.cliSessionId,
+  };
 }
 
 /**
  * 같은 wave 내에서 같은 role의 가장 최근 done 세션을 찾는다.
  */
 export function findPrevDoneSession(waveId: string, roleId: string): PrevSessionInfo | null {
-  // execution-manager에서 done 상태 세션 검색
   const sessions = listSessions().filter(
-    s => s.waveId === waveId && s.roleId === roleId && s.status === 'closed',
+    s => s.waveId === waveId && s.roleId === roleId && (s.status === 'done' || s.status === 'closed'),
   );
 
   if (sessions.length === 0) return null;
 
-  // 가장 최근 세션
   const latest = sessions[sessions.length - 1];
-
-  // execution에서 task와 cliSessionId 가져오기
   const exec = executionManager.getCompletedExecution(latest.id);
 
   return {
     sessionId: latest.id,
     task: exec?.task ?? '',
+    status: latest.status,
     cliSessionId: exec?.cliSessionId,
   };
+}
+
+/**
+ * 같은 wave 내에서 같은 role의 error 세션 수를 센다.
+ */
+function countErrorSessions(waveId: string, roleId: string): number {
+  return listSessions().filter(
+    s => s.waveId === waveId && s.roleId === roleId && s.status === 'error',
+  ).length;
 }
 
 /* ─── Decision Logger ─────────────────── */
@@ -132,14 +112,13 @@ export interface AutoAmendResult {
 }
 
 /**
- * dispatch 요청 시 auto-amend 여부를 판단한다.
+ * dispatch 요청 시 기존 세션 reuse 여부를 deterministic하게 판단.
  *
- * 조건:
- * 1. waveId가 있어야 함 (wave 내 dispatch만)
- * 2. 같은 role의 이전 done 세션이 있어야 함
- * 3. 이전 세션이 error가 아니어야 함
- * 4. 이전 세션이 현재 running이 아니어야 함 (병렬 dispatch 보호)
- * 5. Haiku가 "follow-up"이라 판단해야 함
+ * Role당 1세션 Invariant:
+ * 1. active 세션 있음 → amend (대기 후 추가 지시)
+ * 2. done 세션 있음 → amend (이어서)
+ * 3. error N회 초과 → new (fresh start)
+ * 4. 세션 없음 → new (첫 생성)
  */
 export async function decideDispatchOrAmend(
   waveId: string | undefined,
@@ -152,43 +131,49 @@ export async function decideDispatchOrAmend(
     return { action: 'new', reason: 'no-wave-context' };
   }
 
-  // Find previous done session for same role in same wave
+  // 1. Active session → amend (BUG-FORKBOMB fix: 기존에는 'new' 반환하여 fork bomb 유발)
+  const active = findActiveSession(waveId, roleId);
+  if (active) {
+    const decision: DispatchDecision = {
+      ts: new Date().toISOString(),
+      waveId, roleId, sourceRole, newTask: newTask.slice(0, 200),
+      prevSessionId: active.sessionId,
+      decision: 'amend', reason: 'role-already-active',
+    };
+    logDecision(decision);
+    console.log(`[Dispatch] ${roleId}: AMEND (active session ${active.sessionId})`);
+    return { action: 'amend', prevSessionId: active.sessionId, reason: 'role-already-active' };
+  }
+
+  // 2. Done session → amend (이어서 작업)
   const prev = findPrevDoneSession(waveId, roleId);
-  if (!prev) {
-    return { action: 'new', reason: 'no-prev-session' };
+  if (prev) {
+    // 2a. Error threshold 체크: error가 많으면 fresh start
+    const errorCount = countErrorSessions(waveId, roleId);
+    if (errorCount >= ERROR_THRESHOLD) {
+      const decision: DispatchDecision = {
+        ts: new Date().toISOString(),
+        waveId, roleId, sourceRole, newTask: newTask.slice(0, 200),
+        prevSessionId: prev.sessionId,
+        decision: 'new', reason: `error-threshold-${errorCount}`,
+      };
+      logDecision(decision);
+      console.log(`[Dispatch] ${roleId}: NEW (${errorCount} errors >= ${ERROR_THRESHOLD} threshold)`);
+      return { action: 'new', reason: `error-threshold-${errorCount}` };
+    }
+
+    const decision: DispatchDecision = {
+      ts: new Date().toISOString(),
+      waveId, roleId, sourceRole, newTask: newTask.slice(0, 200),
+      prevSessionId: prev.sessionId,
+      decision: 'amend', reason: 'prev-session-done',
+    };
+    logDecision(decision);
+    console.log(`[Dispatch] ${roleId}: AMEND (done session ${prev.sessionId})`);
+    return { action: 'amend', prevSessionId: prev.sessionId, reason: 'prev-session-done' };
   }
 
-  // Check if there's a currently running session for this role (parallel dispatch protection)
-  // Check execution-level status for running (session status 'active' means has active execution)
-  const running = listSessions().find(
-    s => s.waveId === waveId && s.roleId === roleId && s.status === 'active',
-  );
-  if (running) {
-    return { action: 'new', reason: 'prev-session-running' };
-  }
-
-  // Haiku classification
-  const classification = await classifyDispatch(prev.task, newTask);
-
-  const decision: DispatchDecision = {
-    ts: new Date().toISOString(),
-    waveId,
-    roleId,
-    sourceRole,
-    prevTask: prev.task.slice(0, 200),
-    newTask: newTask.slice(0, 200),
-    prevSessionId: prev.sessionId,
-    decision: classification,
-    reason: classification === 'amend' ? 'haiku-follow-up' : 'haiku-new-scope',
-    haiku: true,
-  };
-  logDecision(decision);
-
-  console.log(`[AutoAmend] ${roleId}: ${classification.toUpperCase()} (prev=${prev.sessionId}, reason=${decision.reason})`);
-
-  return {
-    action: classification,
-    prevSessionId: classification === 'amend' ? prev.sessionId : undefined,
-    reason: decision.reason,
-  };
+  // 3. No session → new dispatch
+  console.log(`[Dispatch] ${roleId}: NEW (first dispatch in wave)`);
+  return { action: 'new', reason: 'no-prev-session' };
 }
