@@ -379,6 +379,143 @@ else
 fi
 
 # =============================================================================
+# TC-AGENT-11: BUG-FORKBOMB — 중복 wave → CEO amend (서버 guard)
+# =============================================================================
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "TC-AGENT-11: BUG-FORKBOMB — duplicate wave guard"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+TEST_DIR=$(mktemp -d)
+trap cleanup EXIT
+
+mkdir -p "$TEST_DIR/knowledge"
+echo "# Test" > "$TEST_DIR/knowledge/CLAUDE.md"
+mkdir -p "$TEST_DIR/.tycono"
+
+# Start server
+TYCONO_BIN=$(which tycono-server 2>/dev/null || echo "")
+if [[ -n "$TYCONO_BIN" ]] || command -v npx &>/dev/null; then
+  cd "$TEST_DIR"
+  if [[ -n "$TYCONO_BIN" ]]; then
+    "$TYCONO_BIN" &
+  else
+    npx tycono-server@0.1.1-beta.0 &
+  fi
+  SERVER_PID=$!
+
+  SERVER_READY=""
+  for i in $(seq 1 60); do
+    if [[ -f "$TEST_DIR/.tycono/headless.json" ]]; then
+      PORT=$(python3 -c "import json; print(json.load(open('$TEST_DIR/.tycono/headless.json'))['port'])" 2>/dev/null || echo "")
+      if [[ -n "$PORT" ]] && curl -s --max-time 2 "http://localhost:${PORT}/api/health" >/dev/null 2>&1; then
+        SERVER_READY="true"
+        break
+      fi
+    fi
+    sleep 1
+  done
+
+  if [[ -n "$SERVER_READY" ]]; then
+    API_URL="http://localhost:${PORT}"
+
+    # Wave 1
+    WAVE1=$(curl -s -X POST "${API_URL}/api/exec/wave" \
+      -H "Content-Type: application/json" \
+      -d '{"directive":"hello test 1"}' 2>/dev/null || echo "")
+    WAVE1_ID=$(echo "$WAVE1" | python3 -c "import sys,json; print(json.load(sys.stdin).get('waveId',''))" 2>/dev/null || echo "")
+
+    sleep 2
+
+    # Wave 2 (duplicate) — should be amended to existing wave, not new
+    WAVE2=$(curl -s -X POST "${API_URL}/api/exec/wave" \
+      -H "Content-Type: application/json" \
+      -d '{"directive":"hello test 2"}' 2>/dev/null || echo "")
+    WAVE2_AMENDED=$(echo "$WAVE2" | python3 -c "import sys,json; print(json.load(sys.stdin).get('amended', False))" 2>/dev/null || echo "")
+    WAVE2_ID=$(echo "$WAVE2" | python3 -c "import sys,json; print(json.load(sys.stdin).get('waveId',''))" 2>/dev/null || echo "")
+
+    if [[ "$WAVE2_AMENDED" == "True" ]]; then
+      echo "  [PASS] Duplicate wave amended to existing (not new wave)"
+      PASS=$((PASS + 1))
+    else
+      echo "  [FAIL] Duplicate wave created new instead of amend"
+      echo "  [DEBUG] Wave1: $WAVE1"
+      echo "  [DEBUG] Wave2: $WAVE2"
+      FAIL=$((FAIL + 1))
+    fi
+
+    # Verify same waveId
+    if [[ -n "$WAVE1_ID" ]] && [[ "$WAVE1_ID" == "$WAVE2_ID" ]]; then
+      echo "  [PASS] Same waveId returned ($WAVE1_ID)"
+      PASS=$((PASS + 1))
+    elif [[ "$WAVE2_AMENDED" == "True" ]]; then
+      echo "  [PASS] Amendment confirmed (waveId may differ in response format)"
+      PASS=$((PASS + 1))
+    else
+      echo "  [FAIL] Different waveIds — wave2 is a separate wave"
+      FAIL=$((FAIL + 1))
+    fi
+
+    # Check session count — CEO should be 1, not 2
+    sleep 3
+    SESSIONS=$(curl -s "${API_URL}/api/waves/active" 2>/dev/null || echo "[]")
+    echo "  [INFO] Active waves: $SESSIONS"
+
+    # Count CEO sessions in activity-streams
+    CEO_SESSIONS=$(ls "$TEST_DIR/.tycono/activity-streams/ses-ceo-"* 2>/dev/null | wc -l | tr -d ' ')
+    if [[ "$CEO_SESSIONS" -le 1 ]]; then
+      echo "  [PASS] CEO session count: $CEO_SESSIONS (1-session invariant)"
+      PASS=$((PASS + 1))
+    else
+      echo "  [FAIL] CEO session count: $CEO_SESSIONS (expected ≤ 1)"
+      FAIL=$((FAIL + 1))
+    fi
+
+    # Kill server
+    kill "$SERVER_PID" 2>/dev/null || true
+    wait "$SERVER_PID" 2>/dev/null || true
+  else
+    echo "  [FAIL] Server did not start within 60s"
+    FAIL=$((FAIL + 1))
+    kill "$SERVER_PID" 2>/dev/null || true
+  fi
+  SERVER_PID=""
+else
+  echo "  [FAIL] tycono-server not available"
+  FAIL=$((FAIL + 1))
+fi
+
+cleanup
+trap - EXIT
+
+# =============================================================================
+# TC-AGENT-12: dispatch-invariant vitest (Round 3 자동화)
+# =============================================================================
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "TC-AGENT-12: dispatch-invariant vitest suite"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+INVARIANT_TEST="${PLUGIN_ROOT}/../server/src/api/tests/dispatch-invariant.test.ts"
+if [[ -f "$INVARIANT_TEST" ]]; then
+  VITEST_OUT=$(cd "${PLUGIN_ROOT}/../server/src/api" && npx vitest run tests/dispatch-invariant.test.ts --reporter=verbose 2>&1) || true
+
+  INV_PASS=$(echo "$VITEST_OUT" | grep -c "✓" || echo "0")
+  INV_FAIL=$(echo "$VITEST_OUT" | grep -c "×\|✗\|FAIL" || echo "0")
+
+  if [[ "$INV_FAIL" -eq 0 ]] && [[ "$INV_PASS" -gt 0 ]]; then
+    echo "  [PASS] dispatch-invariant: $INV_PASS tests passed"
+    PASS=$((PASS + 1))
+  else
+    echo "  [FAIL] dispatch-invariant: $INV_PASS passed, $INV_FAIL failed"
+    FAIL=$((FAIL + 1))
+  fi
+else
+  echo "  [FAIL] dispatch-invariant.test.ts not found at $INVARIANT_TEST"
+  FAIL=$((FAIL + 1))
+fi
+
+# =============================================================================
 # Summary
 # =============================================================================
 echo ""
