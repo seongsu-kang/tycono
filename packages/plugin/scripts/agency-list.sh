@@ -59,10 +59,12 @@ if [[ -d "$LOCAL_DIR" ]]; then
   done
 fi
 
-# 2. Legacy (knowledge/agencies/) — backward compat
+# 2. Legacy (knowledge/agencies/) — backward compat, deprecated
 if [[ -d "$LEGACY_DIR" ]]; then
+  echo "  ⚠️  Agencies in knowledge/agencies/ are deprecated. Move to .tycono/agencies/"
+  echo ""
   for DIR in "$LEGACY_DIR"/*/; do
-    [[ -d "$DIR" ]] && show_agency "$DIR" "[project]"
+    [[ -d "$DIR" ]] && show_agency "$DIR" "[deprecated]"
   done
 fi
 

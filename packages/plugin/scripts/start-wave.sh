@@ -162,7 +162,7 @@ if [[ -z "$API_URL" ]]; then
   if [[ -z "$TYCONO_BIN" ]]; then
     # Use npx as fallback — @latest ensures the newest server features
     # (dispatch, 2-Layer Knowledge, etc.) without manual version bumps
-    npx tycono-server@0.1.0 &
+    npx tycono-server@0.1.1-beta.0 &
     SERVER_PID=$!
   else
     "$TYCONO_BIN" &
@@ -214,7 +214,7 @@ fi
 # --- Create Wave ---
 
 # Build JSON payload
-PAYLOAD_PARTS="\"directive\": $(python3 -c "import json; print(json.dumps('$DIRECTIVE'))")"
+PAYLOAD_PARTS="\"directive\": $(echo "$DIRECTIVE" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read().strip()))")"
 if [[ -n "$PRESET" ]]; then
   PAYLOAD_PARTS="$PAYLOAD_PARTS, \"preset\": \"$PRESET\""
 fi

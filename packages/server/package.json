@@ -8,8 +8,12 @@
   },
   "files": [
     "bin/",
-    "src/",
-    "templates/"
+    "src/api/package.json",
+    "src/api/src/",
+    "src/core/",
+    "src/shared/",
+    "templates/",
+    "presets/"
   ],
   "engines": {
     "node": ">=18"

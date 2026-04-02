@@ -85,7 +85,7 @@ start_server_and_wait() {
   local dir="$1"
   local wait_secs="${2:-15}"
   cd "$dir"
-  npx tycono-server@0.1.0-beta.6 &
+  npx tycono-server@0.1.1-beta.0 &
   SERVER_PID=$!
   echo "  [INFO] Server started (PID=$SERVER_PID), waiting ${wait_secs}s..."
   sleep "$wait_secs"
@@ -97,38 +97,35 @@ start_server_and_wait() {
 }
 
 # =============================================================================
-# TC-CLAUDE-1: 빈 디렉토리에서 서버 시작
+# TC-CLAUDE-1: Zero-footprint — server does NOT scaffold in empty directory
 # =============================================================================
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "TC-CLAUDE-1: Empty directory — server creates CLAUDE.md"
+echo "TC-CLAUDE-1: Zero-footprint — no scaffold in empty dir"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 TEST_DIR=$(mktemp -d)
 trap cleanup EXIT
 
-# Create .tycono/ so server recognizes as initialized
+# Create .tycono/ but NO knowledge/CLAUDE.md
 mkdir -p "$TEST_DIR/.tycono"
 
 start_server_and_wait "$TEST_DIR" 15
 
-# Assertions
-assert_file_exists "knowledge/CLAUDE.md created" "$TEST_DIR/knowledge/CLAUDE.md"
-
-if [[ -f "$TEST_DIR/knowledge/CLAUDE.md" ]]; then
-  CLAUDE_CONTENT=$(cat "$TEST_DIR/knowledge/CLAUDE.md")
-  assert_contains "CLAUDE.md has AKB Core Concept" "$CLAUDE_CONTENT" "AKB Core Concept"
+# Zero-footprint: server should NOT create knowledge/ or CLAUDE.md
+if [[ ! -f "$TEST_DIR/knowledge/CLAUDE.md" ]]; then
+  echo "  [PASS] knowledge/CLAUDE.md not created (zero-footprint)"
+  PASS=$((PASS + 1))
 else
-  echo "  [FAIL] Cannot check CLAUDE.md content — file missing"
+  echo "  [FAIL] knowledge/CLAUDE.md was created — violates zero-footprint"
   FAIL=$((FAIL + 1))
 fi
 
-# Check methodology doc installed
-if [[ -f "$TEST_DIR/knowledge/methodologies/agentic-knowledge-base.md" ]] || [[ -d "$TEST_DIR/knowledge/methodologies" ]]; then
-  echo "  [PASS] methodologies/ directory or agentic-knowledge-base.md installed"
+if [[ ! -d "$TEST_DIR/knowledge/roles" ]]; then
+  echo "  [PASS] knowledge/roles/ not created (zero-footprint)"
   PASS=$((PASS + 1))
 else
-  echo "  [FAIL] methodologies/ not found"
+  echo "  [FAIL] knowledge/roles/ was created — violates zero-footprint"
   FAIL=$((FAIL + 1))
 fi
 
@@ -173,12 +170,12 @@ assert_contains "AKB section appended (tycono:akb-guide marker)" "$CLAUDE_CONTEN
 assert_contains "Hub-First included" "$CLAUDE_CONTENT" "Hub-First"
 assert_contains "Anti-Patterns included" "$CLAUDE_CONTENT" "Anti-Patterns"
 
-# Check methodology doc installed
-if [[ -f "$TEST_DIR/knowledge/methodologies/agentic-knowledge-base.md" ]] || [[ -d "$TEST_DIR/knowledge/methodologies" ]]; then
+# Check methodology doc installed (server uses methodology/ singular or methodologies/ plural)
+if [[ -f "$TEST_DIR/knowledge/methodology/agentic-knowledge-base.md" ]] || [[ -f "$TEST_DIR/knowledge/methodologies/agentic-knowledge-base.md" ]]; then
   echo "  [PASS] methodology doc installed"
   PASS=$((PASS + 1))
 else
-  echo "  [FAIL] methodology doc not installed"
+  echo "  [FAIL] methodology doc not installed (checked both methodology/ and methodologies/)"
   FAIL=$((FAIL + 1))
 fi
 

@@ -61,7 +61,7 @@ if [[ ! "$NAME" =~ ^[a-z][a-z0-9-]*$ ]]; then
   exit 1
 fi
 
-AGENCIES_DIR="knowledge/agencies"
+AGENCIES_DIR=".tycono/agencies"
 AGENCY_DIR="${AGENCIES_DIR}/${NAME}"
 
 if [[ -d "$AGENCY_DIR" ]]; then

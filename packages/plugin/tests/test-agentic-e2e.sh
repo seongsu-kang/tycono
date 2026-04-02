@@ -311,7 +311,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "TC-AGENT-8: Continuous turn-1 storm guard (server code)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-SH_FILE="${PLUGIN_ROOT}/../../src/api/src/services/supervisor-heartbeat.ts"
+SH_FILE="${PLUGIN_ROOT}/../server/src/api/src/services/supervisor-heartbeat.ts"
 if [[ -f "$SH_FILE" ]]; then
   SH_CONTENT=$(cat "$SH_FILE")
   assert_contains "Turn-1 check exists" "$SH_CONTENT" "turns <= 1 && dispatches === 0"
@@ -320,8 +320,8 @@ if [[ -f "$SH_FILE" ]]; then
   # Verify the fix doesn't break normal continuous restart
   assert_contains "Normal continuous restart preserved" "$SH_CONTENT" "Continuous mode ON — restarting"
 else
-  echo "  [SKIP] supervisor-heartbeat.ts not found at expected path"
-  SKIP=$((SKIP + 1))
+  echo "  [FAIL] supervisor-heartbeat.ts not found at $SH_FILE"
+  FAIL=$((FAIL + 1))
 fi
 
 # =============================================================================
@@ -332,6 +332,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "TC-AGENT-9: CEO Critic CHALLENGE relay (server code)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
+# Reuse SH_FILE from TC-AGENT-8 (same file)
 if [[ -f "$SH_FILE" ]]; then
   SH_CONTENT=$(cat "$SH_FILE")
   assert_contains "Critic CHALLENGE relay section" "$SH_CONTENT" "Critic CHALLENGE Relay"
@@ -339,8 +340,8 @@ if [[ -f "$SH_FILE" ]]; then
   assert_contains "Re-amend on no response" "$SH_CONTENT" "did not address it"
   assert_contains "Detect CHALLENGE keywords" "$SH_CONTENT" "CHALLENGE, BLOCK, SNOWBALL"
 else
-  echo "  [SKIP] supervisor-heartbeat.ts not found"
-  SKIP=$((SKIP + 1))
+  echo "  [FAIL] supervisor-heartbeat.ts not found at $SH_FILE"
+  FAIL=$((FAIL + 1))
 fi
 
 # =============================================================================
@@ -351,7 +352,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "TC-AGENT-10: Server vitest suite"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-API_DIR="${PLUGIN_ROOT}/../../src/api"
+API_DIR="${PLUGIN_ROOT}/../server/src/api"
 if [[ -d "$API_DIR" ]] && [[ -f "$API_DIR/package.json" ]]; then
   VITEST_OUTPUT=$(cd "$API_DIR" && npx vitest run --reporter=verbose 2>&1) || true
 
@@ -373,8 +374,8 @@ if [[ -d "$API_DIR" ]] && [[ -f "$API_DIR/package.json" ]]; then
     FAIL=$((FAIL + 1))
   fi
 else
-  echo "  [SKIP] Server API directory not found"
-  SKIP=$((SKIP + 1))
+  echo "  [FAIL] Server API directory not found at $API_DIR"
+  FAIL=$((FAIL + 1))
 fi
 
 # =============================================================================
