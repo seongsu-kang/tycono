@@ -124,16 +124,15 @@ echo "TC-02: Agency Create"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 setup
-mkdir -p knowledge
 
 # 2a. Create a custom agency
 OUTPUT=$("$SCRIPTS_DIR/agency-create.sh" my-test-team --roles cto,engineer,qa 2>&1)
 EC=$?
 assert_exit_code "agency-create exits 0" 0 "$EC"
-assert_file_exists "agency.yaml created" "knowledge/agencies/my-test-team/agency.yaml"
+assert_file_exists "agency.yaml created" ".tycono/agencies/my-test-team/agency.yaml"
 
 # 2b. Validate content
-YAML_CONTENT=$(cat "knowledge/agencies/my-test-team/agency.yaml")
+YAML_CONTENT=$(cat ".tycono/agencies/my-test-team/agency.yaml")
 assert_contains "id is my-test-team" "$YAML_CONTENT" "id: my-test-team"
 assert_contains "cto role present" "$YAML_CONTENT" "cto"
 assert_contains "engineer role present" "$YAML_CONTENT" "engineer"
