@@ -252,7 +252,24 @@ class ExecutionManager {
       }
     }
 
-    const model = params.model ?? orgTree.nodes.get(params.roleId)?.model;
+    // Model resolution: params.model > wave modelOverrides > role.yaml
+    let model = params.model ?? orgTree.nodes.get(params.roleId)?.model;
+    if (!params.model) {
+      const session = getSession(params.sessionId);
+      if (session?.waveId) {
+        try {
+          const wavePath = path.join(COMPANY_ROOT, '.tycono', 'waves', `${session.waveId}.json`);
+          if (fs.existsSync(wavePath)) {
+            const waveData = JSON.parse(fs.readFileSync(wavePath, 'utf-8'));
+            const override = waveData.modelOverrides?.[params.roleId];
+            if (override) {
+              model = override;
+              console.log(`[ExecMgr] Model override for ${params.roleId}: ${override} (from wave ${session.waveId})`);
+            }
+          }
+        } catch { /* ignore */ }
+      }
+    }
 
     const config = readConfig(COMPANY_ROOT);
     const limits = getConversationLimits(config);

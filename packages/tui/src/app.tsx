@@ -22,7 +22,7 @@ import { useApi } from './hooks/useApi';
 import { useSSE } from './hooks/useSSE';
 import { useCommand, type WaveInfo } from './hooks/useCommand';
 import { dispatchWave, stopWave } from './api';
-import type { ActiveSessionInfo, PresetSummary } from './api';
+import type { ActiveSessionInfo, PresetSummary, WavePreview, RolePreview } from './api';
 import { buildOrgTree, flattenOrgRoleIds } from './store';
 
 type Mode = 'command' | 'panel';
@@ -243,6 +243,9 @@ export const App: React.FC = () => {
   const [pendingPresetSelect, setPendingPresetSelect] = useState<PresetSummary[] | null>(null);
   const selectedPresetRef = useRef<string | null>(null);
 
+  // Wave confirmation state (pre-dispatch preview)
+  const [pendingWaveConfirm, setPendingWaveConfirm] = useState<WavePreview | null>(null);
+
   // Terminal full height with resize tracking (minus 1 for wide-char overflow safety)
   const [termHeight, setTermHeight] = useState((process.stdout.rows || 30) - 1);
 
@@ -416,6 +419,29 @@ export const App: React.FC = () => {
   // Handle command submission from CommandMode
   const handleCommandSubmit = useCallback(async (input: string) => {
     // User input is already shown by CommandMode (immediate commit to Static)
+
+    // Wave confirmation mode: user confirms or cancels the preview
+    if (pendingWaveConfirm) {
+      const trimmed = input.trim().toLowerCase();
+      if (trimmed === 'n' || trimmed === 'no' || trimmed === 'cancel') {
+        setPendingWaveConfirm(null);
+        addSystemMessage('Wave cancelled.', 'gray');
+        return;
+      }
+      // Any other input (empty enter, 'y', 'yes', 'ok') → proceed
+      const preview = pendingWaveConfirm;
+      setPendingWaveConfirm(null);
+      try {
+        const waveResult = await dispatchWave(preview.directive || undefined, {
+          preset: preview.preset ?? undefined,
+          continuous: preview.continuous,
+        });
+        onWaveCreated(waveResult.waveId, preview.directive);
+      } catch (err) {
+        addSystemMessage(`Wave failed: ${err instanceof Error ? err.message : 'unknown'}`, 'red');
+      }
+      return;
+    }
 
     // Preset selection mode: user types a number to pick preset
     if (pendingPresetSelect) {
@@ -591,7 +617,7 @@ export const App: React.FC = () => {
       case 'help':
         addSystemMessage('Type naturally to talk to your AI team.', 'cyan');
         addSystemMessage('Commands:', 'cyan');
-        addSystemMessage('  /new [text]          Create new wave', 'white');
+        addSystemMessage('  /new [text]          Create new wave (shows preview first)', 'white');
         addSystemMessage('  /waves               List all waves', 'white');
         addSystemMessage('  /focus <n>           Switch to wave n', 'white');
         addSystemMessage('  /stop                Stop current wave execution', 'white');
@@ -605,7 +631,13 @@ export const App: React.FC = () => {
         addSystemMessage('  /preset list         Installed presets', 'white');
         addSystemMessage('  /help                This help', 'white');
         addSystemMessage('  /quit                Exit', 'white');
-        addSystemMessage('Keys: [Tab] team panel  [1-9] wave  [Esc] back  [Ctrl+C] quit', 'gray');
+        addSystemMessage('', 'white');
+        addSystemMessage('Continuous mode:', 'cyan');
+        addSystemMessage('  Type "continuous: <directive>" to auto-restart after each round.', 'white');
+        addSystemMessage('  The wave runs until you /stop it. Cost accumulates per round.', 'white');
+        addSystemMessage('  Use /status to check elapsed time and cost.', 'white');
+        addSystemMessage('', 'white');
+        addSystemMessage('Keys: [Tab] team panel  [1-9] wave  [Esc] interrupt  [Ctrl+C] quit', 'gray');
         break;
       case 'info':
         if (result.message === '__status__') {
@@ -656,6 +688,46 @@ export const App: React.FC = () => {
         }
         break;
       }
+      case 'wave_preview': {
+        const preview = result.preview;
+        if (!preview) {
+          addSystemMessage('Preview unavailable. Dispatching directly...', 'yellow');
+          break;
+        }
+
+        // Format role tree
+        function formatRoleTree(roles: RolePreview[], indent = '  '): void {
+          for (let i = 0; i < roles.length; i++) {
+            const r = roles[i];
+            const isLast = i === roles.length - 1;
+            const prefix = indent === '  ' ? '  ' : `${indent}${isLast ? '\u2514' : '\u251C'} `;
+            const modelShort = r.model.replace('claude-', '').replace('-20250514', '');
+            addSystemMessage(`${prefix}${r.name} \u2192 ${modelShort}`, 'white');
+            if (r.children.length > 0) {
+              formatRoleTree(r.children, indent === '  ' ? '    ' : `${indent}${isLast ? '  ' : '\u2502 '}`);
+            }
+          }
+        }
+
+        addSystemMessage('\u250C\u2500 Wave Confirmation \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500', 'cyan');
+        addSystemMessage(`\u2502 Directive: ${preview.directive || '(empty)'}`, 'white');
+        if (preview.preset) {
+          const autoTag = preview.presetAutoDetected ? ' (auto-detected)' : '';
+          addSystemMessage(`\u2502 Preset:    ${preview.presetName ?? preview.preset}${autoTag}`, 'white');
+        }
+        if (preview.continuous) {
+          addSystemMessage(`\u2502 Mode:      \u26A0\uFE0F continuous (auto-restart until /stop)`, 'yellow');
+        }
+        addSystemMessage('\u2502', 'cyan');
+        addSystemMessage('\u2502 Team:', 'cyan');
+        formatRoleTree(preview.team);
+        addSystemMessage('\u2502', 'cyan');
+        addSystemMessage(`\u2502 Dispatch: ${preview.dispatchOrder}  Agents: ${preview.totalAgents}  Est. cost: ~$${preview.estimatedCostPerRound}/round`, 'gray');
+        addSystemMessage('\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500', 'cyan');
+        addSystemMessage('[Enter] dispatch  [n] cancel', 'gray');
+        setPendingWaveConfirm(preview);
+        break;
+      }
       case 'panel':
         break;
       case 'quit':
@@ -665,7 +737,7 @@ export const App: React.FC = () => {
           addSystemMessage(result.message, 'green');
         }
     }
-  }, [execute, addSystemMessage, addSystemLines, focusedWaveId, focusedWaveIndex, derivedWaveStatus, api.sessions.length, activeCount, waves, api.activeSessions, api.portSummary, pendingPresetSelect, onWaveCreated]);
+  }, [execute, addSystemMessage, addSystemLines, focusedWaveId, focusedWaveIndex, derivedWaveStatus, api.sessions.length, activeCount, waves, api.activeSessions, api.portSummary, pendingPresetSelect, pendingWaveConfirm, onWaveCreated]);
 
   // Global key handler: Tab/Escape mode toggle + Ctrl+C
   useInput((input, key) => {

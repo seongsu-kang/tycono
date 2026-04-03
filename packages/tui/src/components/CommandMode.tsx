@@ -291,6 +291,7 @@ const COMMANDS: Array<{ cmd: string; desc: string }> = [
   { cmd: '/preset list', desc: 'Installed presets' },
   { cmd: '/help', desc: 'Help' },
   { cmd: '/quit', desc: 'Exit' },
+  { cmd: 'continuous: <text>', desc: 'Auto-restart wave' },
 ];
 
 export const CommandMode: React.FC<CommandModeProps> = ({

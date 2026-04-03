@@ -133,10 +133,51 @@ export async function fetchExecStatus(): Promise<ExecStatus> {
   return fetchJson<ExecStatus>('/api/exec/status');
 }
 
+/* ─── Wave Preview (dry-run) ─── */
+
+export interface RolePreview {
+  roleId: string;
+  name: string;
+  level: string;
+  model: string;
+  children: RolePreview[];
+}
+
+export interface WavePreview {
+  directive: string;
+  preset: string | null;
+  presetName: string | null;
+  presetAutoDetected: boolean;
+  continuous: boolean;
+  team: RolePreview[];
+  totalAgents: number;
+  dispatchOrder: 'parallel' | 'sequential';
+  estimatedCostPerRound: number;
+  availableModels: string[];
+}
+
+export async function previewWave(directive?: string, options?: {
+  targetRoles?: string[];
+  continuous?: boolean;
+  preset?: string;
+}): Promise<WavePreview> {
+  return fetchJson<WavePreview>('/api/jobs/preview', {
+    method: 'POST',
+    body: {
+      type: 'wave',
+      directive: directive ?? '',
+      targetRoles: options?.targetRoles,
+      continuous: options?.continuous ?? false,
+      preset: options?.preset,
+    },
+  });
+}
+
 export async function dispatchWave(directive?: string, options?: {
   targetRoles?: string[];
   continuous?: boolean;
   preset?: string;
+  modelOverrides?: Record<string, string>;
 }): Promise<WaveResponse> {
   return fetchJson<WaveResponse>('/api/jobs', {
     method: 'POST',
@@ -146,6 +187,7 @@ export async function dispatchWave(directive?: string, options?: {
       targetRoles: options?.targetRoles,
       continuous: options?.continuous ?? false,
       preset: options?.preset,
+      modelOverrides: options?.modelOverrides,
     },
   });
 }

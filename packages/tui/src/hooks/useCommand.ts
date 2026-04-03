@@ -16,8 +16,8 @@
  */
 
 import { useCallback } from 'react';
-import { dispatchWave, sendDirective, stopWave, fetchJson, killSession, cleanupSessions, fetchActiveSessions, fetchPresets } from '../api';
-import type { PresetSummary } from '../api';
+import { dispatchWave, sendDirective, stopWave, fetchJson, killSession, cleanupSessions, fetchActiveSessions, fetchPresets, previewWave } from '../api';
+import type { PresetSummary, WavePreview } from '../api';
 
 export interface WaveInfo {
   waveId: string;
@@ -26,10 +26,11 @@ export interface WaveInfo {
 }
 
 export interface CommandResult {
-  type: 'success' | 'error' | 'info' | 'wave_started' | 'directive_sent' | 'stopped' | 'quit' | 'help' | 'panel' | 'waves_list' | 'focus_changed' | 'agents' | 'ports' | 'sessions' | 'cleanup' | 'docs' | 'read_file' | 'open_file' | 'preset_list' | 'preset_select';
+  type: 'success' | 'error' | 'info' | 'wave_started' | 'directive_sent' | 'stopped' | 'quit' | 'help' | 'panel' | 'waves_list' | 'focus_changed' | 'agents' | 'ports' | 'sessions' | 'cleanup' | 'docs' | 'read_file' | 'open_file' | 'preset_list' | 'preset_select' | 'wave_preview';
   message: string;
   waveId?: string;
   presets?: PresetSummary[];
+  preview?: WavePreview;
 }
 
 async function postAssign(roleId: string, task: string): Promise<{ waveId?: string }> {
@@ -92,15 +93,14 @@ export function useCommand(options: UseCommandOptions) {
             }
           }
           try {
-            const result = await dispatchWave(directive);
-            onWaveCreated(result.waveId, directive ?? '');
+            const preview = await previewWave(directive);
             return {
-              type: 'wave_started',
-              message: `Wave created`,
-              waveId: result.waveId,
+              type: 'wave_preview',
+              message: '',
+              preview,
             };
           } catch (err) {
-            return { type: 'error', message: `New wave failed: ${err instanceof Error ? err.message : 'unknown'}` };
+            return { type: 'error', message: `Preview failed: ${err instanceof Error ? err.message : 'unknown'}` };
           }
         }
 
@@ -218,17 +218,19 @@ export function useCommand(options: UseCommandOptions) {
         return { type: 'error', message: `Failed: ${err instanceof Error ? err.message : 'unknown'}` };
       }
     } else {
-      // No focused wave — create one with the directive
+      // No focused wave — preview before creating
+      // Check for "continuous:" prefix
+      const isContinuous = /^continuous:\s*/i.test(trimmed);
+      const directiveText = isContinuous ? trimmed.replace(/^continuous:\s*/i, '') : trimmed;
       try {
-        const result = await dispatchWave(trimmed);
-        onWaveCreated(result.waveId, trimmed);
+        const preview = await previewWave(directiveText, { continuous: isContinuous });
         return {
-          type: 'wave_started',
-          message: `Wave created`,
-          waveId: result.waveId,
+          type: 'wave_preview',
+          message: '',
+          preview,
         };
       } catch (err) {
-        return { type: 'error', message: `Wave failed: ${err instanceof Error ? err.message : 'unknown'}` };
+        return { type: 'error', message: `Preview failed: ${err instanceof Error ? err.message : 'unknown'}` };
       }
     }
   }, [focusedWaveId, waves, onWaveCreated, onFocusWave, onQuit, onShowPanel]);

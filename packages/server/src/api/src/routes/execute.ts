@@ -2,8 +2,9 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { COMPANY_ROOT } from '../services/file-reader.js';
-import { autoSelectPreset } from '../services/preset-loader.js';
+import { autoSelectPreset, getPresetById } from '../services/preset-loader.js';
 import { readConfig } from '../services/company-config.js';
+import { MODEL_PRICING } from '../services/pricing.js';
 // activity-tracker removed — executionManager is Single Source of Truth
 import { buildOrgTree, canDispatchTo, getSubordinates } from '../engine/org-tree.js';
 import { createRunner, type RunnerResult } from '../engine/runners/index.js';
@@ -162,6 +163,8 @@ export function handleExecRequest(req: IncomingMessage, res: ServerResponse): vo
     readBody(req).then((body) => handleSessionMessage(sessionMatch[1], body, req, res));
   } else if (method === 'POST' && url.endsWith('/assign')) {
     readBody(req).then((body) => handleAssign(body, req, res));
+  } else if (method === 'POST' && url.endsWith('/wave/preview')) {
+    readBody(req).then((body) => handleWavePreview(body, res));
   } else if (method === 'POST' && url.endsWith('/wave')) {
     readBody(req).then((body) => handleWave(body, req, res));
   } else if (method === 'GET' && url.endsWith('/status')) {
@@ -178,6 +181,12 @@ export function handleExecRequest(req: IncomingMessage, res: ServerResponse): vo
 
 function handleJobsRequest(url: string, method: string, req: IncomingMessage, res: ServerResponse): void {
   const [reqPath] = url.split('?');
+
+  // POST /api/jobs/preview — dry-run wave preview (no execution)
+  if (method === 'POST' && reqPath === '/api/jobs/preview') {
+    readBody(req).then((body) => handleWavePreview(body, res));
+    return;
+  }
 
   // POST /api/jobs — start a new execution (creates session + execution)
   if (method === 'POST' && reqPath === '/api/jobs') {
@@ -270,6 +279,7 @@ async function handleStartJob(body: Record<string, unknown>, res: ServerResponse
     const continuous = body.continuous === true;
     const preset = body.preset as string | undefined;
     const permissionMode = body.permissionMode as string | undefined;
+    const modelOverrides = body.modelOverrides as Record<string, string> | undefined;
 
     // Set permission mode for agent runners (auto = model-based safety, bypassPermissions = full access)
     if (permissionMode) {
@@ -284,6 +294,7 @@ async function handleStartJob(body: Record<string, unknown>, res: ServerResponse
         targetRoles && targetRoles.length > 0 ? targetRoles : undefined,
         continuous,
         preset,
+        modelOverrides,
       );
 
       if (state.status === 'error') {
@@ -811,6 +822,101 @@ function handleAssign(body: Record<string, unknown>, req: IncomingMessage, res: 
   });
 }
 
+/* ─── POST /api/exec/wave/preview ────────────── */
+
+function handleWavePreview(body: Record<string, unknown>, res: ServerResponse): void {
+  const directive = (body.directive as string) ?? '';
+  const targetRoles = body.targetRoles as string[] | undefined;
+  const continuous = body.continuous === true;
+  let preset = body.preset as string | undefined;
+
+  // Resolve preset (same logic as handleWave)
+  if (!preset) {
+    const config = readConfig(COMPANY_ROOT);
+    if (config.defaultAgency) {
+      preset = config.defaultAgency;
+    } else if (directive) {
+      preset = autoSelectPreset(COMPANY_ROOT, directive);
+    }
+  }
+
+  // Build org tree to determine team composition
+  const orgTree = buildOrgTree(COMPANY_ROOT, preset);
+  const ceoNode = orgTree.nodes.get('ceo');
+  const cLevelIds = ceoNode?.children ?? [];
+
+  // Filter by targetRoles if specified
+  const activeCLevels = targetRoles
+    ? cLevelIds.filter(id => targetRoles.includes(id))
+    : cLevelIds;
+
+  // Build team tree with models
+  interface RolePreview {
+    roleId: string;
+    name: string;
+    level: string;
+    model: string;
+    children: RolePreview[];
+  }
+
+  function buildRolePreview(roleId: string): RolePreview | null {
+    const node = orgTree.nodes.get(roleId);
+    if (!node) return null;
+    const children = (node.children ?? [])
+      .filter(id => !targetRoles || targetRoles.includes(id))
+      .map(id => buildRolePreview(id))
+      .filter((r): r is RolePreview => r !== null);
+    return {
+      roleId: node.id,
+      name: node.name,
+      level: node.level,
+      model: node.model ?? 'claude-sonnet-4-5',
+      children,
+    };
+  }
+
+  const team = activeCLevels.map(id => buildRolePreview(id)).filter((r): r is RolePreview => r !== null);
+
+  // Count total agents
+  function countRoles(roles: RolePreview[]): number {
+    return roles.reduce((sum, r) => sum + 1 + countRoles(r.children), 0);
+  }
+  const totalAgents = countRoles(team);
+
+  // Estimate cost per round (rough: ~50K input + ~5K output per agent per round)
+  const AVG_INPUT = 50_000;
+  const AVG_OUTPUT = 5_000;
+  function estimateRoleCost(role: RolePreview): number {
+    const pricing = MODEL_PRICING[role.model] ?? MODEL_PRICING['claude-sonnet-4-5'] ?? { inputPer1M: 3, outputPer1M: 15 };
+    const self = (AVG_INPUT * pricing.inputPer1M / 1_000_000) + (AVG_OUTPUT * pricing.outputPer1M / 1_000_000);
+    return self + role.children.reduce((sum, c) => sum + estimateRoleCost(c), 0);
+  }
+  const estimatedCostPerRound = team.reduce((sum, r) => sum + estimateRoleCost(r), 0);
+
+  // Determine dispatch order
+  const dispatchOrder = activeCLevels.length > 1 ? 'parallel' : 'sequential';
+
+  // Preset info
+  let presetName: string | undefined;
+  if (preset) {
+    const loaded = getPresetById(COMPANY_ROOT, preset);
+    presetName = loaded?.definition.name;
+  }
+
+  jsonResponse(res, 200, {
+    directive,
+    preset: preset ?? null,
+    presetName: presetName ?? null,
+    presetAutoDetected: !body.preset && !!preset,
+    continuous,
+    team,
+    totalAgents,
+    dispatchOrder,
+    estimatedCostPerRound: Math.round(estimatedCostPerRound * 100) / 100,
+    availableModels: Object.keys(MODEL_PRICING),
+  });
+}
+
 /* ─── POST /api/exec/wave ────────────────────── */
 
 function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: ServerResponse): void {
@@ -881,21 +987,24 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
     console.warn(`[Wave] Active wave ${existingWave.id} has no CEO session. Creating new wave.`);
   }
 
+  const modelOverrides = body.modelOverrides as Record<string, string> | undefined;
+
   // Always supervisor mode — CEO supervises C-Levels
-  handleWaveSupervisor(directive, targetRoles, continuous, req, res, preset);
+  handleWaveSupervisor(directive, targetRoles, continuous, req, res, preset, modelOverrides);
 }
 
 /**
  * Supervisor mode: Start a single CEO Supervisor session that dispatches C-Levels.
  * The supervisor uses dispatch/watch/amend tools — same pattern as any supervisor node.
  */
-function handleWaveSupervisor(directive: string, targetRoles: string[] | undefined, continuous: boolean, req: IncomingMessage, res: ServerResponse, preset?: string): void {
+function handleWaveSupervisor(directive: string, targetRoles: string[] | undefined, continuous: boolean, req: IncomingMessage, res: ServerResponse, preset?: string, modelOverrides?: Record<string, string>): void {
   const state = supervisorHeartbeat.start(
     `wave-${Date.now()}`,
     directive,
     targetRoles && targetRoles.length > 0 ? targetRoles : undefined,
     continuous,
     preset,
+    modelOverrides,
   );
 
   if (state.status === 'error') {

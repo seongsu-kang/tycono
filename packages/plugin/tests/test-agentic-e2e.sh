@@ -40,9 +40,20 @@ assert_contains() {
 }
 
 cleanup() {
+  # Kill server process GROUP (not just the parent PID)
+  # npx spawns child node processes that survive a plain `kill $PID`
   if [[ -n "$SERVER_PID" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
-    kill "$SERVER_PID" 2>/dev/null || true
+    # Kill entire process group rooted at SERVER_PID
+    kill -- -"$SERVER_PID" 2>/dev/null || kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
+  fi
+  # Also kill any server spawned via headless.json in TEST_DIR
+  if [[ -n "$TEST_DIR" ]] && [[ -f "$TEST_DIR/.tycono/headless.json" ]]; then
+    local hpid
+    hpid=$(python3 -c "import json; print(json.load(open('$TEST_DIR/.tycono/headless.json')).get('pid',''))" 2>/dev/null || echo "")
+    if [[ -n "$hpid" ]] && kill -0 "$hpid" 2>/dev/null; then
+      kill -- -"$hpid" 2>/dev/null || kill "$hpid" 2>/dev/null || true
+    fi
   fi
   SERVER_PID=""
   if [[ -n "$TEST_DIR" ]] && [[ -d "$TEST_DIR" ]]; then
@@ -126,7 +137,7 @@ assert_contains "wave ID in output" "$RESULT" "wave-"
 if [[ -f "$TEST_DIR/.tycono/headless.json" ]]; then
   SERVER_PID=$(python3 -c "import json; d=json.load(open('$TEST_DIR/.tycono/headless.json')); print(d.get('pid',''))" 2>/dev/null || true)
   if [[ -n "$SERVER_PID" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
-    kill "$SERVER_PID" 2>/dev/null || true
+    kill -- -"$SERVER_PID" 2>/dev/null || kill "$SERVER_PID" 2>/dev/null || true
   fi
   SERVER_PID=""
 fi
@@ -271,7 +282,7 @@ if [[ -n "$TYCONO_BIN" ]] || command -v npx &>/dev/null; then
     fi
 
     # Test 2: kill server, check start-wave.sh detects stale headless.json
-    kill "$SERVER_PID" 2>/dev/null || true
+    kill -- -"$SERVER_PID" 2>/dev/null || kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
     sleep 2
 
@@ -292,7 +303,7 @@ if [[ -n "$TYCONO_BIN" ]] || command -v npx &>/dev/null; then
   else
     echo "  [SKIP] Server did not start within 60s"
     SKIP=$((SKIP + 1))
-    kill "$SERVER_PID" 2>/dev/null || true
+    kill -- -"$SERVER_PID" 2>/dev/null || kill "$SERVER_PID" 2>/dev/null || true
   fi
   SERVER_PID=""
 else
@@ -472,12 +483,12 @@ if [[ -n "$TYCONO_BIN" ]] || command -v npx &>/dev/null; then
     fi
 
     # Kill server
-    kill "$SERVER_PID" 2>/dev/null || true
+    kill -- -"$SERVER_PID" 2>/dev/null || kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
   else
     echo "  [FAIL] Server did not start within 60s"
     FAIL=$((FAIL + 1))
-    kill "$SERVER_PID" 2>/dev/null || true
+    kill -- -"$SERVER_PID" 2>/dev/null || kill "$SERVER_PID" 2>/dev/null || true
   fi
   SERVER_PID=""
 else
@@ -512,6 +523,169 @@ if [[ -f "$INVARIANT_TEST" ]]; then
   fi
 else
   echo "  [FAIL] dispatch-invariant.test.ts not found at $INVARIANT_TEST"
+  FAIL=$((FAIL + 1))
+fi
+
+# =============================================================================
+# TC-AGENT-13: Wave Preview API (server code check)
+# =============================================================================
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "TC-AGENT-13: Wave Preview API (server code check)"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+EXEC_FILE="${PLUGIN_ROOT}/../server/src/api/src/routes/execute.ts"
+if [[ -f "$EXEC_FILE" ]]; then
+  EXEC_CONTENT=$(cat "$EXEC_FILE")
+  assert_contains "handleWavePreview function exists" "$EXEC_CONTENT" "handleWavePreview"
+  assert_contains "/api/jobs/preview route exists" "$EXEC_CONTENT" "/api/jobs/preview"
+  assert_contains "estimatedCostPerRound in response" "$EXEC_CONTENT" "estimatedCostPerRound"
+  assert_contains "availableModels in response" "$EXEC_CONTENT" "availableModels"
+else
+  echo "  [FAIL] execute.ts not found at $EXEC_FILE"
+  FAIL=$((FAIL + 1))
+fi
+
+# =============================================================================
+# TC-AGENT-14: Wave Preview API (live server test)
+# =============================================================================
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "TC-AGENT-14: Wave Preview API (live server test)"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+TEST_DIR=$(mktemp -d)
+trap cleanup EXIT
+
+mkdir -p "$TEST_DIR/knowledge"
+echo "# Test" > "$TEST_DIR/knowledge/CLAUDE.md"
+mkdir -p "$TEST_DIR/.tycono"
+
+# Start server
+TYCONO_BIN=$(which tycono-server 2>/dev/null || echo "")
+if [[ -n "$TYCONO_BIN" ]] || command -v npx &>/dev/null; then
+  cd "$TEST_DIR"
+  if [[ -n "$TYCONO_BIN" ]]; then
+    "$TYCONO_BIN" &
+  else
+    npx tycono-server@latest &
+  fi
+  SERVER_PID=$!
+
+  SERVER_READY=""
+  for i in $(seq 1 60); do
+    if [[ -f "$TEST_DIR/.tycono/headless.json" ]]; then
+      PORT=$(python3 -c "import json; print(json.load(open('$TEST_DIR/.tycono/headless.json'))['port'])" 2>/dev/null || echo "")
+      if [[ -n "$PORT" ]] && curl -s --max-time 2 "http://localhost:${PORT}/api/health" >/dev/null 2>&1; then
+        SERVER_READY="true"
+        break
+      fi
+    fi
+    sleep 1
+  done
+
+  if [[ -n "$SERVER_READY" ]]; then
+    API_URL="http://localhost:${PORT}"
+
+    # Test 1: Basic preview request
+    PREVIEW=$(curl -s -X POST "${API_URL}/api/exec/wave/preview" \
+      -H "Content-Type: application/json" \
+      -d '{"directive":"test hello"}' 2>/dev/null || echo "")
+
+    assert_contains "Preview has team array" "$PREVIEW" '"team"'
+    assert_contains "Preview has totalAgents > 0" "$(echo "$PREVIEW" | python3 -c "import sys,json; d=json.load(sys.stdin); print('HAS_AGENTS' if d.get('totalAgents',0) > 0 else 'NO_AGENTS')" 2>/dev/null || echo "")" "HAS_AGENTS"
+    assert_contains "Preview has estimatedCostPerRound > 0" "$(echo "$PREVIEW" | python3 -c "import sys,json; d=json.load(sys.stdin); print('HAS_COST' if d.get('estimatedCostPerRound',0) > 0 else 'NO_COST')" 2>/dev/null || echo "")" "HAS_COST"
+    assert_contains "Preview has availableModels array" "$PREVIEW" '"availableModels"'
+    assert_contains "Preview has continuous: false" "$(echo "$PREVIEW" | python3 -c "import sys,json; d=json.load(sys.stdin); print('CONTINUOUS_FALSE' if d.get('continuous') == False else 'NOT_FALSE')" 2>/dev/null || echo "")" "CONTINUOUS_FALSE"
+
+    # Test 2: Continuous mode preview
+    PREVIEW_CONT=$(curl -s -X POST "${API_URL}/api/exec/wave/preview" \
+      -H "Content-Type: application/json" \
+      -d '{"directive":"test", "continuous": true}' 2>/dev/null || echo "")
+
+    assert_contains "Preview continuous=true returns continuous: true" "$(echo "$PREVIEW_CONT" | python3 -c "import sys,json; d=json.load(sys.stdin); print('CONTINUOUS_TRUE' if d.get('continuous') == True else 'NOT_TRUE')" 2>/dev/null || echo "")" "CONTINUOUS_TRUE"
+
+    # Kill server
+    kill -- -"$SERVER_PID" 2>/dev/null || kill "$SERVER_PID" 2>/dev/null || true
+    wait "$SERVER_PID" 2>/dev/null || true
+  else
+    echo "  [FAIL] Server did not start within 60s"
+    FAIL=$((FAIL + 1))
+    kill -- -"$SERVER_PID" 2>/dev/null || kill "$SERVER_PID" 2>/dev/null || true
+  fi
+  SERVER_PID=""
+else
+  echo "  [FAIL] tycono-server not available"
+  FAIL=$((FAIL + 1))
+fi
+
+cleanup
+trap - EXIT
+
+# =============================================================================
+# TC-AGENT-15: TUI Confirmation Flow (code check)
+# =============================================================================
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "TC-AGENT-15: TUI Confirmation Flow (code check)"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+USE_CMD_FILE="${PLUGIN_ROOT}/../tui/src/hooks/useCommand.ts"
+APP_FILE="${PLUGIN_ROOT}/../tui/src/app.tsx"
+
+if [[ -f "$USE_CMD_FILE" ]]; then
+  USE_CMD_CONTENT=$(cat "$USE_CMD_FILE")
+  assert_contains "useCommand has previewWave import" "$USE_CMD_CONTENT" "previewWave"
+  assert_contains "useCommand has wave_preview result type" "$USE_CMD_CONTENT" "wave_preview"
+else
+  echo "  [FAIL] useCommand.ts not found at $USE_CMD_FILE"
+  FAIL=$((FAIL + 1))
+fi
+
+if [[ -f "$APP_FILE" ]]; then
+  APP_CONTENT=$(cat "$APP_FILE")
+  assert_contains "app.tsx has pendingWaveConfirm state" "$APP_CONTENT" "pendingWaveConfirm"
+  assert_contains "app.tsx has Wave Confirmation text" "$APP_CONTENT" "Wave Confirmation"
+  assert_contains "app.tsx has continuous mode help text" "$APP_CONTENT" "continuous"
+else
+  echo "  [FAIL] app.tsx not found at $APP_FILE"
+  FAIL=$((FAIL + 1))
+fi
+
+# =============================================================================
+# TC-AGENT-16: modelOverrides — runtime model override (code check)
+# =============================================================================
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "TC-AGENT-16: modelOverrides runtime support (code check)"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+EXEC_MGR="${PLUGIN_ROOT}/../server/src/api/src/services/execution-manager.ts"
+if [[ -f "$EXEC_MGR" ]]; then
+  EM_CONTENT=$(cat "$EXEC_MGR")
+  assert_contains "ExecMgr has modelOverrides lookup" "$EM_CONTENT" "modelOverrides"
+  assert_contains "ExecMgr logs model override" "$EM_CONTENT" "Model override for"
+else
+  echo "  [FAIL] execution-manager.ts not found at $EXEC_MGR"
+  FAIL=$((FAIL + 1))
+fi
+
+SH_FILE2="${PLUGIN_ROOT}/../server/src/api/src/services/supervisor-heartbeat.ts"
+if [[ -f "$SH_FILE2" ]]; then
+  SH_CONTENT2=$(cat "$SH_FILE2")
+  assert_contains "Heartbeat accepts modelOverrides" "$SH_CONTENT2" "modelOverrides"
+  assert_contains "Wave file saves modelOverrides" "$SH_CONTENT2" "waveData.modelOverrides"
+else
+  echo "  [FAIL] supervisor-heartbeat.ts not found at $SH_FILE2"
+  FAIL=$((FAIL + 1))
+fi
+
+EXEC_ROUTE="${PLUGIN_ROOT}/../server/src/api/src/routes/execute.ts"
+if [[ -f "$EXEC_ROUTE" ]]; then
+  ER_CONTENT=$(cat "$EXEC_ROUTE")
+  assert_contains "Wave route accepts modelOverrides" "$ER_CONTENT" "body.modelOverrides"
+else
+  echo "  [FAIL] execute.ts not found at $EXEC_ROUTE"
   FAIL=$((FAIL + 1))
 fi
 

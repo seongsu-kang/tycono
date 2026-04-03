@@ -72,7 +72,7 @@ class SupervisorHeartbeat {
    * This creates a supervisor session and starts an execution.
    * If the execution dies, it auto-restarts (heartbeat).
    */
-  start(waveId: string, directive: string, targetRoles?: string[], continuous = false, preset?: string): SupervisorState {
+  start(waveId: string, directive: string, targetRoles?: string[], continuous = false, preset?: string, modelOverrides?: Record<string, string>): SupervisorState {
     // Check if supervisor already running for this wave
     const existing = this.supervisors.get(waveId);
     if (existing && (existing.status === 'running' || existing.status === 'starting')) {
@@ -108,7 +108,7 @@ class SupervisorHeartbeat {
     }
 
     // Save wave file immediately so directive persists across restarts
-    this.saveWaveFile(waveId, directive, preset);
+    this.saveWaveFile(waveId, directive, preset, modelOverrides);
 
     // Record first directive in wave conversation history (Gap #1 fix)
     appendWaveMessage(waveId, { role: 'user', content: directive });
@@ -121,7 +121,7 @@ class SupervisorHeartbeat {
    * Save wave file immediately so directive persists across restarts.
    * saveCompletedWave() adds session/role details on completion.
    */
-  private saveWaveFile(waveId: string, directive: string, preset?: string): void {
+  private saveWaveFile(waveId: string, directive: string, preset?: string, modelOverrides?: Record<string, string>): void {
     try {
       const wavesDir = path.join(COMPANY_ROOT, '.tycono', 'waves');
       if (!fs.existsSync(wavesDir)) fs.mkdirSync(wavesDir, { recursive: true });
@@ -136,6 +136,7 @@ class SupervisorHeartbeat {
           roles: [],
         };
         if (preset) waveData.preset = preset;
+        if (modelOverrides && Object.keys(modelOverrides).length > 0) waveData.modelOverrides = modelOverrides;
         fs.writeFileSync(wavePath, JSON.stringify(waveData, null, 2));
         console.log(`[Supervisor] Wave file created: ${wavePath}`);
       }
