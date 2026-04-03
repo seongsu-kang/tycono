@@ -733,6 +733,87 @@ else
 fi
 
 # =============================================================================
+# TC-AGENT-18: PreToolUse hook — blocks without --confirmed (functional)
+# =============================================================================
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "TC-AGENT-18: wave-confirm.sh blocks without --confirmed"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+if [[ -f "$WAVE_CONFIRM" ]]; then
+  # Simulate PreToolUse input: Bash tool calling start-wave.sh WITHOUT --confirmed
+  HOOK_INPUT='{"tool_name":"Bash","tool_input":{"command":"start-wave.sh \"build a game\""}}'
+  HOOK_OUTPUT=$(echo "$HOOK_INPUT" | "$WAVE_CONFIRM" 2>&1) || HOOK_EXIT=$?
+  HOOK_EXIT=${HOOK_EXIT:-0}
+
+  if [[ "$HOOK_EXIT" -eq 2 ]]; then
+    echo "  [PASS] Hook blocked execution (exit 2)"
+    PASS=$((PASS + 1))
+  else
+    echo "  [FAIL] Hook did not block (exit $HOOK_EXIT, expected 2)"
+    FAIL=$((FAIL + 1))
+  fi
+
+  assert_contains "Block message includes confirmation required" "$HOOK_OUTPUT" "confirmation required"
+  assert_contains "Block message mentions --confirmed" "$HOOK_OUTPUT" "\-\-confirmed"
+else
+  echo "  [SKIP] wave-confirm.sh not found"
+  SKIP=$((SKIP + 1))
+fi
+
+# =============================================================================
+# TC-AGENT-19: PreToolUse hook — allows with --confirmed (functional)
+# =============================================================================
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "TC-AGENT-19: wave-confirm.sh allows with --confirmed"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+if [[ -f "$WAVE_CONFIRM" ]]; then
+  # Simulate PreToolUse input: Bash tool calling start-wave.sh WITH --confirmed
+  HOOK_INPUT='{"tool_name":"Bash","tool_input":{"command":"start-wave.sh --confirmed \"build a game\""}}'
+  echo "$HOOK_INPUT" | "$WAVE_CONFIRM" >/dev/null 2>&1
+  HOOK_EXIT=$?
+
+  if [[ "$HOOK_EXIT" -eq 0 ]]; then
+    echo "  [PASS] Hook allowed execution (exit 0)"
+    PASS=$((PASS + 1))
+  else
+    echo "  [FAIL] Hook blocked confirmed command (exit $HOOK_EXIT, expected 0)"
+    FAIL=$((FAIL + 1))
+  fi
+
+  # Non-start-wave commands should pass through
+  HOOK_INPUT2='{"tool_name":"Bash","tool_input":{"command":"ls -la"}}'
+  echo "$HOOK_INPUT2" | "$WAVE_CONFIRM" >/dev/null 2>&1
+  HOOK_EXIT2=$?
+
+  if [[ "$HOOK_EXIT2" -eq 0 ]]; then
+    echo "  [PASS] Hook ignores non-wave commands (exit 0)"
+    PASS=$((PASS + 1))
+  else
+    echo "  [FAIL] Hook blocked unrelated command (exit $HOOK_EXIT2)"
+    FAIL=$((FAIL + 1))
+  fi
+
+  # Non-Bash tools should pass through
+  HOOK_INPUT3='{"tool_name":"Read","tool_input":{"file_path":"/tmp/test"}}'
+  echo "$HOOK_INPUT3" | "$WAVE_CONFIRM" >/dev/null 2>&1
+  HOOK_EXIT3=$?
+
+  if [[ "$HOOK_EXIT3" -eq 0 ]]; then
+    echo "  [PASS] Hook ignores non-Bash tools (exit 0)"
+    PASS=$((PASS + 1))
+  else
+    echo "  [FAIL] Hook blocked non-Bash tool (exit $HOOK_EXIT3)"
+    FAIL=$((FAIL + 1))
+  fi
+else
+  echo "  [SKIP] wave-confirm.sh not found"
+  SKIP=$((SKIP + 1))
+fi
+
+# =============================================================================
 # Summary
 # =============================================================================
 echo ""
