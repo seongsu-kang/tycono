@@ -690,6 +690,49 @@ else
 fi
 
 # =============================================================================
+# TC-AGENT-17: PreToolUse hook — wave confirmation (code check)
+# =============================================================================
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "TC-AGENT-17: PreToolUse wave confirmation hook (code check)"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+HOOKS_JSON="${PLUGIN_ROOT}/hooks/hooks.json"
+WAVE_CONFIRM="${PLUGIN_ROOT}/hooks/wave-confirm.sh"
+
+if [[ -f "$HOOKS_JSON" ]]; then
+  HJ_CONTENT=$(cat "$HOOKS_JSON")
+  assert_contains "hooks.json has PreToolUse" "$HJ_CONTENT" "PreToolUse"
+  assert_contains "hooks.json targets Bash tool" "$HJ_CONTENT" "Bash"
+  assert_contains "hooks.json references wave-confirm.sh" "$HJ_CONTENT" "wave-confirm.sh"
+else
+  echo "  [FAIL] hooks.json not found at $HOOKS_JSON"
+  FAIL=$((FAIL + 1))
+fi
+
+if [[ -f "$WAVE_CONFIRM" ]]; then
+  WC_CONTENT=$(cat "$WAVE_CONFIRM")
+  assert_contains "wave-confirm detects start-wave.sh" "$WC_CONTENT" "start-wave.sh"
+  assert_contains "wave-confirm checks --confirmed flag" "$WC_CONTENT" "\-\-confirmed"
+  assert_contains "wave-confirm calls preview API" "$WC_CONTENT" "wave/preview"
+  assert_contains "wave-confirm exits 2 to block" "$WC_CONTENT" "exit 2"
+  assert_contains "wave-confirm is executable" "$(test -x "$WAVE_CONFIRM" && echo "EXEC" || echo "NOEXEC")" "EXEC"
+else
+  echo "  [FAIL] wave-confirm.sh not found at $WAVE_CONFIRM"
+  FAIL=$((FAIL + 1))
+fi
+
+# Verify start-wave.sh accepts --confirmed flag
+SW_FILE="${PLUGIN_ROOT}/scripts/start-wave.sh"
+if [[ -f "$SW_FILE" ]]; then
+  SW_CONTENT=$(cat "$SW_FILE")
+  assert_contains "start-wave.sh accepts --confirmed" "$SW_CONTENT" "\-\-confirmed"
+else
+  echo "  [FAIL] start-wave.sh not found"
+  FAIL=$((FAIL + 1))
+fi
+
+# =============================================================================
 # Summary
 # =============================================================================
 echo ""

@@ -47,6 +47,10 @@ while [[ $# -gt 0 ]]; do
       PERMISSION_MODE="auto"
       shift
       ;;
+    --confirmed)
+      # Pre-dispatch confirmation accepted — proceed with wave
+      shift
+      ;;
     *)
       PROMPT_PARTS+=("$1")
       shift
