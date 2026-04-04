@@ -135,23 +135,31 @@ if [[ -f "$HEADLESS_JSON" ]]; then
     # PID alive — verify server actually responds
     HEALTH_RESPONSE=$(curl -s --max-time 3 "http://localhost:${EXISTING_PORT}/api/health" 2>/dev/null || echo "")
     if [[ -n "$HEALTH_RESPONSE" ]] && echo "$HEALTH_RESPONSE" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
-      # Check server version — restart if outdated or version unknown
+      # Check server version — warn if outdated, auto-restart only if no active waves
       RUNNING_VERSION=$(echo "$HEALTH_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('version',''))" 2>/dev/null || echo "")
       LATEST_VERSION=$(npm view tycono-server version --prefer-offline 2>/dev/null || echo "")
       NEED_RESTART="false"
-      if [[ -z "$RUNNING_VERSION" ]]; then
-        # Old server without version in health → definitely outdated
-        NEED_RESTART="true"
-        echo "⚠️  Server version unknown (pre-0.1.6). Restarting..."
-      elif [[ -n "$LATEST_VERSION" ]] && [[ "$RUNNING_VERSION" != "$LATEST_VERSION" ]]; then
-        NEED_RESTART="true"
-        echo "⚠️  Server outdated: v$RUNNING_VERSION → v$LATEST_VERSION. Restarting..."
-      fi
-      if [[ "$NEED_RESTART" == "true" ]]; then
-        kill "$EXISTING_PID" 2>/dev/null || true
-        sleep 2
-        rm -f "$HEADLESS_JSON"
-        # Fall through to start new server below
+      if [[ -z "$RUNNING_VERSION" ]] || { [[ -n "$LATEST_VERSION" ]] && [[ "$RUNNING_VERSION" != "$LATEST_VERSION" ]]; }; then
+        # Check if other waves are running — don't kill them
+        ACTIVE_COUNT=$(curl -s "http://localhost:${EXISTING_PORT}/api/waves/active" 2>/dev/null | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+waves=d.get('waves',d) if isinstance(d,dict) else d
+print(len(waves) if isinstance(waves,list) else 0)
+" 2>/dev/null || echo "0")
+        if [[ "$ACTIVE_COUNT" -gt 0 ]]; then
+          DISPLAY_VER="${RUNNING_VERSION:-pre-0.1.6}"
+          echo "⚠️  Server outdated (v$DISPLAY_VER → v$LATEST_VERSION) but $ACTIVE_COUNT active wave(s). Skipping restart."
+          API_URL="http://localhost:${EXISTING_PORT}"
+        else
+          DISPLAY_VER="${RUNNING_VERSION:-pre-0.1.6}"
+          echo "⚠️  Server outdated: v$DISPLAY_VER → v$LATEST_VERSION. Restarting (no active waves)..."
+          kill "$EXISTING_PID" 2>/dev/null || true
+          sleep 2
+          rm -f "$HEADLESS_JSON"
+          NEED_RESTART="true"
+          # Fall through to start new server below
+        fi
       else
         API_URL="http://localhost:${EXISTING_PORT}"
         echo "🔗 Connected to existing Tycono server (port $EXISTING_PORT, v$RUNNING_VERSION)"
