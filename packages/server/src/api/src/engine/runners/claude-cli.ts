@@ -547,7 +547,20 @@ export class ClaudeCliRunner implements ExecutionRunner {
       cwd,
       env: cleanEnv,
       stdio: ['ignore', 'pipe', 'pipe'],
+      detached: true, // BUG-CONCURRENT: survive server restart
     });
+
+    // Save PID for wave-scoped tracking + server recovery
+    if (cleanEnv.DISPATCH_WAVE_ID) {
+      const pidsDir = path.join(companyRoot, '.tycono', 'pids');
+      try {
+        if (!fs.existsSync(pidsDir)) fs.mkdirSync(pidsDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(pidsDir, `wave-${cleanEnv.DISPATCH_WAVE_ID}-${roleId}.pid`),
+          JSON.stringify({ pid: proc.pid, roleId, sessionId: config.sessionId, model: modelName, startedAt: Date.now() }),
+        );
+      } catch { /* ignore */ }
+    }
 
     let output = '';
     let turnCount = 0;
@@ -675,6 +688,10 @@ export class ClaudeCliRunner implements ExecutionRunner {
         try { fs.unlinkSync(consultScript); } catch { /* ignore */ }
         try { fs.unlinkSync(supervisionScript); } catch { /* ignore */ }
         try { fs.rmSync(runnerOutputDir, { recursive: true, force: true }); } catch { /* ignore */ }
+        // Clean up wave PID file
+        if (cleanEnv.DISPATCH_WAVE_ID) {
+          try { fs.unlinkSync(path.join(companyRoot, '.tycono', 'pids', `wave-${cleanEnv.DISPATCH_WAVE_ID}-${roleId}.pid`)); } catch { /* ignore */ }
+        }
 
         // 비정상 종료 시에도 결과 반환 (output이 있을 수 있으므로)
         resolve({

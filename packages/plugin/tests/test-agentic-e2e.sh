@@ -917,6 +917,14 @@ if [[ -f "$RUNNER_TS" ]]; then
   assert_contains "Server: TYCONO_ROLE_ID env var" \
     "$(cat "$RUNNER_TS")" \
     "TYCONO_ROLE_ID"
+
+  assert_contains "Server: detached spawn for process isolation" \
+    "$(cat "$RUNNER_TS")" \
+    "detached: true"
+
+  assert_contains "Server: PID file per wave-role" \
+    "$(cat "$RUNNER_TS")" \
+    "wave-\${cleanEnv.DISPATCH_WAVE_ID}-\${roleId}.pid"
 else
   echo "  [SKIP] claude-cli.ts not found"
   SKIP=$((SKIP + 1))
