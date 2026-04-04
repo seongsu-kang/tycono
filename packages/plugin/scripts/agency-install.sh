@@ -75,6 +75,9 @@ if [[ "$SOURCE" == https://github.com/* ]]; then
     echo ""
     echo "  📁 Location: ${AGENCY_DIR}/"
     echo "  Use: /tycono --agency ${AGENCY_ID} \"your task\""
+
+    # Track install count (fire-and-forget)
+    curl -s -X POST "https://tycono.ai/api/agencies/${AGENCY_ID}/install" >/dev/null 2>&1 &
   else
     echo "❌ Error: Failed to clone repository." >&2
     exit 1
@@ -113,6 +116,9 @@ if [[ "$HTTP_CODE" == "200" ]]; then
   echo ""
   echo "  📁 Location: ${AGENCY_DIR}/"
   echo "  Use: /tycono --agency ${AGENCY_ID} \"your task\""
+
+  # Track install count (fire-and-forget)
+  curl -s -X POST "https://tycono.ai/api/agencies/${AGENCY_ID}/install" >/dev/null 2>&1 &
 else
   echo "⚠️  Agency '${AGENCY_ID}' not found on tycono.ai (HTTP $HTTP_CODE)"
   echo ""
