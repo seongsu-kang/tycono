@@ -58,9 +58,16 @@ fi
 
 # --- Block and show preview ---
 
-# Extract directive from the command
-# start-wave.sh [flags] "directive" or start-wave.sh [flags] directive words
-DIRECTIVE=$(echo "$COMMAND" | sed 's/.*start-wave\.sh//' | sed 's/--agency [^ ]*//' | sed 's/--continuous//' | sed 's/--safe//' | sed 's/--confirmed//' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//' | sed "s/^['\"]//;s/['\"]$//")
+# Extract directive from the command using python3
+# Handles: "$SW" "directive", "$SW" --agency x "directive", start-wave.sh "directive"
+DIRECTIVE=$(WAVE_CMD="$COMMAND" python3 -c '
+import os, re
+cmd = os.environ.get("WAVE_CMD", "")
+matches = re.findall(r"\"([^\"]+)\"|'\''([^'\'']+)'\''", cmd)
+strings = [d or s for d, s in matches]
+directives = [s for s in strings if not s.startswith(("-", "/", "$", "~")) and "start-wave" not in s and len(s) > 5]
+print(directives[-1] if directives else "")
+' 2>/dev/null || echo "")
 
 # Extract flags
 CONTINUOUS=""
