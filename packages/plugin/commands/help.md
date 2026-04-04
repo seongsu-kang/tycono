@@ -28,6 +28,8 @@ You see real-time updates in your Claude Code session as background notification
 | `/tycono:agency-create` | **Guided setup** — scan project, design team, auto-verify |
 | `/tycono:agency-list` | List installed agencies |
 | `/tycono:agency-install <id>` | Install an agency from marketplace or GitHub |
+| `/tycono:analysis` | Role별 토큰/비용/모델 실시간 분석 |
+| `/tycono:report` | Wave 결과 마크다운 리포트 |
 | `/tycono:version` | Show version info (plugin, server, hook status) |
 | `/tycono:help` | This help page |
 
@@ -135,6 +137,36 @@ curl http://localhost:{PORT}/api/waves/active
 ```
 
 `/tycono:tycono-status`로도 요약을 볼 수 있습니다.
+
+## New in 0.1.6+
+
+| Feature | Command |
+|---------|---------|
+| **Wave Analysis** | `/tycono:analysis` — role별 토큰/비용/모델 실시간 표시 |
+| **Wave Report** | `/tycono:report` — wave 결과 마크다운 리포트 |
+| **Model Override** | `--model cto=sonnet,engineer=haiku` — role별 모델 변경 |
+| **Confirmation** | wave 시작 전 팀/비용 preview + 승인 (자동) |
+
+## Troubleshooting
+
+**Hook 충돌 (SessionStart error)**
+```
+npm -g와 marketplace 동시 설치 시 hook이 충돌합니다.
+해결: npm uninstall -g tycono
+marketplace 설치만 유지하세요.
+```
+
+**서버 업데이트 안 됨**
+```
+기존 서버가 떠있으면 새 버전으로 자동 교체됩니다 (0.1.6+).
+수동 교체: /tycono:version 으로 확인 후 서버 PID kill.
+```
+
+**wave 완료 후 프로세스 남음**
+```
+0.1.8+ 서버는 wave:done SSE 이벤트를 보내 자동 종료됩니다.
+구 버전이면: /tycono:tycono-cancel 또는 서버 업데이트.
+```
 
 ## Links
 
