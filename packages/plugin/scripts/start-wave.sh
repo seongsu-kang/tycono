@@ -135,11 +135,19 @@ if [[ -f "$HEADLESS_JSON" ]]; then
     # PID alive — verify server actually responds
     HEALTH_RESPONSE=$(curl -s --max-time 3 "http://localhost:${EXISTING_PORT}/api/health" 2>/dev/null || echo "")
     if [[ -n "$HEALTH_RESPONSE" ]] && echo "$HEALTH_RESPONSE" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
-      # Check server version — restart if outdated
-      RUNNING_VERSION=$(echo "$HEALTH_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('version','0.0.0'))" 2>/dev/null || echo "0.0.0")
+      # Check server version — restart if outdated or version unknown
+      RUNNING_VERSION=$(echo "$HEALTH_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('version',''))" 2>/dev/null || echo "")
       LATEST_VERSION=$(npm view tycono-server version --prefer-offline 2>/dev/null || echo "")
-      if [[ -n "$LATEST_VERSION" ]] && [[ "$RUNNING_VERSION" != "$LATEST_VERSION" ]] && [[ "$RUNNING_VERSION" != "0.0.0" ]]; then
+      NEED_RESTART="false"
+      if [[ -z "$RUNNING_VERSION" ]]; then
+        # Old server without version in health → definitely outdated
+        NEED_RESTART="true"
+        echo "⚠️  Server version unknown (pre-0.1.6). Restarting..."
+      elif [[ -n "$LATEST_VERSION" ]] && [[ "$RUNNING_VERSION" != "$LATEST_VERSION" ]]; then
+        NEED_RESTART="true"
         echo "⚠️  Server outdated: v$RUNNING_VERSION → v$LATEST_VERSION. Restarting..."
+      fi
+      if [[ "$NEED_RESTART" == "true" ]]; then
         kill "$EXISTING_PID" 2>/dev/null || true
         sleep 2
         rm -f "$HEADLESS_JSON"
