@@ -23,14 +23,12 @@ if [[ "$TOOL_NAME" != "Bash" ]]; then
   exit 0
 fi
 
-# Only match actual execution of start-wave.sh, not searches (find, grep, ls, cat)
-# Match: start-wave.sh "directive" or /path/to/start-wave.sh "directive"
-# Skip: find ... -name "start-wave.sh", grep start-wave.sh, cat start-wave.sh
-if ! echo "$COMMAND" | grep -qE '(^|/|"\s*)start-wave\.sh\s'; then
+# Detect start-wave.sh in the command (any form: direct, variable, path)
+if ! echo "$COMMAND" | grep -q "start-wave\.sh"; then
   exit 0
 fi
-# Skip search/read commands that mention start-wave.sh
-if echo "$COMMAND" | grep -qE '^(find|grep|rg|cat|head|tail|ls|wc|file|stat|which|locate) '; then
+# Skip search/read commands that merely mention start-wave.sh
+if echo "$COMMAND" | grep -qE '^(find|grep|rg|cat|head|tail|ls|wc|file|stat|which|locate|diff|md5) '; then
   exit 0
 fi
 
