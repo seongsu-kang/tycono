@@ -8,13 +8,9 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "  Tycono Version Info"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# Plugin version — from hooks.json or git
-PLUGIN_VER="unknown"
-if [[ -f "$PLUGIN_ROOT/hooks/hooks.json" ]]; then
-  # Use git commit short hash as plugin version
-  PLUGIN_VER=$(cd "$PLUGIN_ROOT" && git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-fi
-echo "  Plugin:  $PLUGIN_VER ($(basename "$PLUGIN_ROOT"))"
+# Plugin version — bump this on each release
+PLUGIN_VER="0.1.1"
+echo "  Plugin:  $PLUGIN_VER"
 
 # Server version
 SERVER_VER=$(npx tycono-server@latest --version 2>/dev/null || echo "not installed")
