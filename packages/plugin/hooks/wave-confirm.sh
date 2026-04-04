@@ -70,14 +70,47 @@ if echo "$COMMAND" | grep -q "\-\-continuous"; then
 fi
 PRESET_MATCH=$(echo "$COMMAND" | sed -n 's/.*--agency[[:space:]]\+\([^[:space:]]*\).*/\1/p' 2>/dev/null || echo "")
 
-# Try to find running server for preview
+# Try to find running server for preview — start one if needed
 API_URL=""
 HEADLESS_JSON=".tycono/headless.json"
+
+# Check existing server
 if [[ -f "$HEADLESS_JSON" ]]; then
   PORT=$(python3 -c "import json; print(json.load(open('$HEADLESS_JSON'))['port'])" 2>/dev/null || echo "")
   if [[ -n "$PORT" ]] && curl -s --max-time 2 "http://localhost:${PORT}/api/health" >/dev/null 2>&1; then
     API_URL="http://localhost:${PORT}"
+  else
+    # Stale headless.json — clean up
+    rm -f "$HEADLESS_JSON"
   fi
+fi
+
+# Fallback: scan common ports
+if [[ -z "$API_URL" ]]; then
+  for PORT_CHECK in 4321 4322 4323; do
+    if curl -s --max-time 1 "http://localhost:${PORT_CHECK}/api/health" >/dev/null 2>&1; then
+      API_URL="http://localhost:${PORT_CHECK}"
+      break
+    fi
+  done
+fi
+
+# No server found — start one for preview
+if [[ -z "$API_URL" ]]; then
+  npx tycono-server@latest >/dev/null 2>&1 &
+  HOOK_SERVER_PID=$!
+
+  # Wait for server (max 30s)
+  for i in $(seq 1 30); do
+    if [[ -f "$HEADLESS_JSON" ]]; then
+      PORT=$(python3 -c "import json; print(json.load(open('$HEADLESS_JSON'))['port'])" 2>/dev/null || echo "")
+      if [[ -n "$PORT" ]] && curl -s --max-time 1 "http://localhost:${PORT}/api/health" >/dev/null 2>&1; then
+        API_URL="http://localhost:${PORT}"
+        break
+      fi
+    fi
+    sleep 1
+  done
 fi
 
 # Build preview request body
@@ -90,15 +123,15 @@ if [[ -n "$PRESET_MATCH" ]]; then
 fi
 BODY="${BODY}}"
 
-# If server is available, get live preview
-if [[ -n "$API_URL" ]]; then
-  PREVIEW=$(curl -s -X POST "${API_URL}/api/exec/wave/preview" \
-    -H "Content-Type: application/json" \
-    -d "$BODY" 2>/dev/null || echo "")
+# Output preview to stderr (Claude Code shows stderr on exit 2)
+{
+  if [[ -n "$API_URL" ]]; then
+    PREVIEW=$(curl -s -X POST "${API_URL}/api/exec/wave/preview" \
+      -H "Content-Type: application/json" \
+      -d "$BODY" 2>/dev/null || echo "")
 
-  if [[ -n "$PREVIEW" ]] && echo "$PREVIEW" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
-    # Parse and display preview (pass via stdin to avoid quote escaping issues)
-    echo "$PREVIEW" | python3 -c "
+    if [[ -n "$PREVIEW" ]] && echo "$PREVIEW" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
+      echo "$PREVIEW" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
 
@@ -126,25 +159,29 @@ cost = d.get('estimatedCostPerRound', 0)
 order = d.get('dispatchOrder', 'sequential')
 print(f'│ Dispatch: {order}  Agents: {agents}  Est. cost: ~\${cost}/round')
 print('└─────────────────────────────────────────────────────┘')
-print()
 " 2>/dev/null || echo "Preview parsing failed"
+    else
+      echo ""
+      echo "┌─ Wave Confirmation ─────────────────────────┐"
+      echo "│ Directive: ${DIRECTIVE:0:40}"
+      [[ -n "$CONTINUOUS" ]] && echo "│ Mode:      ⚠️  CONTINUOUS"
+      [[ -n "$PRESET_MATCH" ]] && echo "│ Preset:    ${PRESET_MATCH}"
+      echo "│ (Server started but preview API failed)"
+      echo "└─────────────────────────────────────────────┘"
+    fi
+  else
+    echo ""
+    echo "┌─ Wave Confirmation ─────────────────────────┐"
+    echo "│ Directive: ${DIRECTIVE:0:40}"
+    [[ -n "$CONTINUOUS" ]] && echo "│ Mode:      ⚠️  CONTINUOUS"
+    [[ -n "$PRESET_MATCH" ]] && echo "│ Preset:    ${PRESET_MATCH}"
+    echo "│ (Server could not start — no team preview)"
+    echo "└─────────────────────────────────────────────┘"
   fi
-else
-  # No server running — show basic info
-  echo ""
-  echo "┌─ Wave Confirmation ─────────────────────────┐"
-  echo "│ Directive: ${DIRECTIVE:0:40}"
-  [[ -n "$CONTINUOUS" ]] && echo "│ Mode:      ⚠️  CONTINUOUS"
-  [[ -n "$PRESET_MATCH" ]] && echo "│ Preset:    ${PRESET_MATCH}"
-  echo "│ (Server not running — no team preview)"
-  echo "└─────────────────────────────────────────────┘"
-  echo ""
-fi
 
-# Block execution — exit 2 sends stderr message back to Claude as feedback
-echo "⛔ Wave dispatch blocked — user confirmation required." >&2
-echo "" >&2
-echo "The wave preview is shown above. To proceed, the user must approve." >&2
-echo "Re-run the command with --confirmed flag:" >&2
-echo "  start-wave.sh --confirmed ${COMMAND##*start-wave.sh}" >&2
+  echo ""
+  echo "⛔ Wave dispatch requires user confirmation."
+  echo "Show the preview above to the user and ask for approval."
+  echo "If approved, re-run with --confirmed flag."
+} >&2
 exit 2
