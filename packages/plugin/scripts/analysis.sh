@@ -101,7 +101,9 @@ for r in sorted(roles, key=lambda x: x.get('roleId', '')):
     out = r.get('outputTokens', 0)
     c = r.get('costUsd', 0)
     if st == 'working' and inp == 0 and out == 0:
-        print(f'  {role_id:<14s} {st:<10s} {short_model:<12s} {"(collecting...)":>8s} {"":>8s} {"":>8s}')
+        collecting = '(collecting...)'
+        blank = ''
+        print(f'  {role_id:<14s} {st:<10s} {short_model:<12s} {collecting:>16s} {blank:>8s} {blank:>8s}')
     else:
         print(f'  {role_id:<14s} {st:<10s} {short_model:<12s} {fmt_tokens(inp):>8s} {fmt_tokens(out):>8s} {\"\${:.2f}\".format(c):>8s}')
 
