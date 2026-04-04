@@ -55,14 +55,14 @@ echo "   Source: ${AGENCY_DIR}/"
 # --- Validate required fields ---
 AGENCY_NAME=$(grep -m1 '^name:' "$YAML_FILE" | sed 's/^name:[[:space:]]*//' | sed 's/^"//' | sed 's/"$//')
 AGENCY_VERSION=$(grep -m1 '^version:' "$YAML_FILE" | sed 's/^version:[[:space:]]*//' | sed 's/^"//' | sed 's/"$//')
-AGENCY_ROLES=$(grep -m1 '^roles:' "$YAML_FILE" | sed 's/^roles://')
+HAS_ROLES=$(grep -c '^roles:' "$YAML_FILE" || true)
 
 if [[ -z "$AGENCY_NAME" ]]; then
   echo "❌ Error: 'name' field missing in agency.yaml" >&2
   exit 1
 fi
 
-if [[ -z "$AGENCY_ROLES" ]]; then
+if [[ "$HAS_ROLES" -eq 0 ]]; then
   echo "❌ Error: 'roles' field missing in agency.yaml" >&2
   exit 1
 fi
@@ -184,15 +184,17 @@ body = {
 print(json.dumps(body))
 " <<< "$ARCHIVE_B64")
 
-HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" \
+TEMP_RESPONSE=$(mktemp)
+HTTP_CODE=$(curl -s -w "%{http_code}" \
   -X POST "$API_URL" \
   -H "Content-Type: application/json" \
   -H "X-Instance-Id: ${INSTANCE_ID}" \
   --max-time 60 \
-  -d "$REQUEST_BODY" 2>/dev/null || echo -e "\n000")
+  -o "$TEMP_RESPONSE" \
+  -d "$REQUEST_BODY" 2>/dev/null || echo "000")
 
-HTTP_BODY=$(echo "$HTTP_RESPONSE" | head -n -1)
-HTTP_CODE=$(echo "$HTTP_RESPONSE" | tail -n 1)
+HTTP_BODY=$(cat "$TEMP_RESPONSE" 2>/dev/null || echo "")
+rm -f "$TEMP_RESPONSE"
 
 echo ""
 
