@@ -66,6 +66,7 @@ export interface RunnerCallbacks {
   onDispatch?: (roleId: string, task: string) => void;
   onConsult?: (roleId: string, question: string) => void;
   onTurnComplete?: (turn: number) => void;
+  onTokens?: (inputTokens: number, outputTokens: number, totalInput: number, totalOutput: number) => void;
   onError?: (error: string) => void;
   /** Trace: emitted when system prompt is assembled, for full prompt capture */
   onPromptAssembled?: (systemPrompt: string, userTask: string) => void;

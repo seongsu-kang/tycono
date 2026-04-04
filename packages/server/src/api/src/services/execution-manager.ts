@@ -45,6 +45,8 @@ export interface Execution {
   traceId?: string;
   /** CLI session ID for --resume (captured from Claude CLI result event) */
   cliSessionId?: string;
+  /** Running token counts (updated per turn, before final ledger write) */
+  runningTokens?: { input: number; output: number };
 }
 
 export interface StartExecutionParams {
@@ -465,6 +467,9 @@ class ExecutionManager {
             parentSessionId: execution.sessionId,
             sessionId: `ses-consult-${Date.now()}-${subRoleId}`,
           });
+        },
+        onTokens: (_input, _output, totalInput, totalOutput) => {
+          execution.runningTokens = { input: totalInput, output: totalOutput };
         },
         onTurnComplete: (turn) => {
           harnessTurnCount++;

@@ -1233,11 +1233,26 @@ function handleWaveAnalysis(waveId: string, res: ServerResponse): void {
       ? (exec.status === 'running' ? 'working' : exec.status)
       : 'done';
 
-    // Token data from ledger
+    // Token data: ledger (completed turns) + runningTokens (current turn)
     const tokenData = ledger.query({ sessionId: ses.id });
     let costUsd = 0;
     for (const entry of tokenData.entries) {
       costUsd += estimateCost(entry.inputTokens, entry.outputTokens, entry.model);
+    }
+
+    // Merge running tokens from active execution (real-time, not yet in ledger)
+    let totalInput = tokenData.totalInput;
+    let totalOutput = tokenData.totalOutput;
+    if (exec?.runningTokens) {
+      // runningTokens includes all turns (cumulative), ledger also has all completed turns
+      // Use the larger value to avoid double-counting
+      totalInput = Math.max(totalInput, exec.runningTokens.input);
+      totalOutput = Math.max(totalOutput, exec.runningTokens.output);
+      if (totalInput > tokenData.totalInput || totalOutput > tokenData.totalOutput) {
+        // Re-estimate cost with running data
+        const runModel = tokenData.entries.length > 0 ? tokenData.entries[0].model : 'claude-sonnet-4-5';
+        costUsd = estimateCost(totalInput, totalOutput, runModel);
+      }
     }
 
     // Model: from execution or session's first token entry
@@ -1251,8 +1266,8 @@ function handleWaveAnalysis(waveId: string, res: ServerResponse): void {
       status,
       model,
       turns: tokenData.entries.length,
-      inputTokens: tokenData.totalInput,
-      outputTokens: tokenData.totalOutput,
+      inputTokens: totalInput,
+      outputTokens: totalOutput,
       costUsd,
       ...(ses.parentSessionId && { parentSessionId: ses.parentSessionId }),
     });

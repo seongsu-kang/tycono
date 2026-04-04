@@ -634,6 +634,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
                   inputTokens: input,
                   outputTokens: out,
                 });
+                callbacks.onTokens?.(input, out, totalInput, totalOutput);
               },
             });
           } catch {
