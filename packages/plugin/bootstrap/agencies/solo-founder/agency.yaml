@@ -8,9 +8,19 @@ tagline: "Your AI co-founding team"
 version: "1.0.0"
 
 description: |
-  A team for founders building solo.
-  AI handles strategy (CBO) + tech (CTO) + execution (Engineer) + design (Designer).
-  End-to-end coverage from business planning to product launch.
+  Your AI co-founding team — built for solo builders who wear every hat.
+
+  CBO designs your business strategy and revenue model, CTO architects the
+  tech stack, Engineer writes the code, and Designer handles branding and UI.
+  Four specialists working as one team, at the cost of an API call.
+
+  Use this when you want to:
+  - Turn a side project into a real business
+  - Get strategy, development, and design done without hiring
+  - Ship a landing page + MVP + GTM plan in a single session
+  - Bootstrap from zero with no funding and no team
+
+  What you get: Business plan, competitor analysis, landing page, MVP code, brand guide
 
 author:
   id: tycono

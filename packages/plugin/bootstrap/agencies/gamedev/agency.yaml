@@ -8,9 +8,20 @@ tagline: "From concept to playable game"
 version: "1.0.0"
 
 description: |
-  A specialized team for building browser/mobile games from concept to playtest.
-  Focuses on game design documents (GDD), prototyping, and game balancing.
-  Iterative testing and refinement to create games that are actually fun.
+  A full game development team that takes you from concept to playable build.
+
+  Say "build me a game" and the CTO picks the tech stack, PM writes the GDD,
+  Engineer implements mechanics, Designer creates UI/HUD, and QA actually
+  plays the game to find bugs and balance issues.
+
+  Use this when you want to:
+  - Turn a game idea into a working prototype over a weekend
+  - Build a browser game for a game jam or hackathon
+  - Iterate on game mechanics with real playtesting feedback
+  - Create a polished demo with proper GDD documentation
+
+  What you get: Playable game code + Game Design Document + QA playtest report
+  Supports: Canvas, Phaser, pure JS/TS browser games
 
 author:
   id: tycono

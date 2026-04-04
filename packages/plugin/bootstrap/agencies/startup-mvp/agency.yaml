@@ -8,9 +8,20 @@ tagline: "From idea to launch in weeks"
 version: "1.0.0"
 
 description: |
-  A team built to turn ideas into MVPs fast and acquire your first users.
-  Optimized for lean startup methodology + tech stack guidance + rapid execution.
-  Focused on "minimum product for learning," not "perfect product."
+  The fastest path from idea to launched MVP.
+
+  CTO makes tech decisions, Engineer builds it, PM keeps scope tight.
+  Three roles, zero overhead — optimized for speed over perfection.
+  This team follows lean startup methodology: build the smallest thing
+  that lets you learn whether your idea works.
+
+  Use this when you want to:
+  - Validate an idea before investing serious time
+  - Ship a working product in days, not months
+  - Pick the right tech stack without analysis paralysis
+  - Build just enough to get your first 10 users
+
+  What you get: Scoped feature list, tech stack decision, working MVP code, launch checklist
 
 author:
   id: tycono
