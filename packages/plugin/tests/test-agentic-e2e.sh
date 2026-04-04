@@ -866,6 +866,113 @@ else
   SKIP=$((SKIP + 1))
 fi
 
+# TC-AGENT-21: Wave Report endpoint (server + plugin code check)
+# =============================================================================
+echo "TC-AGENT-21: Wave Report endpoint (code check)"
+
+if [[ -f "$EXEC_TS" ]]; then
+  assert_contains "Server: handleWaveReport function" \
+    "$(cat "$EXEC_TS")" \
+    "handleWaveReport"
+
+  assert_contains "Server: report returns markdown" \
+    "$(cat "$EXEC_TS")" \
+    "text/markdown"
+
+  assert_contains "Server: report has dispatch tree" \
+    "$(cat "$EXEC_TS")" \
+    "Dispatch Tree"
+fi
+
+REPORT_SH="${PLUGIN_ROOT}/scripts/report.sh"
+if [[ -f "$REPORT_SH" ]]; then
+  assert_contains "Plugin: report.sh calls /report endpoint" \
+    "$(cat "$REPORT_SH")" \
+    "/api/waves/"
+else
+  echo "  [SKIP] report.sh not found"
+  SKIP=$((SKIP + 1))
+fi
+
+REPORT_CMD="${PLUGIN_ROOT}/commands/report.md"
+if [[ -f "$REPORT_CMD" ]]; then
+  assert_contains "Plugin: report command exists" \
+    "$(cat "$REPORT_CMD")" \
+    "report.sh"
+else
+  echo "  [SKIP] commands/report.md not found"
+  SKIP=$((SKIP + 1))
+fi
+
+# TC-AGENT-22: Wave isolation — env vars + PID structure (code check)
+# =============================================================================
+echo "TC-AGENT-22: Wave isolation (code check)"
+
+RUNNER_TS="${PLUGIN_ROOT}/../server/src/api/src/engine/runners/claude-cli.ts"
+if [[ -f "$RUNNER_TS" ]]; then
+  assert_contains "Server: TYCONO_WAVE_ID env var" \
+    "$(cat "$RUNNER_TS")" \
+    "TYCONO_WAVE_ID"
+
+  assert_contains "Server: TYCONO_ROLE_ID env var" \
+    "$(cat "$RUNNER_TS")" \
+    "TYCONO_ROLE_ID"
+else
+  echo "  [SKIP] claude-cli.ts not found"
+  SKIP=$((SKIP + 1))
+fi
+
+START_SH="${PLUGIN_ROOT}/scripts/start-wave.sh"
+if [[ -f "$START_SH" ]]; then
+  assert_contains "Plugin: structured PID directory" \
+    "$(cat "$START_SH")" \
+    ".tycono/pids"
+fi
+
+CANCEL_SH="${PLUGIN_ROOT}/scripts/cancel.sh"
+if [[ -f "$CANCEL_SH" ]]; then
+  assert_contains "Plugin: cancel uses wave-scoped PID glob" \
+    "$(cat "$CANCEL_SH")" \
+    "wave-\${WAVE_ID}-"
+
+  assert_contains "Plugin: cancel kills by TYCONO_WAVE_ID" \
+    "$(cat "$CANCEL_SH")" \
+    "TYCONO_WAVE_ID"
+fi
+
+# TC-AGENT-23: Model override — --model flag (code check)
+# =============================================================================
+echo "TC-AGENT-23: Model override flag (code check)"
+
+if [[ -f "$START_SH" ]]; then
+  assert_contains "Plugin: --model flag parsing" \
+    "$(cat "$START_SH")" \
+    "MODEL_OVERRIDES"
+
+  assert_contains "Plugin: modelOverrides in payload" \
+    "$(cat "$START_SH")" \
+    "modelOverrides"
+fi
+
+# TC-AGENT-24: Status dispatch tree (code check)
+# =============================================================================
+echo "TC-AGENT-24: Status dispatch tree (code check)"
+
+STATUS_SH="${PLUGIN_ROOT}/scripts/status.sh"
+if [[ -f "$STATUS_SH" ]]; then
+  assert_contains "Plugin: status uses analysis endpoint" \
+    "$(cat "$STATUS_SH")" \
+    "/api/waves/"
+
+  assert_contains "Plugin: status builds parent→child tree" \
+    "$(cat "$STATUS_SH")" \
+    "parentSessionId"
+
+  assert_contains "Plugin: status has tree rendering" \
+    "$(cat "$STATUS_SH")" \
+    "print_role"
+fi
+
 # =============================================================================
 # Summary
 # =============================================================================
