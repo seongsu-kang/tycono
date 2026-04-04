@@ -8,9 +8,14 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "  Tycono Version Info"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# Plugin version — bump this on each release
-PLUGIN_VER="0.1.1"
-echo "  Plugin:  $PLUGIN_VER"
+# Plugin version — derive from hook file modification date
+HOOK_FILE="$PLUGIN_ROOT/hooks/wave-confirm.sh"
+if [[ -f "$HOOK_FILE" ]]; then
+  PLUGIN_DATE=$(stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$HOOK_FILE" 2>/dev/null || stat -c "%y" "$HOOK_FILE" 2>/dev/null | cut -d. -f1 || echo "unknown")
+else
+  PLUGIN_DATE=$(stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$PLUGIN_ROOT/scripts/start-wave.sh" 2>/dev/null || echo "unknown")
+fi
+echo "  Plugin:  $PLUGIN_DATE"
 
 # Server version
 SERVER_VER=$(npx tycono-server@latest --version 2>/dev/null || echo "not installed")
