@@ -69,10 +69,23 @@ export function handleExecRequest(req: IncomingMessage, res: ServerResponse): vo
         if (!ses.waveId) continue;
         if (ses.roleId !== 'ceo') continue;
         const exec = executionManager.getActiveExecution(ses.id);
-        if (exec) {
-          waveMultiplexer.registerSession(ses.waveId, exec);
-          recovered++;
+        if (!exec) continue;
+        // BUG-ZOMBIE-WAVE: Skip stale "running" executions — if no activity for 5+ min, it's dead
+        if (exec.status === 'running' && exec.id.startsWith('recovered-')) {
+          const createdTime = new Date(exec.createdAt).getTime();
+          const staleThreshold = 5 * 60 * 1000; // 5 minutes
+          if (Date.now() - createdTime > staleThreshold) {
+            console.log(`[WaveRecovery] Skipping stale recovered execution for wave ${ses.waveId} (age: ${Math.round((Date.now() - createdTime) / 60000)}min)`);
+            continue;
+          }
         }
+        // Only register genuinely active executions
+        if (exec.status === 'done' || exec.status === 'error') {
+          console.log(`[WaveRecovery] Skipping completed execution for wave ${ses.waveId} (status: ${exec.status})`);
+          continue;
+        }
+        waveMultiplexer.registerSession(ses.waveId, exec);
+        recovered++;
       }
       if (recovered > 0) {
         console.log(`[WaveRecovery] Recovered ${recovered} sessions (one-time)`);
@@ -972,7 +985,13 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
     );
     const ceoExec = ceoSession ? executionManager.getActiveExecution(ceoSession.id) : null;
 
-    if (ceoExec && ceoExec.status === 'running') {
+    // BUG-ZOMBIE-WAVE: recovered executions with status='running' may be stale
+    // (activity stream had no done event, but process is long dead)
+    const isRecoveredZombie = ceoExec?.id.startsWith('recovered-') &&
+      ceoExec.status === 'running' &&
+      (Date.now() - new Date(ceoExec.createdAt).getTime() > 5 * 60 * 1000);
+
+    if (ceoExec && ceoExec.status === 'running' && !isRecoveredZombie) {
       // CEO is genuinely running — amend instead of new wave
       console.log(`[Wave] CEO actively running in wave ${existingWave.id}. Amending.`);
 
@@ -1003,8 +1022,9 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
       return;
     }
 
-    // CEO not running → zombie wave. Clean up and proceed with new wave.
-    console.log(`[Wave] Zombie wave detected: ${existingWave.id} (CEO not running). Creating new wave.`);
+    // CEO not running (or recovered zombie) → zombie wave. Clean up and proceed with new wave.
+    const reason = isRecoveredZombie ? 'recovered stale execution' : !ceoExec ? 'no CEO execution' : `CEO status: ${ceoExec.status}`;
+    console.log(`[Wave] Zombie wave detected: ${existingWave.id} (${reason}). Creating new wave.`);
     waveMultiplexer.cleanupWave(existingWave.id);
   }
 
