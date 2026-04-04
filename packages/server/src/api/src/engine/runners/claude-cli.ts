@@ -539,6 +539,8 @@ export class ClaudeCliRunner implements ExecutionRunner {
     cleanEnv.TYCONO_CODE_ROOT = codeRoot;
     cleanEnv.TYCONO_AKB_ROOT = companyRoot;
     cleanEnv.TYCONO_KNOWLEDGE_ROOT = knowledgeDir;
+    cleanEnv.TYCONO_ROLE_ID = roleId;
+    if (cleanEnv.DISPATCH_WAVE_ID) cleanEnv.TYCONO_WAVE_ID = cleanEnv.DISPATCH_WAVE_ID;
     console.log(`[Runner] Spawning claude ${isResume ? '--resume ' + config.cliSessionId + ' ' : ''}-p: role=${roleId}, model=${modelName}, maxTurns=${maxTurns}, sessionId=${config.sessionId}, cwd=${cwd}, subordinates=[${subordinates.join(',')}]`);
 
     const proc = spawn('claude', args, {

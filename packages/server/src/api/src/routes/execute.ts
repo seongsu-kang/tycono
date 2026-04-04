@@ -130,6 +130,13 @@ export function handleExecRequest(req: IncomingMessage, res: ServerResponse): vo
     return;
   }
 
+  // ── GET /api/waves/:waveId/report — Wave markdown report ──
+  const reportMatch = url.match(/^\/api\/waves\/([^/]+)\/report$/);
+  if (method === 'GET' && reportMatch) {
+    handleWaveReport(reportMatch[1], res);
+    return;
+  }
+
   // ── /api/waves/:waveId/questions — Get pending questions ──
   const questionsMatch = url.match(/^\/api\/waves\/([^/]+)\/questions$/);
   if (method === 'GET' && questionsMatch) {
@@ -1263,6 +1270,127 @@ function handleWaveAnalysis(waveId: string, res: ServerResponse): void {
     totalOutputTokens: totalOutput,
     totalCostUsd: totalCost,
   });
+}
+
+
+/* ─── GET /api/waves/:waveId/report — Markdown wave report ──── */
+
+function handleWaveReport(waveId: string, res: ServerResponse): void {
+  // Reuse analysis logic
+  const activeWaves = waveMultiplexer.getActiveWaves();
+  let wave: Record<string, unknown> | undefined = activeWaves.find((w: { id: string }) => w.id === waveId) as Record<string, unknown> | undefined;
+  let waveStatus: 'running' | 'completed' | 'unknown' = wave ? 'running' : 'unknown';
+
+  if (!wave) {
+    const wavePath = path.join(COMPANY_ROOT, '.tycono', 'waves', `${waveId}.json`);
+    if (fs.existsSync(wavePath)) {
+      try {
+        wave = JSON.parse(fs.readFileSync(wavePath, 'utf-8'));
+        waveStatus = 'completed';
+      } catch { /* ignore */ }
+    }
+  }
+
+  if (!wave) {
+    jsonResponse(res, 404, { error: 'Wave not found' });
+    return;
+  }
+
+  const allSessions = listSessions();
+  const waveSessions = allSessions.filter(s => s.waveId === waveId);
+  const ledger = getTokenLedger(COMPANY_ROOT);
+
+  const directive = (wave.directive as string) ?? '';
+  const startedAt = wave.startedAt as number | undefined;
+  const elapsed = startedAt ? Math.floor((Date.now() - startedAt) / 1000) : null;
+
+  // Build role data
+  const roleData: Array<{ roleId: string; status: string; model: string; inputTokens: number; outputTokens: number; costUsd: number; parentSessionId?: string; sessionId: string }> = [];
+  let totalCost = 0;
+
+  for (const ses of waveSessions) {
+    const exec = executionManager.getActiveExecution(ses.id);
+    const status = exec ? (exec.status === 'running' ? 'working' : exec.status) : 'done';
+    const tokenData = ledger.query({ sessionId: ses.id });
+    let costUsd = 0;
+    for (const entry of tokenData.entries) {
+      costUsd += estimateCost(entry.inputTokens, entry.outputTokens, entry.model);
+    }
+    const model = tokenData.entries.length > 0 ? tokenData.entries[tokenData.entries.length - 1].model : '';
+    totalCost += costUsd;
+    roleData.push({
+      roleId: ses.roleId, status, model, sessionId: ses.id,
+      inputTokens: tokenData.totalInput, outputTokens: tokenData.totalOutput, costUsd,
+      ...(ses.parentSessionId && { parentSessionId: ses.parentSessionId }),
+    });
+  }
+
+  // Build markdown
+  const lines: string[] = [];
+  lines.push(`# Wave Report: ${waveId}`);
+  lines.push('');
+  lines.push(`- **Status**: ${waveStatus}`);
+  lines.push(`- **Directive**: ${directive}`);
+  if (elapsed !== null) {
+    const mins = Math.floor(elapsed / 60);
+    const secs = elapsed % 60;
+    lines.push(`- **Duration**: ${mins}m ${secs}s`);
+  }
+  lines.push(`- **Total Cost**: $${totalCost.toFixed(2)}`);
+  lines.push('');
+
+  // Team table
+  lines.push('## Team');
+  lines.push('');
+  lines.push('| Role | Status | Model | Input | Output | Cost |');
+  lines.push('|------|--------|-------|------:|-------:|-----:|');
+  for (const r of roleData.sort((a, b) => a.roleId.localeCompare(b.roleId))) {
+    const fmtTokens = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${Math.round(n / 1_000)}K` : String(n);
+    const shortModel = r.model.replace('claude-', '').replace('-latest', '').slice(0, 15) || '-';
+    lines.push(`| ${r.roleId} | ${r.status} | ${shortModel} | ${fmtTokens(r.inputTokens)} | ${fmtTokens(r.outputTokens)} | $${r.costUsd.toFixed(2)} |`);
+  }
+  lines.push('');
+
+  // Dispatch tree (text)
+  const sessionToRole = new Map(roleData.map(r => [r.sessionId, r]));
+  const childrenMap = new Map<string, typeof roleData>();
+  const roots: typeof roleData = [];
+  for (const r of roleData) {
+    if (r.parentSessionId && sessionToRole.has(r.parentSessionId)) {
+      const existing = childrenMap.get(r.parentSessionId) ?? [];
+      existing.push(r);
+      childrenMap.set(r.parentSessionId, existing);
+    } else {
+      roots.push(r);
+    }
+  }
+
+  if (roots.length > 0) {
+    lines.push('## Dispatch Tree');
+    lines.push('');
+    lines.push('```');
+    const printTree = (r: typeof roleData[0], prefix: string, isLast: boolean) => {
+      const connector = isLast ? '└── ' : '├── ';
+      lines.push(`${prefix}${connector}${r.roleId} (${r.status}) $${r.costUsd.toFixed(2)}`);
+      const kids = (childrenMap.get(r.sessionId) ?? []).sort((a, b) => a.roleId.localeCompare(b.roleId));
+      for (let i = 0; i < kids.length; i++) {
+        printTree(kids[i], prefix + (isLast ? '    ' : '│   '), i === kids.length - 1);
+      }
+    };
+    roots.sort((a, b) => (a.roleId === 'ceo' ? -1 : b.roleId === 'ceo' ? 1 : a.roleId.localeCompare(b.roleId)));
+    for (let i = 0; i < roots.length; i++) {
+      printTree(roots[i], '', i === roots.length - 1);
+    }
+    lines.push('```');
+    lines.push('');
+  }
+
+  lines.push(`---`);
+  lines.push(`*Generated: ${new Date().toISOString()}*`);
+
+  const markdown = lines.join('\n');
+  res.writeHead(200, { 'Content-Type': 'text/markdown; charset=utf-8' });
+  res.end(markdown);
 }
 
 

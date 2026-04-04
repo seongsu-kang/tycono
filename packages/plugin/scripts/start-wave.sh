@@ -12,23 +12,26 @@ PROMPT_PARTS=()
 PRESET=""
 CONTINUOUS=""
 PERMISSION_MODE="bypassPermissions"
+MODEL_OVERRIDES=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
     -h|--help)
-      echo "Usage: /tycono [TASK...] [--agency <id>] [--continuous] [--unsafe]"
+      echo "Usage: /tycono [TASK...] [--agency <id>] [--continuous] [--model <overrides>]"
       echo ""
       echo "  Start an AI team to work on your task."
       echo ""
       echo "  Options:"
       echo "    --agency <id>    Load domain knowledge (gamedev, startup-mvp, solo-founder)"
       echo "    --continuous     Enable continuous improvement loop (CEO restarts after completion)"
+      echo "    --model <spec>   Override models per role (e.g., cto=sonnet,engineer=haiku)"
       echo "    --safe           Enable model-based safety checks (blocks risky commands)"
       echo ""
       echo "  Examples:"
       echo "    /tycono Build a browser game"
       echo "    /tycono --agency gamedev Create a tower defense game"
       echo "    /tycono --agency research-scout --continuous 'hypothesis loop'"
+      echo "    /tycono --model cto=claude-sonnet-4-5,engineer=claude-haiku-4-5-20251001 Build API"
       exit 0
       ;;
     --agency|--preset)
@@ -42,6 +45,14 @@ while [[ $# -gt 0 ]]; do
     --continuous)
       CONTINUOUS="true"
       shift
+      ;;
+    --model)
+      if [[ -z "${2:-}" ]]; then
+        echo "❌ Error: --model requires overrides (e.g., cto=sonnet,engineer=haiku)" >&2
+        exit 1
+      fi
+      MODEL_OVERRIDES="$2"
+      shift 2
       ;;
     --safe)
       PERMISSION_MODE="auto"
@@ -226,6 +237,20 @@ if [[ -n "$CONTINUOUS" ]]; then
   PAYLOAD_PARTS="$PAYLOAD_PARTS, \"continuous\": true"
 fi
 PAYLOAD_PARTS="$PAYLOAD_PARTS, \"permissionMode\": \"$PERMISSION_MODE\""
+if [[ -n "$MODEL_OVERRIDES" ]]; then
+  # Parse "cto=sonnet,engineer=haiku" → JSON object
+  MODEL_JSON=$(python3 -c "
+import json, sys
+raw = '$MODEL_OVERRIDES'
+overrides = {}
+for pair in raw.split(','):
+    if '=' in pair:
+        role, model = pair.strip().split('=', 1)
+        overrides[role.strip()] = model.strip()
+print(json.dumps(overrides))
+" 2>/dev/null || echo "{}")
+  PAYLOAD_PARTS="$PAYLOAD_PARTS, \"modelOverrides\": $MODEL_JSON"
+fi
 PAYLOAD="{$PAYLOAD_PARTS}"
 
 WAVE_RESPONSE=$(curl -s -X POST "${API_URL}/api/exec/wave" \
@@ -288,8 +313,11 @@ fi
 # The script stays alive until the wave ends (SSE stream closes).
 
 # Save SSE monitor PID for cancel.sh to kill
-SSE_PID_FILE=".tycono/wave-${WAVE_ID}.pid"
+mkdir -p ".tycono/pids"
+SSE_PID_FILE=".tycono/pids/wave-${WAVE_ID}-sse.pid"
 echo "$$" > "$SSE_PID_FILE"
+# Legacy location for backward compat with older cancel.sh
+echo "$$" > ".tycono/wave-${WAVE_ID}.pid"
 
 curl -sN "${API_URL}/api/waves/${WAVE_ID}/stream" 2>/dev/null | while IFS= read -r line; do
   if echo "$line" | grep -q '"type"'; then
@@ -349,7 +377,7 @@ except: print('agent\n\n')
   fi
 done
 
-# Cleanup PID file
-rm -f "$SSE_PID_FILE"
+# Cleanup PID files
+rm -f "$SSE_PID_FILE" ".tycono/wave-${WAVE_ID}.pid"
 echo ""
 echo "📡 Wave $WAVE_ID — SSE monitor stopped."
