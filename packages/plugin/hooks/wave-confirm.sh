@@ -190,5 +190,6 @@ print('└───────────────────────�
   echo "⛔ Wave dispatch requires user confirmation."
   echo "Show the preview above to the user and ask for approval."
   echo "If approved, re-run with --confirmed flag."
+  echo "To change agency: re-run with --agency <id> (e.g., --agency solo-founder)"
 } >&2
 exit 2
