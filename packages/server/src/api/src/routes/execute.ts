@@ -945,46 +945,52 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
     }
   }
 
-  // BUG-FORKBOMB: Check for active waves — amend existing CEO instead of creating new wave
+  // FORKBOMB guard: check if a CEO execution is ACTUALLY running (not zombie wave state)
+  // Source of truth = executionManager, not waveMultiplexer
   const activeWaves = waveMultiplexer.getActiveWaves();
   if (activeWaves.length > 0) {
     const existingWave = activeWaves[0];
-    console.log(`[Wave] Active wave detected: ${existingWave.id}. Amending CEO instead of new wave.`);
 
-    // Find CEO session for existing wave
+    // Find CEO session and check if execution is actually running
     const ceoSession = listSessions().find(
-      s => s.waveId === existingWave.id && s.roleId === 'ceo' && s.status === 'active',
+      s => s.waveId === existingWave.id && s.roleId === 'ceo',
     );
+    const ceoExec = ceoSession ? executionManager.getActiveExecution(ceoSession.id) : null;
 
-    if (ceoSession) {
+    if (ceoExec && ceoExec.status === 'running') {
+      // CEO is genuinely running — amend instead of new wave
+      console.log(`[Wave] CEO actively running in wave ${existingWave.id}. Amending.`);
+
       const amendedExec = executionManager.continueSession(
-        ceoSession.id,
+        ceoSession!.id,
         `[ADDITIONAL DIRECTIVE] ${directive}`,
         'user',
       );
       if (amendedExec) {
         jsonResponse(res, 200, {
           waveId: existingWave.id,
-          sessionId: ceoSession.id,
+          sessionId: ceoSession!.id,
           executionId: amendedExec.id,
           amended: true,
           message: `Amended existing wave ${existingWave.id}`,
         });
         return;
       }
-      // CEO is running — queue the amendment
-      executionManager.queueAmendment(ceoSession.id, `[ADDITIONAL DIRECTIVE] ${directive}`);
+      // CEO execution exists but continueSession returned null — queue
+      executionManager.queueAmendment(ceoSession!.id, `[ADDITIONAL DIRECTIVE] ${directive}`);
       jsonResponse(res, 200, {
         waveId: existingWave.id,
-        sessionId: ceoSession.id,
+        sessionId: ceoSession!.id,
         amended: true,
         queued: true,
         message: `Amendment queued for active wave ${existingWave.id}`,
       });
       return;
     }
-    // No CEO session found — unusual, proceed with new wave
-    console.warn(`[Wave] Active wave ${existingWave.id} has no CEO session. Creating new wave.`);
+
+    // CEO not running → zombie wave. Clean up and proceed with new wave.
+    console.log(`[Wave] Zombie wave detected: ${existingWave.id} (CEO not running). Creating new wave.`);
+    waveMultiplexer.cleanupWave(existingWave.id);
   }
 
   const modelOverrides = body.modelOverrides as Record<string, string> | undefined;
