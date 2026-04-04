@@ -41,7 +41,7 @@ fi
 
 # Extract directive from the command
 # start-wave.sh [flags] "directive" or start-wave.sh [flags] directive words
-DIRECTIVE=$(echo "$COMMAND" | sed 's/.*start-wave\.sh//' | sed 's/--agency [^ ]*//' | sed 's/--continuous//' | sed 's/--safe//' | sed 's/--confirmed//' | xargs)
+DIRECTIVE=$(echo "$COMMAND" | sed 's/.*start-wave\.sh//' | sed 's/--agency [^ ]*//' | sed 's/--continuous//' | sed 's/--safe//' | sed 's/--confirmed//' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//' | sed "s/^['\"]//;s/['\"]$//")
 
 # Extract flags
 CONTINUOUS=""
@@ -49,7 +49,7 @@ PRESET=""
 if echo "$COMMAND" | grep -q "\-\-continuous"; then
   CONTINUOUS="true"
 fi
-PRESET_MATCH=$(echo "$COMMAND" | grep -oP '(?<=--agency\s)\S+' 2>/dev/null || echo "")
+PRESET_MATCH=$(echo "$COMMAND" | sed -n 's/.*--agency[[:space:]]\+\([^[:space:]]*\).*/\1/p' 2>/dev/null || echo "")
 
 # Try to find running server for preview
 API_URL=""
@@ -78,10 +78,10 @@ if [[ -n "$API_URL" ]]; then
     -d "$BODY" 2>/dev/null || echo "")
 
   if [[ -n "$PREVIEW" ]] && echo "$PREVIEW" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
-    # Parse and display preview
-    python3 -c "
+    # Parse and display preview (pass via stdin to avoid quote escaping issues)
+    echo "$PREVIEW" | python3 -c "
 import sys, json
-d = json.loads('''${PREVIEW}''')
+d = json.load(sys.stdin)
 
 print()
 print('┌─ Wave Confirmation ─────────────────────────────────┐')
