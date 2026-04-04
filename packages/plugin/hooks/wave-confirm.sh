@@ -23,12 +23,31 @@ if [[ "$TOOL_NAME" != "Bash" ]]; then
   exit 0
 fi
 
-# Detect start-wave.sh in the command (any form: direct, variable, path)
+# Only intercept actual execution of start-wave.sh
+# Execution patterns:
+#   1. "$SW" "directive"           (variable-based, after && )
+#   2. start-wave.sh "directive"   (direct invocation)
+#   3. /path/to/start-wave.sh "d"  (full path)
+# Non-execution (should pass through):
+#   - echo "...start-wave.sh..."   (just printing)
+#   - ls -la "$SW"                 (just checking)
+#   - find ... start-wave.sh       (searching)
+#   - SW="...start-wave.sh"        (assignment only, no &&)
+
+# Must contain start-wave.sh somewhere
 if ! echo "$COMMAND" | grep -q "start-wave\.sh"; then
   exit 0
 fi
-# Skip search/read commands that merely mention start-wave.sh
-if echo "$COMMAND" | grep -qE '^(find|grep|rg|cat|head|tail|ls|wc|file|stat|which|locate|diff|md5) '; then
+
+# Must have an execution pattern: $SW with string args, or start-wave.sh with string args
+HAS_EXEC="false"
+# Pattern 1: "$SW" "args" or "$SW" --flag (variable execution with arguments)
+echo "$COMMAND" | grep -qE '"\$SW"\s+["'"'"'-]' && HAS_EXEC="true"
+echo "$COMMAND" | grep -qE '\$SW\s+["'"'"'-]' && HAS_EXEC="true"
+# Pattern 2: start-wave.sh "args" or start-wave.sh --flag (direct with arguments)
+echo "$COMMAND" | grep -qE 'start-wave\.sh\s+["'"'"'-]' && HAS_EXEC="true"
+
+if [[ "$HAS_EXEC" != "true" ]]; then
   exit 0
 fi
 
