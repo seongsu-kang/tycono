@@ -813,6 +813,59 @@ else
   SKIP=$((SKIP + 1))
 fi
 
+# TC-AGENT-20: Wave Analysis API endpoint (server code check)
+# =============================================================================
+# Checks that the server has GET /api/waves/:waveId/analysis endpoint
+# and analysis.sh uses it with fallback
+# =============================================================================
+echo "TC-AGENT-20: Wave Analysis API endpoint (code check)"
+
+EXEC_TS="${PLUGIN_ROOT}/../server/src/api/src/routes/execute.ts"
+ANALYSIS_SH="${PLUGIN_ROOT}/scripts/analysis.sh"
+
+if [[ -f "$EXEC_TS" ]]; then
+  # Check server has analysis route
+  assert_contains "Server: /api/waves/:waveId/analysis route" \
+    "$(cat "$EXEC_TS")" \
+    "handleWaveAnalysis"
+
+  assert_contains "Server: analysis imports estimateCost" \
+    "$(cat "$EXEC_TS")" \
+    "estimateCost"
+
+  assert_contains "Server: analysis imports getTokenLedger" \
+    "$(cat "$EXEC_TS")" \
+    "getTokenLedger"
+
+  # Check analysis function has wave-scoped token query
+  assert_contains "Server: analysis queries token ledger per session" \
+    "$(cat "$EXEC_TS")" \
+    "ledger.query({ sessionId: ses.id })"
+
+  # Check analysis function returns orphans
+  assert_contains "Server: analysis detects orphan sessions" \
+    "$(cat "$EXEC_TS")" \
+    "orphans"
+else
+  echo "  [SKIP] execute.ts not found at $EXEC_TS"
+  SKIP=$((SKIP + 1))
+fi
+
+if [[ -f "$ANALYSIS_SH" ]]; then
+  # Check plugin uses unified endpoint
+  assert_contains "Plugin: analysis.sh calls /analysis endpoint" \
+    "$(cat "$ANALYSIS_SH")" \
+    "/api/waves/\${WAVE_ID}/analysis"
+
+  # Check plugin has fallback for older servers
+  assert_contains "Plugin: analysis.sh has fallback for old servers" \
+    "$(cat "$ANALYSIS_SH")" \
+    "Fallback"
+else
+  echo "  [SKIP] analysis.sh not found at $ANALYSIS_SH"
+  SKIP=$((SKIP + 1))
+fi
+
 # =============================================================================
 # Summary
 # =============================================================================

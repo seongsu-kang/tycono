@@ -4,7 +4,8 @@ import path from 'node:path';
 import { COMPANY_ROOT } from '../services/file-reader.js';
 import { autoSelectPreset, getPresetById } from '../services/preset-loader.js';
 import { readConfig } from '../services/company-config.js';
-import { MODEL_PRICING } from '../services/pricing.js';
+import { MODEL_PRICING, estimateCost } from '../services/pricing.js';
+import { getTokenLedger } from '../services/token-ledger.js';
 // activity-tracker removed — executionManager is Single Source of Truth
 import { buildOrgTree, canDispatchTo, getSubordinates } from '../engine/org-tree.js';
 import { createRunner, type RunnerResult } from '../engine/runners/index.js';
@@ -119,6 +120,13 @@ export function handleExecRequest(req: IncomingMessage, res: ServerResponse): vo
   const questionMatch = url.match(/^\/api\/waves\/([^/]+)\/question$/);
   if (method === 'POST' && questionMatch) {
     readBody(req).then((body) => handleWaveQuestion(questionMatch[1], body, res));
+    return;
+  }
+
+  // ── GET /api/waves/:waveId/analysis — Unified wave analysis ──
+  const analysisMatch = url.match(/^\/api\/waves\/([^/]+)\/analysis$/);
+  if (method === 'GET' && analysisMatch) {
+    handleWaveAnalysis(analysisMatch[1], res);
     return;
   }
 
@@ -1149,6 +1157,113 @@ function handleStatus(res: ServerResponse): void {
   jsonResponse(res, 200, { statuses, activeExecutions });
 }
 
+
+/* ─── GET /api/waves/:waveId/analysis — Unified wave analysis ──── */
+
+function handleWaveAnalysis(waveId: string, res: ServerResponse): void {
+  // 1. Find wave (active or from disk)
+  const activeWaves = waveMultiplexer.getActiveWaves();
+  let wave = activeWaves.find((w: { id: string }) => w.id === waveId);
+  let waveStatus: 'running' | 'completed' | 'unknown' = wave ? 'running' : 'unknown';
+
+  if (!wave) {
+    const wavePath = path.join(COMPANY_ROOT, '.tycono', 'waves', `${waveId}.json`);
+    if (fs.existsSync(wavePath)) {
+      try {
+        wave = JSON.parse(fs.readFileSync(wavePath, 'utf-8'));
+        waveStatus = 'completed';
+      } catch { /* ignore */ }
+    }
+  }
+
+  if (!wave) {
+    jsonResponse(res, 404, { error: 'Wave not found' });
+    return;
+  }
+
+  // 2. Get sessions for this wave
+  const allSessions = listSessions();
+  const waveSessions = allSessions.filter(s => s.waveId === waveId);
+
+  // 3. Get execution statuses
+  const roles: Array<{
+    roleId: string;
+    sessionId: string;
+    status: string;
+    model: string;
+    turns: number;
+    inputTokens: number;
+    outputTokens: number;
+    costUsd: number;
+    parentSessionId?: string;
+  }> = [];
+
+  const ledger = getTokenLedger(COMPANY_ROOT);
+
+  for (const ses of waveSessions) {
+    const exec = executionManager.getActiveExecution(ses.id);
+    const status = exec
+      ? (exec.status === 'running' ? 'working' : exec.status)
+      : 'done';
+
+    // Token data from ledger
+    const tokenData = ledger.query({ sessionId: ses.id });
+    let costUsd = 0;
+    for (const entry of tokenData.entries) {
+      costUsd += estimateCost(entry.inputTokens, entry.outputTokens, entry.model);
+    }
+
+    // Model: from execution or session's first token entry
+    const model = tokenData.entries.length > 0
+      ? tokenData.entries[tokenData.entries.length - 1].model
+      : '';
+
+    roles.push({
+      roleId: ses.roleId,
+      sessionId: ses.id,
+      status,
+      model,
+      turns: tokenData.entries.length,
+      inputTokens: tokenData.totalInput,
+      outputTokens: tokenData.totalOutput,
+      costUsd,
+      ...(ses.parentSessionId && { parentSessionId: ses.parentSessionId }),
+    });
+  }
+
+  // 4. Orphan detection: active sessions NOT in this wave
+  const waveSessionIds = new Set(waveSessions.map(s => s.id));
+  const orphans = allSessions
+    .filter(s => !waveSessionIds.has(s.id) && s.status === 'active')
+    .map(s => ({
+      sessionId: s.id,
+      roleId: s.roleId,
+      waveId: s.waveId ?? null,
+      status: s.status,
+    }));
+
+  // 5. Totals
+  const totalCost = roles.reduce((sum, r) => sum + r.costUsd, 0);
+  const totalInput = roles.reduce((sum, r) => sum + r.inputTokens, 0);
+  const totalOutput = roles.reduce((sum, r) => sum + r.outputTokens, 0);
+
+  const startedAt = (wave as Record<string, unknown>).startedAt;
+  const elapsed = typeof startedAt === 'number' && startedAt > 0
+    ? Math.floor((Date.now() - startedAt) / 1000)
+    : null;
+
+  jsonResponse(res, 200, {
+    waveId,
+    status: waveStatus,
+    directive: (wave as Record<string, unknown>).directive ?? '',
+    elapsedSeconds: elapsed,
+    roles,
+    orphans,
+    totalInputTokens: totalInput,
+    totalOutputTokens: totalOutput,
+    totalCostUsd: totalCost,
+  });
+}
 
 
 /* ─── POST /api/exec/session/{id}/message ──── */
