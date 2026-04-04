@@ -30,8 +30,23 @@ WAVE_ID="${WAVE_ID:-}"
 API_URL="${API_URL:-}"
 
 if [[ -n "$WAVE_ID" ]] && [[ -n "$API_URL" ]]; then
+  # Stop the wave via API
   curl -s -X POST "${API_URL}/api/waves/${WAVE_ID}/stop" >/dev/null 2>&1 || true
   echo "🛑 Wave $WAVE_ID cancelled."
+
+  # Kill the SSE monitor process (start-wave.sh that's blocking on curl)
+  SSE_PID_FILE=".tycono/wave-${WAVE_ID}.pid"
+  if [[ -f "$SSE_PID_FILE" ]]; then
+    SSE_PID=$(cat "$SSE_PID_FILE")
+    if [[ -n "$SSE_PID" ]] && kill -0 "$SSE_PID" 2>/dev/null; then
+      kill -- -"$SSE_PID" 2>/dev/null || kill "$SSE_PID" 2>/dev/null || true
+      echo "🧹 SSE monitor (PID $SSE_PID) killed."
+    fi
+    rm -f "$SSE_PID_FILE"
+  fi
+
+  # Kill any lingering curl SSE processes for this wave
+  pkill -f "curl.*${WAVE_ID}/stream" 2>/dev/null || true
 else
   echo "⚠️ Could not find wave info in state file."
 fi

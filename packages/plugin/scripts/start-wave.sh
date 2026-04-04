@@ -287,10 +287,13 @@ fi
 # wakes up the Claude Code main agent via the notification queue.
 # The script stays alive until the wave ends (SSE stream closes).
 
+# Save SSE monitor PID for cancel.sh to kill
+SSE_PID_FILE=".tycono/wave-${WAVE_ID}.pid"
+echo "$$" > "$SSE_PID_FILE"
+
 curl -sN "${API_URL}/api/waves/${WAVE_ID}/stream" 2>/dev/null | while IFS= read -r line; do
   if echo "$line" | grep -q '"type"'; then
     if echo "$line" | grep -q "awaiting_input"; then
-      # Extract fields from JSON in one pass
       PARSED=$(echo "$line" | python3 -c "
 import sys, json
 raw = sys.stdin.read()
@@ -337,13 +340,16 @@ except: print('agent\n\n')
     fi
   fi
 
-  # Detect wave completion
-  if echo "$line" | grep -q "wave:done\|wave:complete"; then
+  # Detect wave completion — break the loop
+  if echo "$line" | grep -q "wave:done\|wave:complete\|stream:end"; then
     echo ""
     echo "✅ TYCONO — Wave $WAVE_ID completed!"
     echo "  Run /tycono:tycono-status for results."
+    break
   fi
 done
 
+# Cleanup PID file
+rm -f "$SSE_PID_FILE"
 echo ""
-echo "📡 Wave $WAVE_ID — SSE stream ended."
+echo "📡 Wave $WAVE_ID — SSE monitor stopped."
