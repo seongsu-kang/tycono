@@ -28,6 +28,7 @@ You see real-time updates in your Claude Code session as background notification
 | `/tycono:agency-create` | **Guided setup** — scan project, design team, auto-verify |
 | `/tycono:agency-list` | List installed agencies |
 | `/tycono:agency-install <id>` | Install an agency from marketplace or GitHub |
+| `/tycono:version` | Show version info (plugin, server, hook status) |
 | `/tycono:help` | This help page |
 
 ## Quick Start (3 steps)
