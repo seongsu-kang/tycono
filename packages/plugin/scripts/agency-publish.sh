@@ -106,57 +106,81 @@ echo "   Archive: ${ARCHIVE_SIZE} bytes"
 ARCHIVE_B64=$(base64 < "$ARCHIVE_PATH")
 
 # --- Build metadata JSON from agency.yaml ---
-# Use python3 for reliable YAML→JSON conversion
+# Try PyYAML first, fallback to manual parser
 METADATA_JSON=$(python3 -c "
 import json, sys
+try:
+    import yaml
+    with open('$YAML_FILE', 'r') as f:
+        data = yaml.safe_load(f)
+    # Flatten nested dicts to top-level for simple fields
+    if isinstance(data, dict):
+        print(json.dumps(data, ensure_ascii=False))
+    else:
+        print('{}')
+except ImportError:
+    # Manual YAML parser with multiline support
+    data = {}
+    current_key = None
+    current_list = None
+    multiline_text = None
 
-data = {}
-current_key = None
-current_list = None
+    with open('$YAML_FILE', 'r') as f:
+        for line in f:
+            line = line.rstrip()
 
-with open('$YAML_FILE', 'r') as f:
-    for line in f:
-        line = line.rstrip()
-        if not line or line.startswith('#'):
-            continue
-
-        # Handle list items
-        if line.startswith('  - ') and current_key:
-            if current_list is None:
-                current_list = []
-            current_list.append(line.strip('- ').strip())
-            data[current_key] = current_list
-            continue
-
-        # Handle key: value
-        if ':' in line and not line.startswith(' '):
-            # Save previous list
-            current_list = None
-
-            parts = line.split(':', 1)
-            key = parts[0].strip()
-            val = parts[1].strip()
-
-            # Handle inline lists like [a, b, c]
-            if val.startswith('[') and val.endswith(']'):
-                items = [x.strip().strip('\"').strip(\"'\") for x in val[1:-1].split(',')]
-                data[key] = items
-                current_key = key
+            # Skip empty lines and comments (but collect multiline text)
+            if not line or line.startswith('#'):
+                if multiline_text is not None and current_key:
+                    multiline_text += '\n'
                 continue
 
-            # Handle multiline (|)
-            if val == '|':
-                current_key = key
-                data[key] = ''
+            # Collect multiline text block (indented lines after |)
+            if multiline_text is not None and current_key and line.startswith('  ') and ':' not in line.lstrip()[:20]:
+                multiline_text += line.strip() + '\n'
+                data[current_key] = multiline_text.strip()
+                continue
+            elif multiline_text is not None:
+                multiline_text = None
+
+            # Handle list items
+            if line.startswith('  - ') and current_key:
+                if current_list is None:
+                    current_list = []
+                current_list.append(line.lstrip()[2:].strip())
+                data[current_key] = current_list
                 continue
 
-            # Regular value
-            val = val.strip('\"').strip(\"'\")
-            if val:
-                data[key] = val
-            current_key = key
+            # Handle top-level key: value
+            if ':' in line and not line.startswith(' '):
+                current_list = None
+                multiline_text = None
 
-print(json.dumps(data))
+                parts = line.split(':', 1)
+                key = parts[0].strip()
+                val = parts[1].strip()
+
+                # Inline lists [a, b, c]
+                if val.startswith('[') and val.endswith(']'):
+                    items = [x.strip().strip('\"').strip(\"'\") for x in val[1:-1].split(',')]
+                    data[key] = items
+                    current_key = key
+                    continue
+
+                # Multiline block (|)
+                if val == '|':
+                    current_key = key
+                    multiline_text = ''
+                    data[key] = ''
+                    continue
+
+                # Regular value
+                val = val.strip('\"').strip(\"'\")
+                if val:
+                    data[key] = val
+                current_key = key
+
+    print(json.dumps(data, ensure_ascii=False))
 " 2>/dev/null || echo '{}')
 
 # --- Upload to tycono.ai ---
@@ -165,24 +189,27 @@ echo "🚀 Uploading to tycono.ai..."
 
 API_URL="https://tycono.ai/api/agencies/publish"
 
-# Build request body
+# Build request body — pipe metadata via stdin to avoid shell escaping issues
 REQUEST_BODY=$(python3 -c "
 import json, sys
 
-metadata = json.loads('''$METADATA_JSON''')
-archive_b64 = sys.stdin.read()
+# Read metadata JSON and base64 archive from stdin (separated by null byte)
+raw = sys.stdin.read()
+parts = raw.split('\x00', 1)
+metadata = json.loads(parts[0])
+archive_b64 = parts[1].strip() if len(parts) > 1 else ''
 
 body = {
     'id': '$AGENCY_ID',
-    'name': '$AGENCY_NAME',
-    'version': '$AGENCY_VERSION',
+    'name': metadata.get('name', '$AGENCY_NAME'),
+    'version': metadata.get('version', '$AGENCY_VERSION'),
     'data': metadata,
     'archive': archive_b64,
     'publisherId': '$INSTANCE_ID'
 }
 
-print(json.dumps(body))
-" <<< "$ARCHIVE_B64")
+print(json.dumps(body, ensure_ascii=False))
+" < <(printf '%s\0%s' "$METADATA_JSON" "$ARCHIVE_B64"))
 
 TEMP_RESPONSE=$(mktemp)
 HTTP_CODE=$(curl -s -w "%{http_code}" \
