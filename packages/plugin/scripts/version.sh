@@ -32,7 +32,9 @@ if [[ -f "$HEADLESS_JSON" ]]; then
   if [[ -n "$PORT" ]] && curl -s --max-time 2 "http://localhost:${PORT}/api/health" >/dev/null 2>&1; then
     echo "  Runtime: ✅ running (port $PORT, PID $PID)"
   else
-    echo "  Runtime: ⚠️  headless.json exists but server not responding"
+    # Stale headless.json — server is dead, clean it up
+    rm -f "$HEADLESS_JSON"
+    echo "  Runtime: ⏸  no active server (cleaned stale headless.json)"
   fi
 else
   echo "  Runtime: ⏸  no active server"
