@@ -7,7 +7,10 @@
 #
 # This hook is harness-enforced — the AI cannot bypass it.
 
-set -euo pipefail
+set -uo pipefail
+# NOTE: -e removed intentionally. With -e, any intermediate grep/python3 failure
+# kills the entire script with exit 1, which Claude Code interprets as "hook error".
+# We need explicit error handling: exit 0 (allow) or exit 2 (block).
 
 # Read tool input from stdin (JSON: { tool_name, tool_input: { command } })
 INPUT=$(cat)
