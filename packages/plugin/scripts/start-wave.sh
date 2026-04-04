@@ -133,9 +133,21 @@ if [[ -f "$HEADLESS_JSON" ]]; then
 
   if [[ -n "$EXISTING_PID" ]] && kill -0 "$EXISTING_PID" 2>/dev/null; then
     # PID alive — verify server actually responds
-    if curl -s --max-time 3 "http://localhost:${EXISTING_PORT}/api/health" >/dev/null 2>&1; then
-      API_URL="http://localhost:${EXISTING_PORT}"
-      echo "🔗 Connected to existing Tycono server (port $EXISTING_PORT)"
+    HEALTH_RESPONSE=$(curl -s --max-time 3 "http://localhost:${EXISTING_PORT}/api/health" 2>/dev/null || echo "")
+    if [[ -n "$HEALTH_RESPONSE" ]] && echo "$HEALTH_RESPONSE" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
+      # Check server version — restart if outdated
+      RUNNING_VERSION=$(echo "$HEALTH_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('version','0.0.0'))" 2>/dev/null || echo "0.0.0")
+      LATEST_VERSION=$(npm view tycono-server version --prefer-offline 2>/dev/null || echo "")
+      if [[ -n "$LATEST_VERSION" ]] && [[ "$RUNNING_VERSION" != "$LATEST_VERSION" ]] && [[ "$RUNNING_VERSION" != "0.0.0" ]]; then
+        echo "⚠️  Server outdated: v$RUNNING_VERSION → v$LATEST_VERSION. Restarting..."
+        kill "$EXISTING_PID" 2>/dev/null || true
+        sleep 2
+        rm -f "$HEADLESS_JSON"
+        # Fall through to start new server below
+      else
+        API_URL="http://localhost:${EXISTING_PORT}"
+        echo "🔗 Connected to existing Tycono server (port $EXISTING_PORT, v$RUNNING_VERSION)"
+      fi
     else
       echo "⏳ Server process alive but not ready. Waiting..."
       # Wait up to 30s for existing server to become ready

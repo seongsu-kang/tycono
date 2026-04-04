@@ -57,7 +57,13 @@ export function createApp() {
   app.use('/api/presets', presetsRouter);
 
   app.get('/api/health', (_req, res) => {
-    res.json({ status: 'ok', companyRoot: COMPANY_ROOT });
+    let version = '0.0.0';
+    try {
+      const pkgPath = path.resolve(__dirname, '..', '..', '..', '..', 'package.json');
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+      version = pkg.version;
+    } catch { /* ignore */ }
+    res.json({ status: 'ok', version, companyRoot: COMPANY_ROOT });
   });
 
   // Debug: memory stats for leak detection
