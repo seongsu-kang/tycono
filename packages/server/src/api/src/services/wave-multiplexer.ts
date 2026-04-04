@@ -203,6 +203,18 @@ class WaveMultiplexer {
           roleId,
           reason: event.type === 'msg:done' ? 'done' : 'error',
         });
+
+        // Check if ALL sessions in this wave are done → emit wave:done
+        const sessions = this.waveSessions.get(waveId);
+        if (sessions) {
+          const allDone = Array.from(sessions.values()).every(
+            e => e.status === 'done' || e.status === 'error'
+          );
+          if (allDone) {
+            sendSSE(client, 'wave:done', { waveId, reason: 'all-roles-complete' });
+            console.log(`[WaveMux] All roles done in wave ${waveId} — sent wave:done`);
+          }
+        }
       }
     };
 
