@@ -1273,15 +1273,20 @@ function handleWaveAnalysis(waveId: string, res: ServerResponse): void {
     });
   }
 
-  // 4. Orphan detection: active sessions NOT in this wave
+  // 4. Orphan detection: sessions NOT in this wave with ACTUALLY running executions
+  // Source of truth = executionManager, not session.status (avoids stale state issues)
   const waveSessionIds = new Set(waveSessions.map(s => s.id));
   const orphans = allSessions
-    .filter(s => !waveSessionIds.has(s.id) && s.status === 'active')
+    .filter(s => {
+      if (waveSessionIds.has(s.id)) return false;
+      const exec = executionManager.getActiveExecution(s.id);
+      return exec && (exec.status === 'running' || exec.status === 'awaiting_input');
+    })
     .map(s => ({
       sessionId: s.id,
       roleId: s.roleId,
       waveId: s.waveId ?? null,
-      status: s.status,
+      status: executionManager.getActiveExecution(s.id)?.status ?? 'unknown',
     }));
 
   // 5. Totals

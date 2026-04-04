@@ -913,13 +913,8 @@ ${state.continuous ? `## Continuous Improvement Mode (ON)
         console.error(`[Supervisor] Failed to auto-save wave ${state.waveId}:`, err);
       }
 
-      // Mark all wave sessions as closed (prevents orphan detection in analysis)
-      const allWaveSessions = listSessions().filter(s => s.waveId === state.waveId);
-      for (const ses of allWaveSessions) {
-        if (ses.status === 'active') {
-          updateSession(ses.id, { status: 'closed' });
-        }
-      }
+      // NOTE: session.status is NOT updated here — orphan detection uses
+      // executionManager as source of truth, not session.status.
 
       // OOM prevention: clear accumulated state + wave multiplexer sessions
       state.pendingDirectives = [];
