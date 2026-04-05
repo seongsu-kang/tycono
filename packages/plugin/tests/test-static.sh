@@ -262,6 +262,63 @@ if [[ -f "$BOARD_SH" ]]; then
 fi
 
 # =============================================================================
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "S-10: Template system"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+if [[ -f "$BOARD_STORE" ]]; then
+  BST=$(cat "$BOARD_STORE")
+  assert_contains "saveTemplate function" "$BST" "saveTemplate"
+  assert_contains "getTemplate function" "$BST" "getTemplate"
+  assert_contains "listTemplates function" "$BST" "listTemplates"
+  assert_contains "createBoardFromTemplate" "$BST" "createBoardFromTemplate"
+fi
+
+if [[ -f "$BOARD_ROUTE" ]]; then
+  BRT=$(cat "$BOARD_ROUTE")
+  assert_contains "POST /api/templates route" "$BRT" "templates.*POST\|POST.*templates"
+  assert_contains "GET /api/templates route" "$BRT" "templates.*GET\|GET.*templates"
+fi
+
+assert_contains "BoardTemplate type" "$(cat "$BOARD_TYPES")" "interface BoardTemplate"
+
+if [[ -f "$BOARD_SH" ]]; then
+  assert_contains "board save command" "$(cat "$BOARD_SH")" "save_template"
+  assert_contains "board templates command" "$(cat "$BOARD_SH")" "list_templates"
+fi
+
+# =============================================================================
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "S-11: Dashboard UI file"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+DASHBOARD="${SERVER_SRC}/ui/dashboard.html"
+assert_file_exists "dashboard.html exists" "$DASHBOARD"
+
+if [[ -f "$DASHBOARD" ]]; then
+  DH=$(cat "$DASHBOARD")
+  assert_contains "dashboard title" "$DH" "Tycono Board"
+  assert_contains "board rendering" "$DH" "renderBoard"
+  assert_contains "wave summary fallback" "$DH" "renderWaveSummary"
+  assert_contains "SSE EventSource" "$DH" "EventSource"
+  assert_contains "skip action" "$DH" "skipTask"
+  assert_contains "edit modal" "$DH" "edit-modal"
+  assert_contains "add task modal" "$DH" "add-modal"
+  assert_contains "template modal" "$DH" "template-modal"
+  assert_contains "stop wave action" "$DH" "stopWave"
+  assert_contains "report view" "$DH" "showReport"
+  assert_contains "task detail" "$DH" "showDetail"
+fi
+
+# Check /ui route in server
+CREATE_SERVER="${SERVER_SRC}/api/src/create-server.ts"
+if [[ -f "$CREATE_SERVER" ]]; then
+  assert_contains "/ui route registered" "$(cat "$CREATE_SERVER")" "dashboard.html"
+fi
+
+# =============================================================================
 # Summary
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

@@ -294,6 +294,64 @@ else
 fi
 
 # =============================================================================
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "I-06: Template CRUD API"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+if [[ -n "$API_URL" ]]; then
+  # Save board as template
+  assert_http "POST save template (201)" POST "${API_URL}/api/templates" "201" \
+    "{\"waveId\":\"${BOARD_WAVE}\",\"name\":\"test-template\"}"
+
+  # List templates
+  TEMPLATES=$(curl -s "${API_URL}/api/templates" 2>/dev/null)
+  assert_contains "template in list" "$TEMPLATES" "test-template"
+
+  # Get template
+  assert_http "GET template (200)" GET "${API_URL}/api/templates/test-template" "200"
+
+  TPL=$(curl -s "${API_URL}/api/templates/test-template" 2>/dev/null)
+  assert_contains "template has tasks" "$TPL" '"tasks"'
+  assert_contains "template has sourceWaveId" "$TPL" "$BOARD_WAVE"
+
+  # Get nonexistent template
+  assert_http "GET unknown template (404)" GET "${API_URL}/api/templates/nonexistent" "404"
+else
+  echo "  [SKIP] No server"
+  SKIP=$((SKIP + 5))
+fi
+
+# =============================================================================
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "I-07: Dashboard UI serving"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+if [[ -n "$API_URL" ]]; then
+  # Dashboard serves HTML
+  assert_http "GET /ui (200)" GET "${API_URL}/ui" "200"
+
+  # Check HTML content
+  DASHBOARD_HTML=$(curl -s "${API_URL}/ui" 2>/dev/null)
+  assert_contains "dashboard has title" "$DASHBOARD_HTML" "Tycono Board"
+  assert_contains "dashboard has board div" "$DASHBOARD_HTML" 'id="board"'
+  assert_contains "dashboard has wave selector" "$DASHBOARD_HTML" 'wave-select'
+  assert_contains "dashboard has Report button" "$DASHBOARD_HTML" "showReport"
+  assert_contains "dashboard has Add Task" "$DASHBOARD_HTML" "showAddTask"
+  assert_contains "dashboard has Stop Wave" "$DASHBOARD_HTML" "stopWave"
+  assert_contains "dashboard has Edit modal" "$DASHBOARD_HTML" "edit-modal"
+  assert_contains "dashboard has Add modal" "$DASHBOARD_HTML" "add-modal"
+  assert_contains "dashboard has Template modal" "$DASHBOARD_HTML" "template-modal"
+  assert_contains "dashboard has SSE" "$DASHBOARD_HTML" "EventSource"
+  assert_contains "dashboard has renderBoard" "$DASHBOARD_HTML" "renderBoard"
+  assert_contains "dashboard has renderWaveSummary" "$DASHBOARD_HTML" "renderWaveSummary"
+else
+  echo "  [SKIP] No server"
+  SKIP=$((SKIP + 12))
+fi
+
+# =============================================================================
 # Cleanup + Summary
 cleanup
 trap - EXIT
