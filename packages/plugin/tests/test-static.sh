@@ -248,6 +248,19 @@ if [[ -f "$BOARD_TYPES" ]]; then
   assert_contains "BoardTaskStatus type" "$(cat "$BOARD_TYPES")" "BoardTaskStatus"
 fi
 
+BOARD_CMD="${PLUGIN_ROOT}/commands/board.md"
+BOARD_SH="${PLUGIN_ROOT}/scripts/board.sh"
+assert_file_exists "board command exists" "$BOARD_CMD"
+assert_file_exists "board script exists" "$BOARD_SH"
+if [[ -f "$BOARD_SH" ]]; then
+  BS=$(cat "$BOARD_SH")
+  assert_contains "board view action" "$BS" "view_board"
+  assert_contains "board skip action" "$BS" "skip_task"
+  assert_contains "board edit action" "$BS" "edit_task"
+  assert_contains "board add action" "$BS" "add_task"
+  assert_contains "board uses board API" "$BS" "/api/waves/"
+fi
+
 # =============================================================================
 # Summary
 echo ""
