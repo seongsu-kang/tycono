@@ -6,18 +6,31 @@
 <title>Tycono Board</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #e0e0e0; padding: 20px; }
-  h1 { font-size: 1.4em; margin-bottom: 4px; color: #fff; }
-  .subtitle { color: #888; font-size: 0.85em; margin-bottom: 20px; }
-  .status-bar { display: flex; gap: 16px; margin-bottom: 20px; font-size: 0.85em; color: #aaa; }
-  .status-bar .live { color: #4ade80; }
-  .status-bar .cost { color: #facc15; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #e0e0e0; padding: 20px; max-width: 1200px; margin: 0 auto; }
+  h1 { font-size: 1.4em; margin-bottom: 4px; color: #fff; display: inline-block; }
+  .subtitle { color: #888; font-size: 0.85em; margin-bottom: 16px; }
 
-  .board { display: flex; flex-direction: column; gap: 8px; }
+  .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .top-left { display: flex; align-items: center; gap: 12px; }
+  .status-bar { display: flex; gap: 16px; font-size: 0.85em; color: #aaa; align-items: center; }
+  .status-bar .live { color: #4ade80; }
+
+  .wave-selector select { background: #1a1a1a; color: #ccc; border: 1px solid #333; padding: 6px 12px; border-radius: 4px; font-size: 0.85em; min-width: 300px; }
+
+  .toolbar { display: flex; gap: 8px; margin-bottom: 16px; }
+  .toolbar button { padding: 6px 14px; font-size: 0.8em; border: 1px solid #333; background: #1a1a1a; color: #ccc; border-radius: 4px; cursor: pointer; }
+  .toolbar button:hover { background: #2a2a2a; color: #fff; }
+  .toolbar button.danger { border-color: #7f1d1d; color: #ef4444; }
+  .toolbar button.danger:hover { background: #7f1d1d; color: #fff; }
+  .toolbar button.primary { border-color: #1e40af; color: #60a5fa; }
+  .toolbar button.primary:hover { background: #1e40af; color: #fff; }
+
+  /* Board table */
+  .board { display: flex; flex-direction: column; gap: 6px; }
   .task-row {
-    display: grid; grid-template-columns: 50px 1fr 120px 100px 1fr 80px;
-    align-items: center; padding: 12px 16px; background: #161616; border-radius: 8px;
-    border-left: 4px solid #333; transition: all 0.2s;
+    display: grid; grid-template-columns: 50px 1fr 110px 100px 1fr 120px;
+    align-items: center; padding: 10px 16px; background: #161616; border-radius: 8px;
+    border-left: 4px solid #333; transition: all 0.2s; cursor: pointer;
   }
   .task-row:hover { background: #1e1e1e; }
   .task-row.running { border-left-color: #3b82f6; background: #161625; }
@@ -25,54 +38,88 @@
   .task-row.skipped { border-left-color: #666; opacity: 0.5; }
   .task-row.blocked { border-left-color: #ef4444; }
   .task-row.waiting { border-left-color: #444; }
+  .task-row.child { margin-left: 24px; border-left-style: dashed; }
 
   .task-id { font-family: monospace; color: #888; font-size: 0.85em; }
   .task-title { font-weight: 500; }
   .task-assignee { color: #a78bfa; font-size: 0.85em; }
   .task-status { font-size: 0.85em; }
   .task-criteria { color: #888; font-size: 0.8em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .task-actions { display: flex; gap: 4px; }
-  .task-actions button {
-    padding: 4px 8px; font-size: 0.75em; border: 1px solid #333; background: #222;
-    color: #ccc; border-radius: 4px; cursor: pointer; transition: all 0.15s;
-  }
+  .task-actions { display: flex; gap: 4px; justify-content: flex-end; }
+  .task-actions button { padding: 3px 8px; font-size: 0.7em; border: 1px solid #333; background: #222; color: #ccc; border-radius: 3px; cursor: pointer; }
   .task-actions button:hover { background: #333; color: #fff; }
-  .task-actions button.skip-btn:hover { border-color: #f59e0b; color: #f59e0b; }
+  .task-actions .skip-btn:hover { border-color: #f59e0b; color: #f59e0b; }
+  .task-actions .edit-btn:hover { border-color: #60a5fa; color: #60a5fa; }
 
-  .status-icon { margin-right: 4px; }
+  .dep-arrow { color: #555; font-size: 0.75em; margin-left: 4px; }
+
   .header-row {
-    display: grid; grid-template-columns: 50px 1fr 120px 100px 1fr 80px;
-    padding: 8px 16px; font-size: 0.75em; color: #666; text-transform: uppercase; letter-spacing: 0.05em;
+    display: grid; grid-template-columns: 50px 1fr 110px 100px 1fr 120px;
+    padding: 6px 16px; font-size: 0.7em; color: #555; text-transform: uppercase; letter-spacing: 0.05em;
   }
-  .history { margin-top: 24px; }
-  .history h3 { font-size: 0.9em; color: #888; margin-bottom: 8px; }
-  .history-row { font-size: 0.8em; color: #666; padding: 4px 0; }
-  .progress { margin-top: 16px; }
+
+  /* Progress */
+  .progress { margin-top: 12px; }
   .progress-bar { height: 4px; background: #222; border-radius: 2px; overflow: hidden; margin-top: 4px; }
   .progress-fill { height: 100%; background: #22c55e; transition: width 0.3s; }
-  .progress-text { font-size: 0.8em; color: #888; margin-top: 4px; }
+  .progress-text { font-size: 0.8em; color: #666; margin-top: 4px; }
+
+  /* History */
+  .history { margin-top: 20px; }
+  .history h3 { font-size: 0.85em; color: #666; margin-bottom: 6px; }
+  .history-row { font-size: 0.8em; color: #555; padding: 3px 0; }
+
+  /* Modal */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; justify-content: center; align-items: center; }
+  .modal-overlay.active { display: flex; }
+  .modal { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 20px; min-width: 400px; max-width: 600px; }
+  .modal h3 { font-size: 1em; margin-bottom: 12px; color: #fff; }
+  .modal label { display: block; font-size: 0.8em; color: #888; margin-bottom: 4px; margin-top: 10px; }
+  .modal input, .modal textarea, .modal select { width: 100%; padding: 8px; background: #111; border: 1px solid #333; color: #ccc; border-radius: 4px; font-size: 0.85em; }
+  .modal textarea { min-height: 60px; resize: vertical; }
+  .modal-actions { margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end; }
+  .modal-actions button { padding: 6px 16px; border-radius: 4px; cursor: pointer; font-size: 0.85em; border: 1px solid #333; }
+  .modal-actions .cancel { background: #222; color: #888; }
+  .modal-actions .save { background: #1e40af; color: #fff; border-color: #1e40af; }
+
+  /* Report */
+  .report-section { margin-top: 20px; background: #111; border: 1px solid #222; border-radius: 8px; padding: 16px; font-size: 0.85em; line-height: 1.6; white-space: pre-wrap; color: #bbb; display: none; }
+  .report-section h3 { color: #fff; margin-bottom: 8px; }
+
+  /* Detail panel */
+  .detail-panel { margin-top: 12px; background: #111; border: 1px solid #222; border-radius: 8px; padding: 12px 16px; font-size: 0.8em; display: none; }
+  .detail-panel h4 { color: #a78bfa; margin-bottom: 6px; }
+  .detail-panel .detail-meta { color: #666; }
 
   .empty { text-align: center; padding: 60px; color: #555; }
   .empty h2 { font-size: 1.2em; margin-bottom: 8px; }
-
-  .wave-selector { margin-bottom: 16px; }
-  .wave-selector select { background: #1a1a1a; color: #ccc; border: 1px solid #333; padding: 6px 12px; border-radius: 4px; font-size: 0.85em; }
 </style>
 </head>
 <body>
 
-<h1>Tycono Board</h1>
-<div class="subtitle" id="directive">Loading...</div>
-
-<div class="status-bar">
-  <span id="wave-id"></span>
-  <span class="live" id="sse-status">Connecting...</span>
+<div class="top-bar">
+  <div class="top-left">
+    <h1>Tycono Board</h1>
+    <div class="status-bar">
+      <span id="wave-id" style="font-family:monospace; font-size:0.8em"></span>
+      <span class="live" id="sse-status">--</span>
+    </div>
+  </div>
+  <div class="wave-selector">
+    <select id="wave-select" onchange="loadWave(this.value)">
+      <option value="">Select wave...</option>
+    </select>
+  </div>
 </div>
 
-<div class="wave-selector">
-  <select id="wave-select" onchange="loadWave(this.value)">
-    <option value="">Select wave...</option>
-  </select>
+<div class="subtitle" id="directive">Loading...</div>
+
+<div class="toolbar" id="toolbar">
+  <button class="primary" onclick="showReport()">Report</button>
+  <button onclick="showAddTask()">+ Add Task</button>
+  <button onclick="showTemplates()">Templates</button>
+  <button onclick="saveAsTemplate()">Save Template</button>
+  <button class="danger" onclick="stopWave()">Stop Wave</button>
 </div>
 
 <div class="header-row">
@@ -85,14 +132,73 @@
   <div class="progress-text" id="progress-text"></div>
 </div>
 
+<div class="detail-panel" id="detail-panel">
+  <h4 id="detail-title"></h4>
+  <div id="detail-content" class="detail-meta"></div>
+</div>
+
+<div class="report-section" id="report-section">
+  <h3>Wave Report</h3>
+  <div id="report-content"></div>
+</div>
+
 <div class="history" id="history-section" style="display:none">
   <h3>History</h3>
   <div id="history"></div>
 </div>
 
+<!-- Edit Modal -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal">
+    <h3>Edit Task</h3>
+    <input type="hidden" id="edit-task-id">
+    <label>Title</label>
+    <input type="text" id="edit-title">
+    <label>Criteria</label>
+    <textarea id="edit-criteria"></textarea>
+    <label>Assignee</label>
+    <input type="text" id="edit-assignee">
+    <div class="modal-actions">
+      <button class="cancel" onclick="closeModal('edit-modal')">Cancel</button>
+      <button class="save" onclick="submitEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Task Modal -->
+<div class="modal-overlay" id="add-modal">
+  <div class="modal">
+    <h3>Add Task</h3>
+    <label>Title</label>
+    <input type="text" id="add-title" placeholder="Task description">
+    <label>Assignee (role ID)</label>
+    <input type="text" id="add-assignee" placeholder="e.g. cto, engineer, qa">
+    <label>Criteria</label>
+    <textarea id="add-criteria" placeholder="Completion criteria (optional)"></textarea>
+    <div class="modal-actions">
+      <button class="cancel" onclick="closeModal('add-modal')">Cancel</button>
+      <button class="save" onclick="submitAdd()">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- Template Save Modal -->
+<div class="modal-overlay" id="template-modal">
+  <div class="modal">
+    <h3>Save as Template</h3>
+    <label>Template Name</label>
+    <input type="text" id="template-name" placeholder="e.g. rpg-game-flow">
+    <div class="modal-actions">
+      <button class="cancel" onclick="closeModal('template-modal')">Cancel</button>
+      <button class="save" onclick="submitTemplate()">Save</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const API = window.location.origin;
 let currentWaveId = null;
+let currentBoard = null;
 let sseSource = null;
 
 const statusIcons = {
@@ -103,160 +209,131 @@ const statusIcons = {
   skipped: '<span class="status-icon">&#9197;</span>skipped',
 };
 
+/* ─── Wave loading ─────────────────── */
+
 async function loadActiveWaves() {
   try {
     const res = await fetch(`${API}/api/waves/active`);
     const data = await res.json();
     const waves = data.waves || data || [];
     const select = document.getElementById('wave-select');
+    const prevValue = select.value;
     select.innerHTML = '<option value="">Select wave...</option>';
     waves.forEach(w => {
       const opt = document.createElement('option');
       opt.value = w.id;
-      const dir = (w.directive || '').slice(0, 60);
-      opt.textContent = `${w.id} — ${dir}`;
+      opt.textContent = `${w.id} — ${(w.directive || '').slice(0, 50)}`;
       select.appendChild(opt);
     });
-    // Also check completed waves
-    const ops = await fetch(`${API}/api/operations/waves`);
-    const completed = await ops.json();
-    (completed || []).slice(0, 10).forEach(w => {
-      const opt = document.createElement('option');
-      opt.value = w.id;
-      opt.textContent = `${w.id} — ${(w.directive || '').slice(0, 60)} (done)`;
-      select.appendChild(opt);
-    });
-    if (waves.length > 0 && !currentWaveId) {
+    try {
+      const ops = await fetch(`${API}/api/operations/waves`);
+      const completed = await ops.json();
+      (completed || []).slice(0, 10).forEach(w => {
+        const opt = document.createElement('option');
+        opt.value = w.id;
+        opt.textContent = `${w.id} — ${(w.directive || '').slice(0, 50)} (done)`;
+        select.appendChild(opt);
+      });
+    } catch {}
+    if (prevValue) { select.value = prevValue; }
+    else if (waves.length > 0 && !currentWaveId) {
       select.value = waves[0].id;
       loadWave(waves[0].id);
     }
-  } catch (e) {
-    console.error('Failed to load waves:', e);
-  }
+  } catch (e) { console.error('Load waves failed:', e); }
 }
 
 async function loadWave(waveId) {
   if (!waveId) return;
   currentWaveId = waveId;
   document.getElementById('wave-id').textContent = waveId;
+  document.getElementById('report-section').style.display = 'none';
+  document.getElementById('detail-panel').style.display = 'none';
   await renderBoard();
   connectSSE(waveId);
 }
+
+/* ─── Board rendering ──────────────── */
 
 async function renderBoard() {
   if (!currentWaveId) return;
   try {
     const res = await fetch(`${API}/api/waves/${currentWaveId}/board`);
-    if (!res.ok) {
-      // No board — try to show wave summary from operations API
-      await renderWaveSummary();
-      return;
-    }
+    if (!res.ok) { await renderWaveSummary(); return; }
     const board = await res.json();
+    currentBoard = board;
     document.getElementById('directive').textContent = board.directive || '';
 
     const el = document.getElementById('board');
-    el.innerHTML = board.tasks.map(t => `
-      <div class="task-row ${t.status}" data-id="${t.id}">
+    el.innerHTML = board.tasks.map(t => {
+      const depHtml = t.dependsOn?.length ? `<span class="dep-arrow">&#8592; ${t.dependsOn.join(', ')}</span>` : '';
+      const isChild = t.dependsOn?.length > 0;
+      return `
+      <div class="task-row ${t.status} ${isChild ? 'child' : ''}" data-id="${t.id}" onclick="showDetail('${t.id}')">
         <span class="task-id">${t.id}</span>
         <span class="task-title">${esc(t.title)}</span>
         <span class="task-assignee">${t.assignee}</span>
         <span class="task-status">${statusIcons[t.status] || t.status}</span>
-        <span class="task-criteria">${esc(t.criteria || '')}${t.dependsOn?.length ? ' (dep: ' + t.dependsOn.join(', ') + ')' : ''}</span>
+        <span class="task-criteria">${esc(t.criteria || '')}${depHtml}</span>
         <span class="task-actions">
-          ${t.status === 'waiting' ? `<button class="skip-btn" onclick="skipTask('${t.id}')">Skip</button>` : ''}
+          ${t.status === 'waiting' ? `<button class="skip-btn" onclick="event.stopPropagation();skipTask('${t.id}')">Skip</button>` : ''}
+          ${t.status !== 'done' && t.status !== 'skipped' ? `<button class="edit-btn" onclick="event.stopPropagation();showEdit('${t.id}')">Edit</button>` : ''}
         </span>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
 
-    // Progress
     const done = board.tasks.filter(t => t.status === 'done' || t.status === 'skipped').length;
     const total = board.tasks.length;
     document.getElementById('progress-fill').style.width = total ? `${(done / total * 100)}%` : '0%';
     document.getElementById('progress-text').textContent = `${done}/${total} tasks complete`;
 
-    // History
     if (board.history?.length) {
       document.getElementById('history-section').style.display = 'block';
       document.getElementById('history').innerHTML = board.history.map(h =>
-        `<div class="history-row">${h.result === 'pass' ? '&#9989;' : '&#10060;'} ${h.taskId}: ${esc(h.note || '')} <span style="color:#555">(${h.agent})</span></div>`
+        `<div class="history-row">${h.result === 'pass' ? '&#9989;' : '&#10060;'} ${h.taskId}: ${esc(h.note || '')} <span style="color:#444">(${h.agent})</span></div>`
       ).join('');
+    } else {
+      document.getElementById('history-section').style.display = 'none';
     }
-  } catch (e) {
-    console.error('Failed to load board:', e);
-  }
+  } catch (e) { console.error('Render board failed:', e); }
 }
 
-function connectSSE(waveId) {
-  if (sseSource) sseSource.close();
-  const statusEl = document.getElementById('sse-status');
-  try {
-    sseSource = new EventSource(`${API}/api/waves/${waveId}/stream`);
-    sseSource.onopen = () => { statusEl.textContent = 'Live'; };
-    sseSource.onmessage = (e) => {
-      // Re-render board on any event
-      renderBoard();
-    };
-    sseSource.onerror = () => {
-      statusEl.textContent = 'Disconnected';
-      statusEl.style.color = '#888';
-    };
-  } catch {
-    statusEl.textContent = 'No SSE';
-  }
-}
-
-async function skipTask(taskId) {
-  try {
-    await fetch(`${API}/api/waves/${currentWaveId}/board/tasks/${taskId}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'skipped' }),
-    });
-    renderBoard();
-  } catch (e) {
-    alert('Failed to skip task: ' + e.message);
-  }
-}
+/* ─── Wave summary (no board) ──────── */
 
 async function renderWaveSummary() {
-  // Show wave data from operations API (for waves without boards)
   try {
     const res = await fetch(`${API}/api/operations/waves/${currentWaveId}`);
     if (!res.ok) {
-      document.getElementById('board').innerHTML = '<div class="empty"><h2>No data</h2><p>This wave has no board or saved data.</p></div>';
+      document.getElementById('board').innerHTML = '<div class="empty"><h2>No data</h2><p>No board or wave data found.</p></div>';
       document.getElementById('directive').textContent = '';
-      document.getElementById('progress-fill').style.width = '0%';
-      document.getElementById('progress-text').textContent = '';
       return;
     }
     const raw = await res.json();
     const wave = raw.replay || raw;
     document.getElementById('directive').textContent = wave.directive || '';
+    currentBoard = null;
 
     const roles = wave.roles || [];
-    if (roles.length === 0) {
+    if (!roles.length) {
       document.getElementById('board').innerHTML = '<div class="empty"><h2>Wave (no board)</h2><p>This wave ran before Task Board was introduced.</p></div>';
       return;
     }
 
-    // Render roles as a wave summary (not board tasks)
-    const waveStatusMap = { done: 'done', streaming: 'running', running: 'running', error: 'blocked', unknown: 'waiting', awaiting_input: 'running' };
-    const el = document.getElementById('board');
+    const sMap = { done: 'done', streaming: 'running', running: 'running', error: 'blocked', unknown: 'waiting', awaiting_input: 'running' };
     const allRoles = [];
     roles.forEach(r => {
       allRoles.push(r);
       (r.childSessions || []).forEach(c => allRoles.push({ ...c, isChild: true }));
     });
 
-    el.innerHTML = allRoles.map(r => {
-      const status = waveStatusMap[r.status] || 'waiting';
-      const indent = r.isChild ? '&nbsp;&nbsp;&#8627; ' : '';
+    document.getElementById('board').innerHTML = allRoles.map(r => {
+      const st = sMap[r.status] || 'waiting';
       return `
-        <div class="task-row ${status}">
-          <span class="task-id">${indent}${r.roleId}</span>
+        <div class="task-row ${st} ${r.isChild ? 'child' : ''}">
+          <span class="task-id">${r.roleId}</span>
           <span class="task-title">${esc(r.roleName || r.roleId)}</span>
-          <span class="task-assignee">${r.isChild ? '(dispatched)' : 'C-Level'}</span>
-          <span class="task-status">${statusIcons[status] || r.status}</span>
+          <span class="task-assignee">${r.isChild ? 'dispatched' : 'C-Level'}</span>
+          <span class="task-status">${statusIcons[st] || r.status}</span>
           <span class="task-criteria">${r.events ? r.events.length + ' events' : ''}</span>
           <span class="task-actions"></span>
         </div>`;
@@ -264,19 +341,175 @@ async function renderWaveSummary() {
 
     const done = allRoles.filter(r => r.status === 'done').length;
     document.getElementById('progress-fill').style.width = allRoles.length ? `${(done / allRoles.length * 100)}%` : '0%';
-    document.getElementById('progress-text').textContent = `${done}/${allRoles.length} roles complete (wave summary — no board)`;
-  } catch (e) {
-    document.getElementById('board').innerHTML = '<div class="empty"><h2>No data</h2><p>Could not load wave data.</p></div>';
-  }
+    document.getElementById('progress-text').textContent = `${done}/${allRoles.length} roles (wave summary)`;
+  } catch { document.getElementById('board').innerHTML = '<div class="empty"><h2>Error</h2></div>'; }
 }
+
+/* ─── SSE ───────────────────────────── */
+
+function connectSSE(waveId) {
+  if (sseSource) sseSource.close();
+  const el = document.getElementById('sse-status');
+  try {
+    sseSource = new EventSource(`${API}/api/waves/${waveId}/stream`);
+    sseSource.onopen = () => { el.textContent = 'Live'; el.style.color = '#4ade80'; };
+    sseSource.onmessage = () => renderBoard();
+    sseSource.onerror = () => { el.textContent = 'Offline'; el.style.color = '#666'; };
+  } catch { el.textContent = '--'; }
+}
+
+/* ─── Actions: Skip ────────────────── */
+
+async function skipTask(taskId) {
+  await fetch(`${API}/api/waves/${currentWaveId}/board/tasks/${taskId}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'skipped' }),
+  });
+  renderBoard();
+}
+
+/* ─── Actions: Edit ────────────────── */
+
+function showEdit(taskId) {
+  const t = currentBoard?.tasks?.find(x => x.id === taskId);
+  if (!t) return;
+  document.getElementById('edit-task-id').value = taskId;
+  document.getElementById('edit-title').value = t.title;
+  document.getElementById('edit-criteria').value = t.criteria || '';
+  document.getElementById('edit-assignee').value = t.assignee;
+  document.getElementById('edit-modal').classList.add('active');
+}
+
+async function submitEdit() {
+  const taskId = document.getElementById('edit-task-id').value;
+  const body = {
+    title: document.getElementById('edit-title').value,
+    criteria: document.getElementById('edit-criteria').value,
+    assignee: document.getElementById('edit-assignee').value,
+  };
+  await fetch(`${API}/api/waves/${currentWaveId}/board/tasks/${taskId}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  closeModal('edit-modal');
+  renderBoard();
+}
+
+/* ─── Actions: Add Task ────────────── */
+
+function showAddTask() {
+  document.getElementById('add-title').value = '';
+  document.getElementById('add-assignee').value = '';
+  document.getElementById('add-criteria').value = '';
+  document.getElementById('add-modal').classList.add('active');
+}
+
+async function submitAdd() {
+  const title = document.getElementById('add-title').value;
+  const assignee = document.getElementById('add-assignee').value;
+  const criteria = document.getElementById('add-criteria').value;
+  if (!title || !assignee) { alert('Title and Assignee required'); return; }
+  const count = currentBoard?.tasks?.length || 0;
+  await fetch(`${API}/api/waves/${currentWaveId}/board/tasks`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: `t${count + 1}`, title, assignee, status: 'waiting', dependsOn: [], criteria }),
+  });
+  closeModal('add-modal');
+  renderBoard();
+}
+
+/* ─── Actions: Stop Wave ───────────── */
+
+async function stopWave() {
+  if (!currentWaveId) return;
+  if (!confirm(`Stop wave ${currentWaveId}?`)) return;
+  await fetch(`${API}/api/waves/${currentWaveId}/stop`, { method: 'POST' });
+  renderBoard();
+}
+
+/* ─── Report ───────────────────────── */
+
+async function showReport() {
+  const section = document.getElementById('report-section');
+  if (section.style.display === 'block') { section.style.display = 'none'; return; }
+  try {
+    const res = await fetch(`${API}/api/waves/${currentWaveId}/report`);
+    if (!res.ok) { document.getElementById('report-content').textContent = 'No report available for this wave.'; }
+    else { document.getElementById('report-content').textContent = await res.text(); }
+    section.style.display = 'block';
+  } catch { document.getElementById('report-content').textContent = 'Failed to load report.'; section.style.display = 'block'; }
+}
+
+/* ─── Task Detail ──────────────────── */
+
+function showDetail(taskId) {
+  const t = currentBoard?.tasks?.find(x => x.id === taskId);
+  if (!t) return;
+  const panel = document.getElementById('detail-panel');
+  document.getElementById('detail-title').textContent = `${t.id}: ${t.title} (${t.assignee})`;
+  const lines = [];
+  lines.push(`Status: ${t.status}`);
+  if (t.criteria) lines.push(`Criteria: ${t.criteria}`);
+  if (t.dependsOn?.length) lines.push(`Depends on: ${t.dependsOn.join(', ')}`);
+  if (t.result) lines.push(`Result: ${t.result}`);
+  if (t.resultNote) lines.push(`Note: ${t.resultNote}`);
+  if (t.startedAt) lines.push(`Started: ${new Date(t.startedAt).toLocaleTimeString()}`);
+  if (t.finishedAt) lines.push(`Finished: ${new Date(t.finishedAt).toLocaleTimeString()}`);
+
+  const hist = currentBoard?.history?.filter(h => h.taskId === taskId) || [];
+  if (hist.length) {
+    lines.push('');
+    lines.push('History:');
+    hist.forEach(h => lines.push(`  ${h.result === 'pass' ? 'PASS' : 'FAIL'}: ${h.note || ''} (${h.agent})`));
+  }
+
+  document.getElementById('detail-content').textContent = lines.join('\n');
+  panel.style.display = 'block';
+}
+
+/* ─── Templates ────────────────────── */
+
+async function showTemplates() {
+  try {
+    const res = await fetch(`${API}/api/templates`);
+    const templates = await res.json();
+    if (!templates.length) { alert('No templates saved yet.\nSave one with "Save Template".'); return; }
+    const list = templates.map(t => `${t.id} — ${t.name} (${t.tasks.length} tasks)`).join('\n');
+    alert('Templates:\n\n' + list);
+  } catch { alert('Failed to load templates.'); }
+}
+
+function saveAsTemplate() {
+  if (!currentBoard) { alert('No board to save.'); return; }
+  document.getElementById('template-name').value = '';
+  document.getElementById('template-modal').classList.add('active');
+}
+
+async function submitTemplate() {
+  const name = document.getElementById('template-name').value;
+  if (!name) { alert('Name required'); return; }
+  await fetch(`${API}/api/templates`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ waveId: currentWaveId, name }),
+  });
+  closeModal('template-modal');
+  alert(`Template "${name}" saved!`);
+}
+
+/* ─── Modal helpers ────────────────── */
+
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-// Init
+// Close modals on overlay click
+document.querySelectorAll('.modal-overlay').forEach(el => {
+  el.addEventListener('click', e => { if (e.target === el) el.classList.remove('active'); });
+});
+
+/* ─── Init ─────────────────────────── */
 loadActiveWaves();
-// Refresh wave list every 10s
 setInterval(loadActiveWaves, 10000);
 </script>
-
 </body>
 </html>
