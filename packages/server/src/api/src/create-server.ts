@@ -231,15 +231,25 @@ export function createExpressApp(): express.Application {
     res.json({ status: 'ok', companyRoot: COMPANY_ROOT });
   });
 
-  // Board Dashboard UI — lightweight single-page HTML
-  app.get('/ui', (_req, res) => {
-    const dashboardPath = path.resolve(__dirname, '../../ui/dashboard.html');
-    if (fs.existsSync(dashboardPath)) {
-      res.sendFile(dashboardPath);
-    } else {
-      res.status(404).send('Dashboard not found');
-    }
-  });
+  // Board Dashboard UI — React app (built with Vite)
+  const uiDistPath = path.resolve(__dirname, '../../ui/dist');
+  if (fs.existsSync(uiDistPath)) {
+    app.use('/ui', express.static(uiDistPath));
+    // SPA fallback
+    app.use('/ui', (_req, res) => {
+      res.sendFile(path.join(uiDistPath, 'index.html'));
+    });
+  } else {
+    // Fallback: serve legacy single-file dashboard
+    app.get('/ui', (_req, res) => {
+      const legacyPath = path.resolve(__dirname, '../../ui/dashboard.html');
+      if (fs.existsSync(legacyPath)) {
+        res.sendFile(legacyPath);
+      } else {
+        res.status(404).send('Dashboard not found. Run: cd packages/server/src/ui && npm run build');
+      }
+    });
+  }
 
   // Production: serve web build as static files (SPA fallback)
   if (isProd) {
