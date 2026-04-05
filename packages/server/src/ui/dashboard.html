@@ -93,6 +93,24 @@
 
   .empty { text-align: center; padding: 60px; color: #555; }
   .empty h2 { font-size: 1.2em; margin-bottom: 8px; }
+
+  /* Activity Feed */
+  .activity-feed { margin-top: 20px; max-height: 300px; overflow-y: auto; border: 1px solid #1a1a1a; border-radius: 8px; }
+  .activity-feed h3 { font-size: 0.85em; color: #666; padding: 8px 12px; background: #111; border-bottom: 1px solid #1a1a1a; position: sticky; top: 0; }
+  .feed-item { padding: 4px 12px; font-size: 0.75em; font-family: monospace; border-bottom: 1px solid #0e0e0e; display: grid; grid-template-columns: 70px 90px 1fr; gap: 8px; }
+  .feed-item .feed-time { color: #555; }
+  .feed-item .feed-role { color: #a78bfa; }
+  .feed-item .feed-event { color: #888; }
+  .feed-item.dispatch { background: #111522; }
+  .feed-item.error { background: #1a1111; color: #ef4444; }
+  .feed-item.done { color: #22c55e; }
+  .feed-item.tool { color: #60a5fa; }
+
+  /* Two column layout */
+  .main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 16px; }
+  @media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
+  .main-grid .left { min-width: 0; }
+  .main-grid .right { min-width: 0; }
 </style>
 </head>
 <body>
@@ -122,29 +140,40 @@
   <button class="danger" onclick="stopWave()">Stop Wave</button>
 </div>
 
-<div class="header-row">
-  <span>ID</span><span>Task</span><span>Assignee</span><span>Status</span><span>Criteria</span><span>Actions</span>
-</div>
-<div class="board" id="board"></div>
+<div class="main-grid">
+  <div class="left">
+    <div class="header-row">
+      <span>ID</span><span>Task</span><span>Assignee</span><span>Status</span><span>Criteria</span><span>Actions</span>
+    </div>
+    <div class="board" id="board"></div>
 
-<div class="progress">
-  <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
-  <div class="progress-text" id="progress-text"></div>
-</div>
+    <div class="progress">
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+      <div class="progress-text" id="progress-text"></div>
+    </div>
 
-<div class="detail-panel" id="detail-panel">
-  <h4 id="detail-title"></h4>
-  <div id="detail-content" class="detail-meta"></div>
+    <div class="detail-panel" id="detail-panel">
+      <h4 id="detail-title"></h4>
+      <div id="detail-content" class="detail-meta"></div>
+    </div>
+
+    <div class="history" id="history-section" style="display:none">
+      <h3>History</h3>
+      <div id="history"></div>
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="activity-feed">
+      <h3>Activity Feed <span id="feed-count" style="color:#555; font-weight:normal">(0)</span></h3>
+      <div id="feed"></div>
+    </div>
+  </div>
 </div>
 
 <div class="report-section" id="report-section">
   <h3>Wave Report</h3>
   <div id="report-content"></div>
-</div>
-
-<div class="history" id="history-section" style="display:none">
-  <h3>History</h3>
-  <div id="history"></div>
 </div>
 
 <!-- Edit Modal -->
@@ -347,15 +376,79 @@ async function renderWaveSummary() {
 
 /* ─── SSE ───────────────────────────── */
 
+let feedCount = 0;
+const feedEvents = [];
+
 function connectSSE(waveId) {
   if (sseSource) sseSource.close();
+  feedCount = 0;
+  feedEvents.length = 0;
+  document.getElementById('feed').innerHTML = '';
+  document.getElementById('feed-count').textContent = '(0)';
+
   const el = document.getElementById('sse-status');
   try {
     sseSource = new EventSource(`${API}/api/waves/${waveId}/stream`);
     sseSource.onopen = () => { el.textContent = 'Live'; el.style.color = '#4ade80'; };
-    sseSource.onmessage = () => renderBoard();
+    sseSource.onmessage = (e) => {
+      renderBoard();
+      try {
+        const data = JSON.parse(e.data);
+        addFeedItem(data);
+      } catch {}
+    };
     sseSource.onerror = () => { el.textContent = 'Offline'; el.style.color = '#666'; };
   } catch { el.textContent = '--'; }
+}
+
+function addFeedItem(data) {
+  const type = data.type || '';
+  const role = data.roleId || data.role || '';
+  const ts = data.ts ? new Date(data.ts).toLocaleTimeString() : '';
+
+  // Format event description
+  let desc = type;
+  let cls = '';
+  if (type === 'dispatch:start') {
+    desc = `→ dispatch to ${data.data?.targetRoleId || '?'}: ${(data.data?.task || '').slice(0, 60)}`;
+    cls = 'dispatch';
+  } else if (type === 'dispatch:done') {
+    desc = `← ${data.data?.targetRoleId || '?'} completed`;
+    cls = 'done';
+  } else if (type === 'tool:start') {
+    desc = `tool: ${data.data?.name || '?'}`;
+    cls = 'tool';
+  } else if (type === 'tool:result') {
+    desc = `tool result: ${(data.data?.output || '').slice(0, 50)}`;
+    cls = 'tool';
+  } else if (type === 'msg:done') {
+    desc = `done`;
+    cls = 'done';
+  } else if (type === 'msg:error') {
+    desc = `error: ${data.data?.error || ''}`;
+    cls = 'error';
+  } else if (type === 'text') {
+    desc = `${(data.data?.text || '').slice(0, 80)}`;
+  } else if (type === 'msg:start') {
+    desc = `started (${data.data?.type || ''})`;
+  } else if (type === 'msg:turn-complete') {
+    desc = `turn ${data.data?.turn || '?'} complete`;
+  }
+
+  // Skip noisy events
+  if (type === 'thinking' || type === 'prompt:assembled' || type === 'trace:response') return;
+
+  feedCount++;
+  document.getElementById('feed-count').textContent = `(${feedCount})`;
+
+  const feed = document.getElementById('feed');
+  const item = document.createElement('div');
+  item.className = `feed-item ${cls}`;
+  item.innerHTML = `<span class="feed-time">${ts}</span><span class="feed-role">${role}</span><span class="feed-event">${esc(desc)}</span>`;
+  feed.insertBefore(item, feed.firstChild); // newest first
+
+  // Keep max 200 items
+  while (feed.children.length > 200) feed.removeChild(feed.lastChild);
 }
 
 /* ─── Actions: Skip ────────────────── */

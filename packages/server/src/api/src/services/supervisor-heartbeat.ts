@@ -595,12 +595,18 @@ You are the CEO Supervisor responding to the CEO's follow-up question.
         }
         // Fallback: create default board from C-Level roles
         if (!boardStore.hasBoard(state.waveId)) {
+          const roleLabels: Record<string, string> = {
+            cto: 'Technical Planning & Implementation',
+            cbo: 'Business Analysis & Strategy',
+            pm: 'Project Management',
+            engineer: 'Code Implementation',
+            qa: 'Quality Assurance & Testing',
+            designer: 'Design & UX',
+          };
           const boardTasks: BoardTask[] = cLevelRoles.map((roleId, i) => {
-            const node = orgTree.nodes.get(roleId);
-            const name = node?.name ?? roleId;
             return {
               id: `t${i + 1}`,
-              title: `${name} 작업`,
+              title: `${roleId.toUpperCase()}: ${roleLabels[roleId] || 'Task'}`,
               assignee: roleId,
               status: 'waiting' as const,
               dependsOn: [],
