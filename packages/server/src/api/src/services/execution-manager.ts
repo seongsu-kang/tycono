@@ -242,12 +242,13 @@ class ExecutionManager {
     });
 
     // Auto-update board task status → running
-    if (session?.waveId) {
+    const sessionForBoard = getSession(params.sessionId);
+    if (sessionForBoard?.waveId) {
       try {
-        const myTasks = boardStore.getTasksForRole(session.waveId, params.roleId);
+        const myTasks = boardStore.getTasksForRole(sessionForBoard.waveId, params.roleId);
         const waitingTask = myTasks.find(t => t.status === 'waiting');
         if (waitingTask) {
-          boardStore.updateTaskStatus(session.waveId, waitingTask.id, 'running');
+          boardStore.updateTaskStatus(sessionForBoard.waveId, waitingTask.id, 'running');
         }
       } catch { /* non-fatal */ }
     }
@@ -338,7 +339,7 @@ class ExecutionManager {
         teamStatus,
         targetRoles: params.targetRoles,
         presetId,
-        waveId: session?.waveId,
+        waveId: sessionForBoard?.waveId,
         codeRoot: resolveCodeRoot(COMPANY_ROOT),
         attachments: params.attachments,
         cliSessionId: params.cliSessionId,

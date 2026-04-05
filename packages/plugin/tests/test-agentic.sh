@@ -7,7 +7,8 @@
 # These tests verify BEHAVIOR, not code patterns.
 # Each test: start wave → wait for completion → analyze activity-streams.
 
-set -euo pipefail
+set -uo pipefail
+# No set -e: individual test failures should not abort the suite
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -57,12 +58,14 @@ start_server() {
   echo "# Test" > "$TEST_DIR/knowledge/CLAUDE.md"
   mkdir -p "$TEST_DIR/.tycono"
 
-  local TYCONO_BIN
-  TYCONO_BIN=$(which tycono-server 2>/dev/null || echo "")
+  local SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+  local SERVER_CLI="${SCRIPT_DIR}/../../server/bin/cli.js"
 
   cd "$TEST_DIR"
-  if [[ -n "$TYCONO_BIN" ]]; then
-    "$TYCONO_BIN" &
+  if [[ -f "$SERVER_CLI" ]]; then
+    COMPANY_ROOT="$TEST_DIR" node "$SERVER_CLI" &
+  elif command -v tycono-server &>/dev/null; then
+    tycono-server &
   elif command -v npx &>/dev/null; then
     npx tycono-server@latest &
   else
