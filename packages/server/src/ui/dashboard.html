@@ -148,8 +148,8 @@ async function renderBoard() {
   try {
     const res = await fetch(`${API}/api/waves/${currentWaveId}/board`);
     if (!res.ok) {
-      document.getElementById('board').innerHTML = '<div class="empty"><h2>No board</h2><p>Board is auto-created when a wave dispatches.</p></div>';
-      document.getElementById('directive').textContent = '';
+      // No board — try to show wave summary from operations API
+      await renderWaveSummary();
       return;
     }
     const board = await res.json();
@@ -215,6 +215,57 @@ async function skipTask(taskId) {
     renderBoard();
   } catch (e) {
     alert('Failed to skip task: ' + e.message);
+  }
+}
+
+async function renderWaveSummary() {
+  // Show wave data from operations API (for waves without boards)
+  try {
+    const res = await fetch(`${API}/api/operations/waves/${currentWaveId}`);
+    if (!res.ok) {
+      document.getElementById('board').innerHTML = '<div class="empty"><h2>No data</h2><p>This wave has no board or saved data.</p></div>';
+      document.getElementById('directive').textContent = '';
+      document.getElementById('progress-fill').style.width = '0%';
+      document.getElementById('progress-text').textContent = '';
+      return;
+    }
+    const wave = await res.json();
+    document.getElementById('directive').textContent = wave.directive || '';
+
+    const roles = wave.roles || [];
+    if (roles.length === 0) {
+      document.getElementById('board').innerHTML = '<div class="empty"><h2>Wave (no board)</h2><p>This wave ran before Task Board was introduced.</p></div>';
+      return;
+    }
+
+    // Render roles as a wave summary (not board tasks)
+    const waveStatusMap = { done: 'done', streaming: 'running', running: 'running', error: 'blocked', unknown: 'waiting', awaiting_input: 'running' };
+    const el = document.getElementById('board');
+    const allRoles = [];
+    roles.forEach(r => {
+      allRoles.push(r);
+      (r.childSessions || []).forEach(c => allRoles.push({ ...c, isChild: true }));
+    });
+
+    el.innerHTML = allRoles.map(r => {
+      const status = waveStatusMap[r.status] || 'waiting';
+      const indent = r.isChild ? '&nbsp;&nbsp;&#8627; ' : '';
+      return `
+        <div class="task-row ${status}">
+          <span class="task-id">${indent}${r.roleId}</span>
+          <span class="task-title">${esc(r.roleName || r.roleId)}</span>
+          <span class="task-assignee">${r.isChild ? '(dispatched)' : 'C-Level'}</span>
+          <span class="task-status">${statusIcons[status] || r.status}</span>
+          <span class="task-criteria">${r.events ? r.events.length + ' events' : ''}</span>
+          <span class="task-actions"></span>
+        </div>`;
+    }).join('');
+
+    const done = allRoles.filter(r => r.status === 'done').length;
+    document.getElementById('progress-fill').style.width = allRoles.length ? `${(done / allRoles.length * 100)}%` : '0%';
+    document.getElementById('progress-text').textContent = `${done}/${allRoles.length} roles complete (wave summary — no board)`;
+  } catch (e) {
+    document.getElementById('board').innerHTML = '<div class="empty"><h2>No data</h2><p>Could not load wave data.</p></div>';
   }
 }
 
