@@ -583,24 +583,34 @@ You are the CEO Supervisor responding to the CEO's follow-up question.
     }
 
     // Auto-create task board for this wave (if not already exists)
+    // If templateId provided (from wave API), use template. Otherwise, default from cLevelRoles.
     if (!boardStore.hasBoard(state.waveId)) {
       try {
-        const boardTasks: BoardTask[] = cLevelRoles.map((roleId, i) => {
-          const node = orgTree.nodes.get(roleId);
-          const name = node?.name ?? roleId;
-          return {
-            id: `t${i + 1}`,
-            title: `${name} 작업`,
-            assignee: roleId,
-            status: 'waiting' as const,
-            dependsOn: [],
-            criteria: state.directive,
-          };
-        });
-        boardStore.createBoard(state.waveId, state.directive, boardTasks);
+        const templateId = (state as Record<string, unknown>).templateId as string | undefined;
+        if (templateId) {
+          const result = boardStore.createBoardFromTemplate(state.waveId, state.directive, templateId);
+          if (!result.ok) {
+            console.warn(`[Supervisor] Template ${templateId} failed: ${result.error}. Falling back to default.`);
+          }
+        }
+        // Fallback: create default board from C-Level roles
+        if (!boardStore.hasBoard(state.waveId)) {
+          const boardTasks: BoardTask[] = cLevelRoles.map((roleId, i) => {
+            const node = orgTree.nodes.get(roleId);
+            const name = node?.name ?? roleId;
+            return {
+              id: `t${i + 1}`,
+              title: `${name} 작업`,
+              assignee: roleId,
+              status: 'waiting' as const,
+              dependsOn: [],
+              criteria: state.directive,
+            };
+          });
+          boardStore.createBoard(state.waveId, state.directive, boardTasks);
+        }
       } catch (err) {
         console.warn(`[Supervisor] Failed to create board for wave ${state.waveId}:`, err);
-        // Non-fatal — wave continues without board
       }
     }
 

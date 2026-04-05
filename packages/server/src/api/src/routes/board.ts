@@ -149,3 +149,47 @@ boardRouter.post('/waves/:waveId/board/tasks/:taskId/complete', (req: Request, r
     next(err);
   }
 });
+
+/* ─── Template Routes ──────────────────── */
+
+/** POST /api/templates — Save board as template */
+boardRouter.post('/templates', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { waveId, name, description } = req.body as { waveId?: string; name?: string; description?: string };
+    if (!waveId || !name) {
+      res.status(400).json({ error: 'waveId and name are required' });
+      return;
+    }
+    const result = boardStore.saveTemplate(waveId, name, description);
+    if (!result.ok) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.status(201).json(result.template);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** GET /api/templates — List templates */
+boardRouter.get('/templates', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json(boardStore.listTemplates());
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** GET /api/templates/:id — Get template */
+boardRouter.get('/templates/:id', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const template = boardStore.getTemplate(req.params.id);
+    if (!template) {
+      res.status(404).json({ error: 'Template not found' });
+      return;
+    }
+    res.json(template);
+  } catch (err) {
+    next(err);
+  }
+});

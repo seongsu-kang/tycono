@@ -10,10 +10,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { COMPANY_ROOT } from './file-reader.js';
-import type { Board, BoardTask, BoardTaskStatus, BoardHistoryEntry } from '../../../shared/types.js';
+import type { Board, BoardTask, BoardTaskStatus, BoardHistoryEntry, BoardTemplate } from '../../../shared/types.js';
 import { canBoardTaskTransition } from '../../../shared/types.js';
 
 const BOARDS_DIR = () => path.join(COMPANY_ROOT, '.tycono', 'boards');
+const TEMPLATES_DIR = () => path.join(COMPANY_ROOT, '.tycono', 'templates');
 
 function ensureBoardsDir(): string {
   const dir = BOARDS_DIR();
@@ -210,4 +211,89 @@ export function listBoards(): Array<{ waveId: string; directive: string; taskCou
     } catch { /* skip */ }
   }
   return results;
+}
+
+/* ─── Templates ──────────────────────────── */
+
+function ensureTemplatesDir(): string {
+  const dir = TEMPLATES_DIR();
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  return dir;
+}
+
+/** Save a board as a reusable template (strips execution state) */
+export function saveTemplate(
+  waveId: string, name: string, description?: string,
+): { ok: boolean; template?: BoardTemplate; error?: string } {
+  const board = getBoard(waveId);
+  if (!board) return { ok: false, error: 'Board not found' };
+
+  const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const template: BoardTemplate = {
+    id,
+    name,
+    description,
+    tasks: board.tasks.map(t => ({
+      id: t.id,
+      title: t.title,
+      assignee: t.assignee,
+      dependsOn: t.dependsOn,
+      criteria: t.criteria,
+    })),
+    createdAt: new Date().toISOString(),
+    sourceWaveId: waveId,
+  };
+
+  const filePath = path.join(ensureTemplatesDir(), `${id}.json`);
+  fs.writeFileSync(filePath, JSON.stringify(template, null, 2), 'utf-8');
+  console.log(`[BoardStore] Template saved: ${id} (${template.tasks.length} tasks from wave ${waveId})`);
+  return { ok: true, template };
+}
+
+/** Get a template by ID */
+export function getTemplate(id: string): BoardTemplate | null {
+  const filePath = path.join(TEMPLATES_DIR(), `${id}.json`);
+  if (!fs.existsSync(filePath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as BoardTemplate;
+  } catch { return null; }
+}
+
+/** List all templates */
+export function listTemplates(): BoardTemplate[] {
+  const dir = TEMPLATES_DIR();
+  if (!fs.existsSync(dir)) return [];
+  const results: BoardTemplate[] = [];
+  for (const file of fs.readdirSync(dir)) {
+    if (!file.endsWith('.json')) continue;
+    try {
+      results.push(JSON.parse(fs.readFileSync(path.join(dir, file), 'utf-8')));
+    } catch { /* skip */ }
+  }
+  return results;
+}
+
+/** Create a board from a template */
+export function createBoardFromTemplate(
+  waveId: string, directive: string, templateId: string,
+): { ok: boolean; board?: Board; error?: string } {
+  const template = getTemplate(templateId);
+  if (!template) return { ok: false, error: `Template ${templateId} not found` };
+
+  if (hasBoard(waveId)) return { ok: false, error: 'Board already exists' };
+
+  const tasks: BoardTask[] = template.tasks.map(t => ({
+    id: t.id,
+    title: t.title,
+    assignee: t.assignee,
+    status: 'waiting' as const,
+    dependsOn: t.dependsOn,
+    criteria: t.criteria,
+  }));
+
+  const board = createBoard(waveId, directive, tasks);
+  console.log(`[BoardStore] Board created from template ${templateId} for wave ${waveId}`);
+  return { ok: true, board };
 }

@@ -231,6 +231,16 @@ export function createExpressApp(): express.Application {
     res.json({ status: 'ok', companyRoot: COMPANY_ROOT });
   });
 
+  // Board Dashboard UI — lightweight single-page HTML
+  app.get('/ui', (_req, res) => {
+    const dashboardPath = path.resolve(__dirname, '../../ui/dashboard.html');
+    if (fs.existsSync(dashboardPath)) {
+      res.sendFile(dashboardPath);
+    } else {
+      res.status(404).send('Dashboard not found');
+    }
+  });
+
   // Production: serve web build as static files (SPA fallback)
   if (isProd) {
     const distPath = path.resolve(__dirname, '../../web/dist');

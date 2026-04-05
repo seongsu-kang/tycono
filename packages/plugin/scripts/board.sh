@@ -184,15 +184,63 @@ add_task() {
   fi
 }
 
+# ─── Save as template ────────────────────────
+save_template() {
+  local NAME="$1"
+  if [[ -z "$NAME" ]]; then
+    echo "Usage: board.sh save \"template-name\""
+    exit 1
+  fi
+
+  local RESULT
+  RESULT=$(curl -s --max-time 5 -X POST \
+    "${API_URL}/api/templates" \
+    -H "Content-Type: application/json" \
+    -d "{\"waveId\":\"${WAVE_ID}\",\"name\":$(python3 -c "import json; print(json.dumps('$NAME'))")}" 2>/dev/null)
+
+  if echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'id' in d" 2>/dev/null; then
+    local TPL_ID
+    TPL_ID=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+    local TASK_COUNT
+    TASK_COUNT=$(echo "$RESULT" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('tasks',[])))")
+    echo "💾 Template saved: ${TPL_ID} (${TASK_COUNT} tasks)"
+    echo "   Use: /tycono \"task\" --template ${TPL_ID}"
+  else
+    echo "❌ Failed to save template"
+    echo "$RESULT"
+  fi
+}
+
+# ─── List templates ──────────────────────────
+list_templates() {
+  local RESULT
+  RESULT=$(curl -s --max-time 5 "${API_URL}/api/templates" 2>/dev/null)
+
+  python3 -c "
+import json, sys
+templates = json.loads('''$RESULT''')
+if not templates:
+    print('No templates saved.')
+    print('Save one with: /tycono:board save \"name\"')
+else:
+    print(f'{len(templates)} template(s):')
+    for t in templates:
+        tasks = len(t.get('tasks', []))
+        print(f'  {t[\"id\"]:20} {t[\"name\"]:25} {tasks} tasks')
+" 2>/dev/null || echo "Failed to list templates"
+}
+
 # ─── Route ───────────────────────────────────
 case "$ACTION" in
   view|"") view_board ;;
   skip) skip_task "$@" ;;
   edit) edit_task "$@" ;;
   add) add_task "$@" ;;
+  save) save_template "$@" ;;
+  templates) list_templates ;;
   *)
     echo "Unknown action: $ACTION"
-    echo "Usage: board.sh [view|skip|edit|add]"
+    echo "Usage: board.sh [view|skip|edit|add|save|templates]"
     exit 1
     ;;
 esac

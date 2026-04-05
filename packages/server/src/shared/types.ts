@@ -322,3 +322,19 @@ export const BOARD_TASK_TRANSITIONS: Record<BoardTaskStatus, BoardTaskStatus[]> 
 export function canBoardTaskTransition(from: BoardTaskStatus, to: BoardTaskStatus): boolean {
   return BOARD_TASK_TRANSITIONS[from].includes(to);
 }
+
+/** Template — reusable board structure (tasks without execution state) */
+export interface BoardTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  tasks: Array<{
+    id: string;
+    title: string;
+    assignee: string;
+    dependsOn: string[];
+    criteria?: string;
+  }>;
+  createdAt: string;
+  sourceWaveId?: string;
+}
