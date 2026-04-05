@@ -30,6 +30,7 @@ export interface AgentConfig {
   attachments?: ImageAttachment[];  // Image attachments for vision
   targetRoles?: string[];          // Selective dispatch scope
   presetId?: string;               // Wave-scoped preset for knowledge injection
+  waveId?: string;                 // Wave ID for task board context
   priorDispatches?: Array<{ roleId: string; task: string; result: string }>;  // Handoff summary
   // Callbacks
   onText?: (text: string) => void;
@@ -164,7 +165,7 @@ export async function runAgentLoop(config: AgentConfig): Promise<AgentResult> {
   const llm = config.llm ?? new AnthropicProvider();
 
   // 1. Assemble context
-  const context = assembleContext(companyRoot, roleId, task, sourceRole, orgTree, { teamStatus: config.teamStatus, targetRoles: config.targetRoles, presetId: config.presetId, priorDispatches: config.priorDispatches });
+  const context = assembleContext(companyRoot, roleId, task, sourceRole, orgTree, { teamStatus: config.teamStatus, targetRoles: config.targetRoles, presetId: config.presetId, priorDispatches: config.priorDispatches, waveId: config.waveId });
 
   // Trace: capture assembled prompt for debugging
   config.onPromptAssembled?.(context.systemPrompt, task);

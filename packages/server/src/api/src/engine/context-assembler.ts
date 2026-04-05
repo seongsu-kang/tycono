@@ -52,6 +52,7 @@ export interface AssembledContext {
  */
 export type { TeamStatus } from '../../../shared/types.js';
 import { type RoleStatus, type TeamStatus, isRoleActive } from '../../../shared/types.js';
+import * as boardStore from '../services/board-store.js';
 
 export function assembleContext(
   companyRoot: string,
@@ -59,7 +60,7 @@ export function assembleContext(
   task: string,
   sourceRole: string,
   orgTree: OrgTree,
-  options?: { teamStatus?: TeamStatus; targetRoles?: string[]; presetId?: string; priorDispatches?: Array<{ roleId: string; task: string; result: string }> },
+  options?: { teamStatus?: TeamStatus; targetRoles?: string[]; presetId?: string; priorDispatches?: Array<{ roleId: string; task: string; result: string }>; waveId?: string },
 ): AssembledContext {
   const node = orgTree.nodes.get(roleId);
   if (!node) {
@@ -192,6 +193,14 @@ ${summaries}
 - You MUST do the work yourself — research, analyze, write, decide
 - If implementation requires another role (e.g., engineering work), recommend it to CEO
 - Make decisions within your authority autonomously — do NOT ask CEO for decisions you can make yourself`, true);
+  }
+
+  // Task Board context — NOT cacheable (board state varies per wave)
+  if (options?.waveId) {
+    const boardSection = buildBoardSection(options.waveId, roleId);
+    if (boardSection) {
+      pushSection(boardSection, false);
+    }
   }
 
   // Consult 도구 안내 — CACHEABLE
@@ -974,4 +983,42 @@ The consulted role will answer your question in read-only mode and return the re
 - The consulted role answers in **read-only mode** (no file modifications)
 - Keep questions specific and concise for better answers
 - Don't consult for tasks that should be dispatched (use dispatch for work assignments)`;
+}
+
+/* ═══════════════════════════════════════════════
+ *  Task Board Section — wave-scoped task awareness
+ * ═══════════════════════════════════════════════ */
+
+function buildBoardSection(waveId: string, roleId: string): string | null {
+  const board = boardStore.getBoard(waveId);
+  if (!board) return null;
+
+  const myTasks = board.tasks.filter(t => t.assignee === roleId);
+  if (myTasks.length === 0) return null;
+
+  const taskLines = myTasks.map(t => {
+    const status = t.status === 'waiting' ? '⏳' : t.status === 'running' ? '🔄' : t.status === 'done' ? '✅' : t.status === 'skipped' ? '⏭' : '🚫';
+    const deps = t.dependsOn.length > 0 ? ` (depends: ${t.dependsOn.join(', ')})` : '';
+    const criteria = t.criteria ? ` — criteria: ${t.criteria}` : '';
+    return `  ${status} ${t.id}: ${t.title}${deps}${criteria}`;
+  }).join('\n');
+
+  const allTaskLines = board.tasks.map(t => {
+    const status = t.status === 'waiting' ? '⏳' : t.status === 'running' ? '🔄' : t.status === 'done' ? '✅' : t.status === 'skipped' ? '⏭' : '🚫';
+    return `  ${status} ${t.id}: ${t.title} → ${t.assignee}`;
+  }).join('\n');
+
+  return `# Task Board (Wave: ${waveId})
+
+## Your Assigned Tasks
+${taskLines}
+
+## Full Board
+${allTaskLines}
+
+## Board Rules
+- Focus on your assigned tasks. Complete them in dependency order.
+- If a task is "skipped" or "blocked", skip it and move to the next one.
+- If the board has been modified by the CEO (task content changed, new tasks added), follow the updated instructions.
+- Report your task results clearly so they can be recorded on the board.`;
 }

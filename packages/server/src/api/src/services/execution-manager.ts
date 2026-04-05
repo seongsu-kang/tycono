@@ -16,6 +16,7 @@ import { earnCoinsInternal } from '../routes/coins.js';
 import { getSession, createSession, addMessage, updateMessage as updateSessionMessage, updateSession, appendMessageEvent, type Message, type ImageAttachment } from './session-store.js';
 import { portRegistry, type PortAllocation } from './port-registry.js';
 import { type MessageStatus, isMessageActive, canTransition, messageStatusToRoleStatus } from '../../../shared/types.js';
+import * as boardStore from './board-store.js';
 
 /* ─── Types ─── */
 
@@ -240,6 +241,17 @@ class ExecutionManager {
       ...(params.parentSessionId && { parentSessionId: params.parentSessionId }),
     });
 
+    // Auto-update board task status → running
+    if (session?.waveId) {
+      try {
+        const myTasks = boardStore.getTasksForRole(session.waveId, params.roleId);
+        const waitingTask = myTasks.find(t => t.status === 'waiting');
+        if (waitingTask) {
+          boardStore.updateTaskStatus(session.waveId, waitingTask.id, 'running');
+        }
+      } catch { /* non-fatal */ }
+    }
+
     // If this execution has a parent session, emit dispatch:start on the parent's stream
     if (params.parentSessionId) {
       const parentExec = this.getActiveExecution(params.parentSessionId);
@@ -326,6 +338,7 @@ class ExecutionManager {
         teamStatus,
         targetRoles: params.targetRoles,
         presetId,
+        waveId: session?.waveId,
         codeRoot: resolveCodeRoot(COMPANY_ROOT),
         attachments: params.attachments,
         cliSessionId: params.cliSessionId,
@@ -648,6 +661,17 @@ class ExecutionManager {
           execution.stream.emit('msg:done', params.roleId, doneData);
           if (execution.sessionId) {
             this.finalizeSessionMessage(execution, 'done', result);
+          }
+
+          // Auto-update board task status → done
+          if (session?.waveId) {
+            try {
+              const myTasks = boardStore.getTasksForRole(session.waveId, params.roleId);
+              const runningTask = myTasks.find(t => t.status === 'running');
+              if (runningTask) {
+                boardStore.completeTask(session.waveId, runningTask.id, 'pass', result.output.slice(-200));
+              }
+            } catch { /* non-fatal */ }
           }
 
           // Emit dispatch:done on parent's stream (monni VOC: parent needs completion signal)

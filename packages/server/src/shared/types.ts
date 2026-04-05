@@ -224,3 +224,101 @@ export interface PresetSummary {
   roles: string[];
   isDefault: boolean;
 }
+
+/* ═══════════════════════════════════════════════
+ *  Task Board — Wave-scoped task management
+ *  Agents work through board tasks; humans intervene by editing the board.
+ *  Strategy: workflow-visibility-strategy.md §4
+ * ═══════════════════════════════════════════════ */
+
+/** Task status — board task lifecycle */
+export type BoardTaskStatus = 'waiting' | 'running' | 'done' | 'blocked' | 'skipped';
+
+/** Task result after completion */
+export type BoardTaskResult = 'pass' | 'fail' | null;
+
+/** Single task on the board */
+export interface BoardTask {
+  /** Unique task ID within the board (e.g. "t1", "t2") */
+  id: string;
+  /** Human-readable task title */
+  title: string;
+  /** Detailed description (optional) */
+  description?: string;
+  /** Role ID assigned to this task */
+  assignee: string;
+  /** Current task status */
+  status: BoardTaskStatus;
+  /** IDs of tasks that must complete before this one starts */
+  dependsOn: string[];
+  /** Machine-verifiable completion criteria */
+  criteria?: string;
+  /** Result after task completes */
+  result?: BoardTaskResult;
+  /** Free-form note from the agent about the result */
+  resultNote?: string;
+  /** ISO timestamp when task started running */
+  startedAt?: string;
+  /** ISO timestamp when task finished */
+  finishedAt?: string;
+}
+
+/** History entry — recorded after each task completion */
+export interface BoardHistoryEntry {
+  /** Task ID */
+  taskId: string;
+  /** Role that executed the task */
+  agent: string;
+  /** Result */
+  result: BoardTaskResult;
+  /** Free-form note */
+  note?: string;
+  /** ISO timestamp */
+  ts: string;
+}
+
+/** Board — wave-scoped task board */
+export interface Board {
+  /** Wave ID this board belongs to */
+  waveId: string;
+  /** Original CEO directive */
+  directive: string;
+  /** Ordered list of tasks */
+  tasks: BoardTask[];
+  /** Completion history */
+  history: BoardHistoryEntry[];
+  /** ISO timestamp when board was created */
+  createdAt: string;
+  /** ISO timestamp of last modification */
+  updatedAt: string;
+}
+
+/** Board task status helpers */
+export function isBoardTaskActive(status: BoardTaskStatus): boolean {
+  return status === 'running';
+}
+
+export function isBoardTaskTerminal(status: BoardTaskStatus): boolean {
+  return status === 'done' || status === 'skipped';
+}
+
+export function isBoardTaskReady(task: BoardTask, allTasks: BoardTask[]): boolean {
+  if (task.status !== 'waiting') return false;
+  return task.dependsOn.every(depId => {
+    const dep = allTasks.find(t => t.id === depId);
+    return dep && isBoardTaskTerminal(dep.status);
+  });
+}
+
+/** Board status transitions */
+export const BOARD_TASK_TRANSITIONS: Record<BoardTaskStatus, BoardTaskStatus[]> = {
+  waiting:  ['running', 'blocked', 'skipped'],
+  running:  ['done', 'blocked'],
+  done:     [],
+  blocked:  ['waiting', 'running', 'skipped'],
+  skipped:  [],
+};
+
+export function canBoardTaskTransition(from: BoardTaskStatus, to: BoardTaskStatus): boolean {
+  return BOARD_TASK_TRANSITIONS[from].includes(to);
+}

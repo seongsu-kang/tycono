@@ -15,6 +15,7 @@ import { COMPANY_ROOT } from './services/file-reader.js';
 import { rolesRouter } from './routes/roles.js';
 import { projectsRouter } from './routes/projects.js';
 import { operationsRouter } from './routes/operations.js';
+import { boardRouter } from './routes/board.js';
 import { companyRouter } from './routes/company.js';
 import { handleExecRequest } from './routes/execute.js';
 import { engineRouter } from './routes/engine.js';
@@ -138,7 +139,9 @@ export function createHttpServer(): http.Server {
 
     // SSE 엔드포인트: Express 우회하여 raw HTTP로 처리
     // BUG-008: /api/waves/:waveId/directive and /api/waves/:waveId/question POST도 포함
-    if ((url.startsWith('/api/exec/') || url.startsWith('/api/jobs') || url.startsWith('/api/waves/') || url === '/api/waves/save' || url === '/api/setup/import-knowledge') && method === 'POST') {
+    // Board API는 Express router로 처리 (raw handler 제외)
+    const isBoardRoute = url.match(/^\/api\/waves\/[^/]+\/board/);
+    if (!isBoardRoute && (url.startsWith('/api/exec/') || url.startsWith('/api/jobs') || url.startsWith('/api/waves/') || url === '/api/waves/save' || url === '/api/setup/import-knowledge') && method === 'POST') {
       setExecCors(req, res);
       if (url === '/api/setup/import-knowledge') {
         handleImportKnowledge(req, res);
@@ -159,7 +162,7 @@ export function createHttpServer(): http.Server {
     }
 
     // Non-SSE exec/jobs/waves endpoints (GET, DELETE)
-    if ((url.startsWith('/api/exec/') || url.startsWith('/api/jobs') || url.startsWith('/api/waves/')) && (method === 'GET' || method === 'DELETE')) {
+    if (!isBoardRoute && (url.startsWith('/api/exec/') || url.startsWith('/api/jobs') || url.startsWith('/api/waves/')) && (method === 'GET' || method === 'DELETE')) {
       setExecCors(req, res);
       handleExecRequest(req, res);
       return;
@@ -222,6 +225,7 @@ export function createExpressApp(): express.Application {
   app.use('/api/active-sessions', activeSessionsRouter);
   app.use('/api/supervision', supervisionRouter);
   app.use('/api/presets', presetsRouter);
+  app.use('/api', boardRouter);
 
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', companyRoot: COMPANY_ROOT });

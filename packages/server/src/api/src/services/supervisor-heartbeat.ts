@@ -24,6 +24,8 @@ import { ActivityStream } from './activity-stream.js';
 import { saveCompletedWave } from './wave-tracker.js';
 import { waveMultiplexer } from './wave-multiplexer.js';
 import { appendWaveMessage, buildHistoryPrompt } from './wave-messages.js';
+import * as boardStore from './board-store.js';
+import type { BoardTask } from '../../../shared/types.js';
 
 /* ─── Types ──────────────────────────────────── */
 
@@ -578,6 +580,28 @@ You are the CEO Supervisor responding to the CEO's follow-up question.
       console.error(`[Supervisor] No C-Level roles found for wave ${state.waveId}`);
       state.status = 'error';
       return;
+    }
+
+    // Auto-create task board for this wave (if not already exists)
+    if (!boardStore.hasBoard(state.waveId)) {
+      try {
+        const boardTasks: BoardTask[] = cLevelRoles.map((roleId, i) => {
+          const node = orgTree.nodes.get(roleId);
+          const name = node?.name ?? roleId;
+          return {
+            id: `t${i + 1}`,
+            title: `${name} 작업`,
+            assignee: roleId,
+            status: 'waiting' as const,
+            dependsOn: [],
+            criteria: state.directive,
+          };
+        });
+        boardStore.createBoard(state.waveId, state.directive, boardTasks);
+      } catch (err) {
+        console.warn(`[Supervisor] Failed to create board for wave ${state.waveId}:`, err);
+        // Non-fatal — wave continues without board
+      }
     }
 
     // Build the supervisor task prompt

@@ -48,6 +48,7 @@ export class DirectApiRunner implements ExecutionRunner {
       onConsult: (roleId, question) => callbacks.onConsult?.(roleId, question),
       onTurnComplete: (turn) => callbacks.onTurnComplete?.(turn),
       onPromptAssembled: (systemPrompt, userTask) => callbacks.onPromptAssembled?.(systemPrompt, userTask),
+      waveId: config.waveId,
       onAbortSession: config.onAbortSession,
       onAmendSession: config.onAmendSession,
     }).then((agentResult): RunnerResult => ({

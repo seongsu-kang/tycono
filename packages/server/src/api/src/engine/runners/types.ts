@@ -47,6 +47,8 @@ export interface RunnerConfig {
   env?: Record<string, string>;
   /** Wave-scoped preset ID for knowledge injection */
   presetId?: string;
+  /** Wave ID for task board context */
+  waveId?: string;
   /** Handoff summary: prior dispatch results in this wave (for context carry-over) */
   priorDispatches?: Array<{ roleId: string; task: string; result: string }>;
   /** CLI session ID for --resume (context continuity across turn limits) */
