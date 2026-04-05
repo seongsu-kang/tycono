@@ -124,7 +124,7 @@
     </div>
   </div>
   <div class="wave-selector">
-    <select id="wave-select" onchange="loadWave(this.value)">
+    <select id="wave-select" onchange="loadWave(this.value).catch(console.error)">
       <option value="">Select wave...</option>
     </select>
   </div>
@@ -279,7 +279,27 @@ async function loadWave(waveId) {
   document.getElementById('report-section').style.display = 'none';
   document.getElementById('detail-panel').style.display = 'none';
   await renderBoard();
-  connectSSE(waveId);
+  connectSSE(waveId);           // SSE first (resets feed)
+  await loadHistoricalEvents(waveId);  // Then load history (fills feed)
+}
+
+async function loadHistoricalEvents(waveId) {
+  // Load past events from activity-streams (for completed waves or catch-up)
+  feedCount = 0;
+  document.getElementById('feed').innerHTML = '';
+  document.getElementById('feed-count').textContent = '(0)';
+  try {
+    const res = await fetch(`${API}/api/waves/${waveId}/events?limit=100`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.events?.length) {
+      // Add events oldest-first (addFeedItem prepends, so result is newest-first)
+      for (const e of data.events) {
+        addFeedItem(e);
+      }
+      document.getElementById('feed-count').textContent = `(${feedCount} / ${data.totalEvents} total)`;
+    }
+  } catch {}
 }
 
 /* ─── Board rendering ──────────────── */

@@ -9,7 +9,9 @@
  */
 import { Router, Request, Response, NextFunction } from 'express';
 import * as boardStore from '../services/board-store.js';
-import type { BoardTask, BoardTaskStatus } from '../../../shared/types.js';
+import { ActivityStream } from '../services/activity-stream.js';
+import { listSessions } from '../services/session-store.js';
+import type { BoardTask, BoardTaskStatus, ActivityEvent } from '../../../shared/types.js';
 
 export const boardRouter = Router();
 
@@ -175,6 +177,61 @@ boardRouter.post('/templates', (req: Request, res: Response, next: NextFunction)
 boardRouter.get('/templates', (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.json(boardStore.listTemplates());
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** GET /api/waves/:waveId/events — All activity events for a wave (for dashboard feed) */
+boardRouter.get('/waves/:waveId/events', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { waveId } = req.params;
+    const limit = parseInt(req.query.limit as string) || 200;
+
+    // Find all sessions belonging to this wave
+    const sessions = listSessions().filter(s => s.waveId === waveId);
+
+    // Also scan activity-streams for sessions with wave timestamp
+    const waveTs = waveId.replace('wave-', '');
+    const allStreamIds = ActivityStream.listAll();
+    const sessionIds = new Set(sessions.map(s => s.id));
+    for (const sid of allStreamIds) {
+      if (sid.includes(waveTs)) sessionIds.add(sid);
+    }
+
+    // Collect events from all sessions, find child sessions via dispatch:start
+    const visited = new Set<string>();
+    const queue = [...sessionIds];
+    const allEvents: Array<ActivityEvent & { sessionId?: string }> = [];
+
+    while (queue.length > 0) {
+      const sid = queue.pop()!;
+      if (visited.has(sid)) continue;
+      visited.add(sid);
+
+      try {
+        const events = ActivityStream.readAll(sid);
+        for (const e of events) {
+          allEvents.push({ ...e, sessionId: sid });
+          // Follow dispatch chains
+          const childId = e.data?.childSessionId as string | undefined;
+          if (e.type === 'dispatch:start' && childId && !visited.has(childId)) {
+            queue.push(childId);
+          }
+        }
+      } catch { /* skip */ }
+    }
+
+    // Sort by timestamp, limit
+    allEvents.sort((a, b) => a.ts.localeCompare(b.ts));
+    const trimmed = allEvents.slice(-limit);
+
+    res.json({
+      waveId,
+      sessionCount: visited.size,
+      totalEvents: allEvents.length,
+      events: trimmed,
+    });
   } catch (err) {
     next(err);
   }
