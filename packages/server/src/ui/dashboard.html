@@ -474,9 +474,30 @@ async function showTemplates() {
     const res = await fetch(`${API}/api/templates`);
     const templates = await res.json();
     if (!templates.length) { alert('No templates saved yet.\nSave one with "Save Template".'); return; }
-    const list = templates.map(t => `${t.id} — ${t.name} (${t.tasks.length} tasks)`).join('\n');
-    alert('Templates:\n\n' + list);
-  } catch { alert('Failed to load templates.'); }
+    const choice = prompt(
+      'Templates:\n\n' +
+      templates.map((t, i) => `${i + 1}. ${t.id} — ${t.name} (${t.tasks.length} tasks)`).join('\n') +
+      '\n\nEnter number to use, or cancel:'
+    );
+    if (!choice) return;
+    const idx = parseInt(choice) - 1;
+    if (idx < 0 || idx >= templates.length) return;
+    const tpl = templates[idx];
+    const directive = prompt(`Start wave with template "${tpl.name}".\n\nEnter directive:`);
+    if (!directive) return;
+    const waveRes = await fetch(`${API}/api/exec/wave`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ directive, templateId: tpl.id }),
+    });
+    const wave = await waveRes.json();
+    if (wave.waveId) {
+      alert(`Wave ${wave.waveId} started with template "${tpl.name}"`);
+      loadActiveWaves();
+      loadWave(wave.waveId);
+    } else {
+      alert('Failed to start wave: ' + JSON.stringify(wave));
+    }
+  } catch (e) { alert('Failed: ' + e.message); }
 }
 
 function saveAsTemplate() {

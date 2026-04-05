@@ -958,6 +958,7 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
   const targetRoles = body.targetRoles as string[] | undefined;
   const continuous = body.continuous === true;
   let preset = body.preset as string | undefined;
+  const templateId = body.templateId as string | undefined;
 
   // Agency resolution priority: --agency flag > config.defaultAgency > auto-select
   if (!preset) {
@@ -1031,14 +1032,14 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
   const modelOverrides = body.modelOverrides as Record<string, string> | undefined;
 
   // Always supervisor mode — CEO supervises C-Levels
-  handleWaveSupervisor(directive, targetRoles, continuous, req, res, preset, modelOverrides);
+  handleWaveSupervisor(directive, targetRoles, continuous, req, res, preset, modelOverrides, templateId);
 }
 
 /**
  * Supervisor mode: Start a single CEO Supervisor session that dispatches C-Levels.
  * The supervisor uses dispatch/watch/amend tools — same pattern as any supervisor node.
  */
-function handleWaveSupervisor(directive: string, targetRoles: string[] | undefined, continuous: boolean, req: IncomingMessage, res: ServerResponse, preset?: string, modelOverrides?: Record<string, string>): void {
+function handleWaveSupervisor(directive: string, targetRoles: string[] | undefined, continuous: boolean, req: IncomingMessage, res: ServerResponse, preset?: string, modelOverrides?: Record<string, string>, templateId?: string): void {
   const state = supervisorHeartbeat.start(
     `wave-${Date.now()}`,
     directive,
@@ -1047,6 +1048,8 @@ function handleWaveSupervisor(directive: string, targetRoles: string[] | undefin
     preset,
     modelOverrides,
   );
+  // Attach templateId for board creation (used in spawnSupervisor)
+  if (templateId) (state as Record<string, unknown>).templateId = templateId;
 
   if (state.status === 'error') {
     jsonResponse(res, 500, { error: 'Failed to start supervisor' });
