@@ -229,7 +229,8 @@ async function renderWaveSummary() {
       document.getElementById('progress-text').textContent = '';
       return;
     }
-    const wave = await res.json();
+    const raw = await res.json();
+    const wave = raw.replay || raw;
     document.getElementById('directive').textContent = wave.directive || '';
 
     const roles = wave.roles || [];
