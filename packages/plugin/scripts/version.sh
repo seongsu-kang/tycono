@@ -50,6 +50,7 @@ if [[ -f "$HEADLESS_JSON" ]]; then
   if [[ -n "$PORT" ]] && curl -s --max-time 2 "http://localhost:${PORT}/api/health" >/dev/null 2>&1; then
     RUNNING_VER=$(curl -s --max-time 2 "http://localhost:${PORT}/api/health" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('version','?'))" 2>/dev/null || echo "?")
     echo "  Runtime: ✅ running (port $PORT, PID $PID, v$RUNNING_VER)"
+    echo "  Board:   http://localhost:${PORT}/ui/"
   else
     # Stale headless.json — server is dead, clean it up
     rm -f "$HEADLESS_JSON"

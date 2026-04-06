@@ -403,6 +403,7 @@ except: print('agent\n\n')
     echo ""
     echo "✅ TYCONO — Wave $WAVE_ID completed!"
     echo "  Run /tycono:tycono-status for results."
+    echo "  Board: ${API_URL}/ui/"
     break
   fi
 done

@@ -136,6 +136,7 @@ export async function main(args: string[]): Promise<void> {
 
   console.log(`  tycono-server v${VERSION}`);
   console.log(`  API: ${url}`);
+  console.log(`  Board: ${url}/ui/`);
   console.log(`  Company: ${companyName}`);
   console.log(`  Engine: ${engine}`);
   console.log(`  PID: ${process.pid}`);
