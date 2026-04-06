@@ -10,10 +10,20 @@ import {
 import '@xyflow/react/dist/style.css';
 import AgentNode from './AgentNode';
 import ActivityFeed from './ActivityFeed';
+import TaskDetail from './TaskDetail';
 import Toolbar from './Toolbar';
+import { applyDagreLayout } from './layout';
 
 const API = window.location.origin;
 const nodeTypes = { agent: AgentNode };
+
+const STATUS_COLORS = {
+  waiting: '#444',
+  running: '#3b82f6',
+  done: '#22c55e',
+  skipped: '#666',
+  blocked: '#ef4444',
+};
 
 export default function App() {
   const [waves, setWaves] = useState([]);
@@ -21,9 +31,14 @@ export default function App() {
   const [board, setBoard] = useState(null);
   const [events, setEvents] = useState([]);
   const [sseStatus, setSseStatus] = useState('--');
+  const [selectedTask, setSelectedTask] = useState(null);
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const sseRef = useRef(null);
+  const boardRef = useRef(null);
+
+  // Keep boardRef in sync
+  useEffect(() => { boardRef.current = board; }, [board]);
 
   // Load waves
   useEffect(() => {
@@ -53,17 +68,16 @@ export default function App() {
     if (!waveId) return;
     setCurrentWaveId(waveId);
     setEvents([]);
+    setSelectedTask(null);
 
-    // Load board
     try {
       const boardRes = await fetch(`${API}/api/waves/${waveId}/board`);
       if (boardRes.ok) {
         const b = await boardRes.json();
         setBoard(b);
-        buildGraph(b, null);
+        buildGraph(b);
       } else {
         setBoard(null);
-        // Load wave summary
         const waveRes = await fetch(`${API}/api/operations/waves/${waveId}`);
         if (waveRes.ok) {
           const raw = await waveRes.json();
@@ -73,7 +87,6 @@ export default function App() {
       }
     } catch {}
 
-    // Load historical events
     try {
       const evRes = await fetch(`${API}/api/waves/${waveId}/events?limit=150`);
       if (evRes.ok) {
@@ -82,7 +95,6 @@ export default function App() {
       }
     } catch {}
 
-    // Connect SSE
     connectSSE(waveId);
   }, []);
 
@@ -97,9 +109,8 @@ export default function App() {
           const data = JSON.parse(e.data);
           setEvents(prev => [...prev, data].slice(-200));
         } catch {}
-        // Refresh board
         fetch(`${API}/api/waves/${waveId}/board`).then(r => r.ok ? r.json() : null).then(b => {
-          if (b) { setBoard(b); buildGraph(b, null); }
+          if (b) { setBoard(b); buildGraph(b); }
         });
       };
       source.onerror = () => setSseStatus('Offline');
@@ -107,23 +118,31 @@ export default function App() {
     } catch { setSseStatus('--'); }
   }, []);
 
-  // Build React Flow graph from board
-  const buildGraph = useCallback((boardData, waveData) => {
-    if (!boardData?.tasks?.length) return;
+  // Task actions
+  const skipTask = useCallback(async (taskId) => {
+    await fetch(`${API}/api/waves/${currentWaveId}/board/tasks/${taskId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'skipped' }),
+    });
+    selectWave(currentWaveId);
+  }, [currentWaveId, selectWave]);
+
+  const selectTask = useCallback((taskId) => {
+    const b = boardRef.current;
+    if (!b?.tasks) return;
+    const task = b.tasks.find(t => t.id === taskId);
+    setSelectedTask(task || null);
+  }, []);
+
+  // Build React Flow graph from board (dagre layout)
+  const buildGraph = useCallback((boardData) => {
+    if (!boardData?.tasks?.length) { setNodes([]); setEdges([]); return; }
     const tasks = boardData.tasks;
 
-    const statusColors = {
-      waiting: '#444',
-      running: '#3b82f6',
-      done: '#22c55e',
-      skipped: '#666',
-      blocked: '#ef4444',
-    };
-
-    const newNodes = tasks.map((t, i) => ({
+    const rawNodes = tasks.map(t => ({
       id: t.id,
       type: 'agent',
-      position: { x: 100 + (i % 3) * 280, y: 80 + Math.floor(i / 3) * 160 },
+      position: { x: 0, y: 0 }, // dagre will override
       data: {
         label: t.title,
         role: t.assignee,
@@ -131,7 +150,10 @@ export default function App() {
         criteria: t.criteria,
         result: t.result,
         resultNote: t.resultNote,
-        color: statusColors[t.status] || '#444',
+        color: STATUS_COLORS[t.status] || '#444',
+        onSkip: (t.status === 'waiting' || t.status === 'running') ? () => skipTask(t.id) : undefined,
+        onEdit: (t.status === 'waiting' || t.status === 'running') ? () => selectTask(t.id) : undefined,
+        onSelect: () => selectTask(t.id),
       },
     }));
 
@@ -143,15 +165,16 @@ export default function App() {
           source: dep,
           target: t.id,
           animated: t.status === 'running',
-          style: { stroke: statusColors[t.status] || '#444', strokeWidth: 2 },
+          style: { stroke: STATUS_COLORS[t.status] || '#444', strokeWidth: 2 },
           type: 'smoothstep',
         });
       });
     });
 
-    setNodes(newNodes);
+    const layoutNodes = applyDagreLayout(rawNodes, newEdges);
+    setNodes(layoutNodes);
     setEdges(newEdges);
-  }, []);
+  }, [skipTask, selectTask]);
 
   // Build graph from wave summary (no board)
   const buildGraphFromWave = useCallback((wave) => {
@@ -159,31 +182,30 @@ export default function App() {
     if (!roles.length) { setNodes([]); setEdges([]); return; }
 
     const statusMap = { done: 'done', streaming: 'running', running: 'running', error: 'blocked', unknown: 'waiting', awaiting_input: 'running' };
-    const statusColors = { waiting: '#444', running: '#3b82f6', done: '#22c55e', blocked: '#ef4444' };
 
-    const newNodes = [];
+    const rawNodes = [];
     const newEdges = [];
 
-    // CEO node
-    newNodes.push({
+    rawNodes.push({
       id: 'ceo',
       type: 'agent',
-      position: { x: 300, y: 20 },
-      data: { label: 'CEO Supervisor', role: 'ceo', status: 'done', color: '#22c55e' },
+      position: { x: 0, y: 0 },
+      data: { label: 'CEO Supervisor', role: 'ceo', status: 'done', color: '#22c55e', onSelect: () => {} },
     });
 
     roles.forEach((r, i) => {
       const st = statusMap[r.status] || 'waiting';
       const nodeId = `role-${r.roleId}-${i}`;
-      newNodes.push({
+      rawNodes.push({
         id: nodeId,
         type: 'agent',
-        position: { x: 100 + i * 280, y: 180 },
+        position: { x: 0, y: 0 },
         data: {
           label: r.roleName || r.roleId,
           role: r.roleId,
           status: st,
-          color: statusColors[st] || '#444',
+          color: STATUS_COLORS[st] || '#444',
+          onSelect: () => {},
         },
       });
       newEdges.push({
@@ -192,22 +214,22 @@ export default function App() {
         target: nodeId,
         type: 'smoothstep',
         animated: st === 'running',
-        style: { stroke: statusColors[st] || '#444', strokeWidth: 2 },
+        style: { stroke: STATUS_COLORS[st] || '#444', strokeWidth: 2 },
       });
 
-      // Child sessions
       (r.childSessions || []).forEach((c, ci) => {
         const childId = `child-${c.roleId}-${ci}`;
         const cst = statusMap[c.status] || 'waiting';
-        newNodes.push({
+        rawNodes.push({
           id: childId,
           type: 'agent',
-          position: { x: 50 + i * 280 + ci * 150, y: 340 },
+          position: { x: 0, y: 0 },
           data: {
             label: c.roleName || c.roleId,
             role: c.roleId,
             status: cst,
-            color: statusColors[cst] || '#444',
+            color: STATUS_COLORS[cst] || '#444',
+            onSelect: () => {},
           },
         });
         newEdges.push({
@@ -216,23 +238,15 @@ export default function App() {
           target: childId,
           type: 'smoothstep',
           animated: cst === 'running',
-          style: { stroke: statusColors[cst] || '#444', strokeWidth: 2 },
+          style: { stroke: STATUS_COLORS[cst] || '#444', strokeWidth: 2 },
         });
       });
     });
 
-    setNodes(newNodes);
+    const layoutNodes = applyDagreLayout(rawNodes, newEdges);
+    setNodes(layoutNodes);
     setEdges(newEdges);
   }, []);
-
-  // Actions
-  const skipTask = async (taskId) => {
-    await fetch(`${API}/api/waves/${currentWaveId}/board/tasks/${taskId}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'skipped' }),
-    });
-    selectWave(currentWaveId);
-  };
 
   const directive = board?.directive || waves.find(w => w.id === currentWaveId)?.directive || '';
 
@@ -268,7 +282,7 @@ export default function App() {
       <Toolbar waveId={currentWaveId} board={board} api={API} onRefresh={() => selectWave(currentWaveId)} />
 
       {/* Main: graph + feed */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
         {/* Graph */}
         <div style={{ flex: 1, position: 'relative' }}>
           <ReactFlow
@@ -288,6 +302,17 @@ export default function App() {
               style={{ background: '#111' }}
             />
           </ReactFlow>
+
+          {/* Task Detail Panel (overlay on graph) */}
+          {selectedTask && (
+            <TaskDetail
+              task={selectedTask}
+              waveId={currentWaveId}
+              api={API}
+              onClose={() => setSelectedTask(null)}
+              onAction={() => selectWave(currentWaveId)}
+            />
+          )}
         </div>
 
         {/* Activity Feed */}

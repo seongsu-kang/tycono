@@ -59,6 +59,8 @@ if [[ -f "$START_WAVE" ]]; then
   assert_contains "--model flag parsing" "$SW" "MODEL_OVERRIDES"
   assert_contains "modelOverrides payload" "$SW" "modelOverrides"
   assert_contains "structured PID directory" "$SW" ".tycono/pids"
+  assert_contains "COMPANY_ROOT passed to server (npx)" "$SW" 'COMPANY_ROOT="$COMPANY_ROOT" npx'
+  assert_contains "COMPANY_ROOT passed to server (bin)" "$SW" 'COMPANY_ROOT="$COMPANY_ROOT" "$TYCONO_BIN"'
 else
   echo "  [SKIP] start-wave.sh not found"
   SKIP=$((SKIP + 1))
@@ -294,28 +296,31 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "S-11: Dashboard UI file"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-DASHBOARD="${SERVER_SRC}/ui/dashboard.html"
-assert_file_exists "dashboard.html exists" "$DASHBOARD"
+# React dashboard (Vite + React Flow)
+UI_SRC="${SERVER_SRC}/ui/src"
+assert_file_exists "App.jsx exists" "${UI_SRC}/App.jsx"
 
-if [[ -f "$DASHBOARD" ]]; then
-  DH=$(cat "$DASHBOARD")
-  assert_contains "dashboard title" "$DH" "Tycono Board"
-  assert_contains "board rendering" "$DH" "renderBoard"
-  assert_contains "wave summary fallback" "$DH" "renderWaveSummary"
-  assert_contains "SSE EventSource" "$DH" "EventSource"
-  assert_contains "skip action" "$DH" "skipTask"
-  assert_contains "edit modal" "$DH" "edit-modal"
-  assert_contains "add task modal" "$DH" "add-modal"
-  assert_contains "template modal" "$DH" "template-modal"
-  assert_contains "stop wave action" "$DH" "stopWave"
-  assert_contains "report view" "$DH" "showReport"
-  assert_contains "task detail" "$DH" "showDetail"
+if [[ -f "${UI_SRC}/App.jsx" ]]; then
+  APP=$(cat "${UI_SRC}/App.jsx")
+  assert_contains "imports ReactFlow" "$APP" "ReactFlow"
+  assert_contains "imports AgentNode" "$APP" "AgentNode"
+  assert_contains "imports ActivityFeed" "$APP" "ActivityFeed"
+  assert_contains "imports TaskDetail" "$APP" "TaskDetail"
+  assert_contains "imports dagre layout" "$APP" "applyDagreLayout"
+  assert_contains "SSE EventSource" "$APP" "EventSource"
+  assert_contains "board API fetch" "$APP" "/board"
+  assert_contains "skip action" "$APP" "skipped"
+  assert_contains "wave selector" "$APP" "selectWave"
 fi
+
+assert_file_exists "AgentNode.jsx exists" "${UI_SRC}/AgentNode.jsx"
+assert_file_exists "TaskDetail.jsx exists" "${UI_SRC}/TaskDetail.jsx"
+assert_file_exists "layout.js exists" "${UI_SRC}/layout.js"
 
 # Check /ui route in server
 CREATE_SERVER="${SERVER_SRC}/api/src/create-server.ts"
 if [[ -f "$CREATE_SERVER" ]]; then
-  assert_contains "/ui route registered" "$(cat "$CREATE_SERVER")" "dashboard.html"
+  assert_contains "/ui route registered" "$(cat "$CREATE_SERVER")" "/ui"
 fi
 
 # =============================================================================

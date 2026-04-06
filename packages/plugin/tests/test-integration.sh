@@ -31,6 +31,19 @@ assert_contains() {
   fi
 }
 
+assert_file_grep() {
+  local label="$1"
+  local file="$2"
+  local needle="$3"
+  if grep -q "$needle" "$file" 2>/dev/null; then
+    echo "  [PASS] $label"
+    PASS=$((PASS + 1))
+  else
+    echo "  [FAIL] $label — expected: $needle"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
 assert_eq() {
   local label="$1"
   local actual="$2"
@@ -329,23 +342,33 @@ echo "I-07: Dashboard UI serving"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 if [[ -n "$API_URL" ]]; then
-  # Dashboard serves HTML
-  assert_http "GET /ui (200)" GET "${API_URL}/ui" "200"
+  # Dashboard serves React SPA
+  assert_http "GET /ui (200)" GET "${API_URL}/ui/" "200"
 
-  # Check HTML content
-  DASHBOARD_HTML=$(curl -s "${API_URL}/ui" 2>/dev/null)
+  # Check HTML shell
+  DASHBOARD_HTML=$(curl -s "${API_URL}/ui/" 2>/dev/null)
   assert_contains "dashboard has title" "$DASHBOARD_HTML" "Tycono Board"
-  assert_contains "dashboard has board div" "$DASHBOARD_HTML" 'id="board"'
-  assert_contains "dashboard has wave selector" "$DASHBOARD_HTML" 'wave-select'
-  assert_contains "dashboard has Report button" "$DASHBOARD_HTML" "showReport"
-  assert_contains "dashboard has Add Task" "$DASHBOARD_HTML" "showAddTask"
-  assert_contains "dashboard has Stop Wave" "$DASHBOARD_HTML" "stopWave"
-  assert_contains "dashboard has Edit modal" "$DASHBOARD_HTML" "edit-modal"
-  assert_contains "dashboard has Add modal" "$DASHBOARD_HTML" "add-modal"
-  assert_contains "dashboard has Template modal" "$DASHBOARD_HTML" "template-modal"
-  assert_contains "dashboard has SSE" "$DASHBOARD_HTML" "EventSource"
-  assert_contains "dashboard has renderBoard" "$DASHBOARD_HTML" "renderBoard"
-  assert_contains "dashboard has renderWaveSummary" "$DASHBOARD_HTML" "renderWaveSummary"
+  assert_contains "dashboard has root div" "$DASHBOARD_HTML" 'id="root"'
+  assert_contains "dashboard has JS bundle" "$DASHBOARD_HTML" '/ui/assets/'
+
+  # Fetch JS bundle to temp file and verify React components
+  JS_URL=$(echo "$DASHBOARD_HTML" | grep -o '/ui/assets/index-[^"]*\.js' | head -1)
+  BUNDLE_FILE="${TEST_DIR}/bundle.js"
+  if [[ -n "$JS_URL" ]]; then
+    curl -s "${API_URL}${JS_URL}" -o "$BUNDLE_FILE" 2>/dev/null
+    assert_file_grep "bundle has react-flow" "$BUNDLE_FILE" "react-flow"
+    assert_file_grep "bundle has smoothstep edges" "$BUNDLE_FILE" "smoothstep"
+    assert_file_grep "bundle has Activity Feed" "$BUNDLE_FILE" "Activity Feed"
+    assert_file_grep "bundle has Activity Summary" "$BUNDLE_FILE" "Activity Summary"
+    assert_file_grep "bundle has dagre rankdir" "$BUNDLE_FILE" "rankdir"
+    assert_file_grep "bundle has node interaction" "$BUNDLE_FILE" "onSkip"
+    assert_file_grep "bundle has SSE EventSource" "$BUNDLE_FILE" "EventSource"
+    assert_file_grep "bundle has skip action" "$BUNDLE_FILE" "skipped"
+    assert_file_grep "bundle has board API" "$BUNDLE_FILE" "/api/waves/"
+  else
+    echo "  [FAIL] could not find JS bundle URL"
+    FAIL=$((FAIL + 9))
+  fi
 else
   echo "  [SKIP] No server"
   SKIP=$((SKIP + 12))

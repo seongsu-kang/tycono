@@ -205,10 +205,12 @@ if [[ -z "$API_URL" ]]; then
   if [[ -z "$TYCONO_BIN" ]]; then
     # Use npx as fallback — @latest ensures the newest server features
     # (dispatch, 2-Layer Knowledge, etc.) without manual version bumps
-    npx tycono-server@latest &
+    # BUG-HEADLESS-PATH: pass COMPANY_ROOT explicitly so server writes
+    # headless.json to the same directory start-wave.sh polls
+    COMPANY_ROOT="$COMPANY_ROOT" npx tycono-server@latest &
     SERVER_PID=$!
   else
-    "$TYCONO_BIN" &
+    COMPANY_ROOT="$COMPANY_ROOT" "$TYCONO_BIN" &
     SERVER_PID=$!
   fi
 
