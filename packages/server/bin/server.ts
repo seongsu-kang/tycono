@@ -78,6 +78,13 @@ export async function main(args: string[]): Promise<void> {
     config({ path: dotenvPath });
   }
 
+  // Validate NODE_EXTRA_CA_CERTS — stale paths cause TLS warnings
+  if (process.env.NODE_EXTRA_CA_CERTS && !fs.existsSync(process.env.NODE_EXTRA_CA_CERTS)) {
+    console.warn(`  ⚠️  NODE_EXTRA_CA_CERTS path not found: ${process.env.NODE_EXTRA_CA_CERTS}`);
+    console.warn(`  ⚠️  Unsetting to avoid TLS errors. Fix your shell profile or .env if needed.`);
+    delete process.env.NODE_EXTRA_CA_CERTS;
+  }
+
   // Company root
   if (command && !command.startsWith('-')) {
     process.env.COMPANY_ROOT = path.resolve(command);
