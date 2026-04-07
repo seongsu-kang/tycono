@@ -144,6 +144,7 @@ Use the code repository path for all source code work (reading, writing, buildin
 
   // 12. Handoff Summary — NOT cacheable (dynamic per dispatch)
   if (options?.priorDispatches && options.priorDispatches.length > 0) {
+    // 12a. Same-role handoff: previous sessions of THIS role
     const sameRole = options.priorDispatches.filter(d => d.roleId === roleId);
     if (sameRole.length > 0) {
       const summaries = sameRole.map((d, i) =>
@@ -156,6 +157,45 @@ This role has been dispatched ${sameRole.length} time(s) before in this wave. **
 ${summaries}
 
 > Build on these results. Skip investigation that was already done. Focus on NEW or UNFINISHED items only.`, false);
+    }
+
+    // 12b. Wave Briefing (Blackboard pattern): other roles' completed results
+    // Gives this role awareness of what the team has already discovered,
+    // reducing redundant context collection across roles.
+    // Critic/validator roles get minimal briefing to preserve independent judgment.
+    const otherRoles = options.priorDispatches.filter(d => d.roleId !== roleId && d.result);
+    if (otherRoles.length > 0) {
+      const isIndependentRole = node.persona?.toLowerCase().includes('critic')
+        || node.persona?.toLowerCase().includes('validator')
+        || node.persona?.toLowerCase().includes('auditor')
+        || node.persona?.toLowerCase().includes('devil');
+
+      if (isIndependentRole) {
+        // Minimal briefing: only role names and task titles (no results)
+        // Preserves independent judgment while avoiding duplicate investigation targets
+        const minimal = otherRoles.map(d =>
+          `- **${d.roleId}**: ${d.task.slice(0, 80)}`
+        ).join('\n');
+        pushSection(`# Wave Context (Team Activity — Minimal)
+
+Other roles have completed work in this wave. You may be aware of their TOPICS but form your own independent conclusions.
+
+${minimal}
+
+> ⛔ Do NOT rely on or reference other roles' conclusions. Your value is independent judgment.`, false);
+      } else {
+        // Full briefing: task + result summaries
+        const full = otherRoles.map(d =>
+          `- **${d.roleId}**: ${d.task.slice(0, 100)}\n  Result: ${d.result.slice(0, 300)}`
+        ).join('\n\n');
+        pushSection(`# Wave Briefing (Team Findings)
+
+Other roles have completed the following work in this wave. **Use these findings — do NOT re-investigate what is already known.**
+
+${full}
+
+> Build on team findings. Focus your effort on YOUR specific task, not re-collecting context.`, false);
+      }
     }
   }
 
