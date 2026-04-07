@@ -636,13 +636,8 @@ You are the CEO Supervisor responding to the CEO's follow-up question.
     // Build conversation context from wave-messages DB (Gap #2 fix)
     const conversationHistory = buildHistoryPrompt(state.waveId);
 
-    const supervisorTask = `[CEO Supervisor] ${state.directive}
-${conversationHistory ? '\n' + conversationHistory + '\n' : ''}
-## Your Role
-You are the CEO Supervisor — the CEO's AI proxy.
-You can answer questions directly OR dispatch C-Level roles for complex work.
-
-## Response Mode Decision (BEFORE dispatching)
+    // Agency-level CEO prompt override (ceo_prompt in agency.yaml)
+    const defaultResponseMode = `## Response Mode Decision (BEFORE dispatching)
 
 ⛔ Dispatch is expensive (spawns entire teams). Judge first:
 
@@ -664,7 +659,17 @@ You can answer questions directly OR dispatch C-Level roles for complex work.
    - "출시 준비해" → All C-Levels
    → **Dispatch multiple C-Levels with clear tasks.**
 
-**Default: Direct Answer first. Dispatch only when code changes or creative work is needed.**
+**Default: Direct Answer first. Dispatch only when code changes or creative work is needed.**`;
+
+    const responseModeSection = orgTree.ceoPromptOverride || defaultResponseMode;
+
+    const supervisorTask = `[CEO Supervisor] ${state.directive}
+${conversationHistory ? '\n' + conversationHistory + '\n' : ''}
+## Your Role
+You are the CEO Supervisor — the CEO's AI proxy.
+You can answer questions directly OR dispatch C-Level roles for complex work.
+
+${responseModeSection}
 
 ## Available C-Level Roles
 ${cLevelList}
@@ -784,7 +789,7 @@ ${state.continuous ? `## Continuous Improvement Mode (ON)
 5. 사용자가 Stop을 누를 때까지 계속한다. 스스로 done 선언하지 마라.
 
 ` : ''}## Instructions
-1. **First: Apply Response Mode Decision** — Can you answer directly? If yes, answer and report done.
+1. **First: Apply the Response Mode above** — decide whether to answer directly or dispatch.
 2. If dispatch is needed: decide which C-Level roles (not necessarily all)
 3. Dispatch with clear, specific tasks
 4. Enter supervision watch loop

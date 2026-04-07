@@ -47,6 +47,7 @@ export interface OrgNode {
 export interface OrgTree {
   root: string;
   nodes: Map<string, OrgNode>;
+  ceoPromptOverride?: string;
 }
 
 /* ─── Raw YAML shape ─────────────────────────── */
@@ -213,6 +214,26 @@ export function buildOrgTree(companyRoot: string, presetId?: string): OrgTree {
     const parent = tree.nodes.get(node.reportsTo);
     if (parent) {
       parent.children.push(id);
+    }
+  }
+
+  // Read agency-level ceo_prompt override from agency.yaml
+  if (presetId && presetId !== 'default') {
+    const agencyYamlCandidates = [
+      path.join(companyRoot, 'knowledge', 'presets', presetId, 'agency.yaml'),
+      path.join(companyRoot, '.tycono', 'agencies', presetId, 'agency.yaml'),
+      path.join(os.homedir(), '.tycono', 'agencies', presetId, 'agency.yaml'),
+    ];
+    for (const yamlPath of agencyYamlCandidates) {
+      if (fs.existsSync(yamlPath)) {
+        try {
+          const agencyConfig = YAML.parse(fs.readFileSync(yamlPath, 'utf-8'));
+          if (agencyConfig?.ceo_prompt) {
+            tree.ceoPromptOverride = agencyConfig.ceo_prompt;
+          }
+        } catch { /* skip malformed */ }
+        break;
+      }
     }
   }
 
