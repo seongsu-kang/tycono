@@ -48,6 +48,7 @@ export interface OrgTree {
   root: string;
   nodes: Map<string, OrgNode>;
   ceoPromptOverride?: string;
+  contextMode?: 'explore-first' | 'briefing-first';
 }
 
 /* ─── Raw YAML shape ─────────────────────────── */
@@ -230,6 +231,9 @@ export function buildOrgTree(companyRoot: string, presetId?: string): OrgTree {
           const agencyConfig = YAML.parse(fs.readFileSync(yamlPath, 'utf-8'));
           if (agencyConfig?.ceo_prompt) {
             tree.ceoPromptOverride = agencyConfig.ceo_prompt;
+          }
+          if (agencyConfig?.context_mode === 'briefing-first') {
+            tree.contextMode = 'briefing-first';
           }
         } catch { /* skip malformed */ }
         break;

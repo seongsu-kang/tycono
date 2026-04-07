@@ -199,6 +199,29 @@ ${full}
     }
   }
 
+  // 13. Context Mode (briefing-first) — reduces redundant AKB exploration
+  if (orgTree.contextMode === 'briefing-first' && roleId !== 'ceo') {
+    pushSection(`# Context Mode: Briefing-First
+
+⛔ All necessary context has been pre-injected into your system prompt:
+- Company rules (CLAUDE.md), org structure, your role persona, skills, and knowledge scope
+- Hub document summaries and CEO decisions
+- Wave Briefing with team findings (if available)
+
+**DO NOT re-read these documents.** They are already in your context.
+Specifically:
+- Do NOT Read CLAUDE.md — it is already injected above
+- Do NOT Read Hub files for orientation — summaries are already provided
+- Do NOT explore the knowledge/ directory for general context
+
+**When to explore AKB:**
+- Only when you need specific data NOT covered by the injected context
+- Only when your task requires reading specific code files or configs
+- Only for task-specific file reads that cannot be inferred from briefings
+
+**Start working on your task immediately with the context you have.**`, false);
+  }
+
   // Task는 별도 필드로 분리
   let subordinates = getSubordinates(orgTree, roleId);
 
