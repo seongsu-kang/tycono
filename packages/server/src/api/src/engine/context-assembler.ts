@@ -1071,13 +1071,22 @@ function buildBoardSection(waveId: string, roleId: string): string | null {
     return `  ${status} ${t.id}: ${t.title} → ${t.assignee}`;
   }).join('\n');
 
+  // Find downstream tasks that depend on this role's tasks
+  const myTaskIds = new Set(myTasks.map(t => t.id));
+  const downstream = board.tasks.filter(t =>
+    t.dependsOn.some(dep => myTaskIds.has(dep)) && t.assignee !== roleId
+  );
+  const downstreamNote = downstream.length > 0
+    ? `\n\n## Downstream (your output feeds into)\n${downstream.map(t => `- **${t.assignee}** will ${t.title} — they depend on your results`).join('\n')}\n\n> Your output quality directly affects downstream roles. Be thorough, document findings clearly, and include reproducible evidence.`
+    : '';
+
   return `# Task Board (Wave: ${waveId})
 
 ## Your Assigned Tasks
 ${taskLines}
 
 ## Full Board
-${allTaskLines}
+${allTaskLines}${downstreamNote}
 
 ## Board Rules
 - Focus on your assigned tasks. Complete them in dependency order.
