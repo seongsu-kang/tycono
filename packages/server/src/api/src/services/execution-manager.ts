@@ -18,6 +18,60 @@ import { portRegistry, type PortAllocation } from './port-registry.js';
 import { type MessageStatus, isMessageActive, canTransition, messageStatusToRoleStatus } from '../../../shared/types.js';
 import * as boardStore from './board-store.js';
 
+/* ─── CEO Findings Extraction (M2: Memory System) ─── */
+
+/**
+ * Extract key findings from a parent session's activity stream.
+ * Reads tool:result events for Read/Grep/Glob to summarize what the
+ * dispatching role already discovered, so child roles don't re-collect.
+ *
+ * Returns a compact summary string, or empty string if nothing useful found.
+ * Budget: max ~800 chars to avoid bloating child context.
+ */
+function extractParentFindings(sessionId: string): string {
+  const events = ActivityStream.readAll(sessionId);
+  if (events.length === 0) return '';
+
+  const findings: string[] = [];
+  let budget = 800;
+
+  for (const e of events) {
+    if (budget <= 0) break;
+    if (e.type !== 'tool:result') continue;
+
+    const toolName = e.data?.toolName as string || e.data?.name as string || '';
+    const output = e.data?.output as string || e.data?.result as string || '';
+    if (!output || output.length < 20) continue;
+
+    // Only extract from Read, Grep, Glob results (context collection tools)
+    if (!['Read', 'Grep', 'Glob', 'Bash'].includes(toolName)) continue;
+
+    // For Bash, only include curl/health checks, not execution commands
+    if (toolName === 'Bash') {
+      const cmd = e.data?.command as string || '';
+      if (!cmd.includes('curl') && !cmd.includes('health') && !cmd.includes('ls') && !cmd.includes('cat')) continue;
+    }
+
+    // Extract file path or search pattern
+    const filePath = e.data?.file_path as string || e.data?.path as string || '';
+    const pattern = e.data?.pattern as string || '';
+    const label = filePath ? `[${filePath.split('/').slice(-2).join('/')}]` : pattern ? `[grep: ${pattern}]` : `[${toolName}]`;
+
+    // Truncate output to fit budget
+    const maxLen = Math.min(150, budget);
+    const summary = output.slice(0, maxLen).replace(/\n/g, ' ').trim();
+    if (summary.length < 15) continue;
+
+    const line = `${label}: ${summary}`;
+    findings.push(line);
+    budget -= line.length;
+  }
+
+  if (findings.length === 0) return '';
+
+  return `[Parent Findings — do NOT re-collect this information]\n${findings.join('\n')}`;
+}
+
 /* ─── Types ─── */
 
 export type ExecStatus = 'idle' | 'running' | 'done' | 'error' | 'awaiting_input' | 'interrupted';
@@ -426,6 +480,15 @@ class ExecutionManager {
             }
           }
 
+          // M2: Inject parent findings into child task (Memory System)
+          // Skip for independent roles (critic, validator) to preserve judgment
+          const roleNode = orgTree?.nodes?.get(subRoleId);
+          const isIndependent = roleNode?.persona?.toLowerCase().match(/critic|validator|auditor|devil/);
+          const parentFindings = !isIndependent ? extractParentFindings(execution.sessionId) : '';
+          const enrichedTask = parentFindings
+            ? `${parentFindings}\n\n${subTask}`
+            : subTask;
+
           const childSession = createSession(subRoleId, {
             mode: 'do',
             source: 'dispatch',
@@ -435,7 +498,7 @@ class ExecutionManager {
           const dispatchMsg: Message = {
             id: `msg-${Date.now()}-dispatch-${subRoleId}`,
             from: 'ceo',
-            content: subTask,
+            content: enrichedTask,
             type: 'directive',
             status: 'done',
             timestamp: new Date().toISOString(),
@@ -445,7 +508,7 @@ class ExecutionManager {
           const childExec = this.startExecution({
             type: 'assign',
             roleId: subRoleId,
-            task: subTask,
+            task: enrichedTask,
             sourceRole: params.roleId,
             parentSessionId: execution.sessionId,
             targetRoles: params.targetRoles,
