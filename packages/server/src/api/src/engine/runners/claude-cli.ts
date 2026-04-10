@@ -623,7 +623,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
               },
               incrementTurn: () => { turnCount++; callbacks.onTurnComplete?.(turnCount); },
               captureCliSessionId: (id) => { capturedCliSessionId = id; },
-              recordTokens: (input, out) => {
+              recordTokens: (input, out, cacheRead, cacheCreation) => {
                 totalInput += input;
                 totalOutput += out;
                 tokenLedger.record({
@@ -633,6 +633,8 @@ export class ClaudeCliRunner implements ExecutionRunner {
                   model: modelName,
                   inputTokens: input,
                   outputTokens: out,
+                  ...(cacheRead && { cacheReadTokens: cacheRead }),
+                  ...(cacheCreation && { cacheCreationTokens: cacheCreation }),
                 });
                 callbacks.onTokens?.(input, out, totalInput, totalOutput);
               },
@@ -664,7 +666,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
               appendOutput: (t) => { output += t; },
               addToolCall: (name, input) => { toolCalls.push({ name, input }); },
               incrementTurn: () => { turnCount++; },
-              recordTokens: (input, out) => {
+              recordTokens: (input, out, cacheRead, cacheCreation) => {
                 totalInput += input;
                 totalOutput += out;
                 tokenLedger.record({
@@ -674,6 +676,8 @@ export class ClaudeCliRunner implements ExecutionRunner {
                   model: modelName,
                   inputTokens: input,
                   outputTokens: out,
+                  ...(cacheRead && { cacheReadTokens: cacheRead }),
+                  ...(cacheCreation && { cacheCreationTokens: cacheCreation }),
                 });
               },
             });
@@ -729,7 +733,7 @@ interface StreamHandlers {
   appendOutput: (text: string) => void;
   addToolCall: (name: string, input?: Record<string, unknown>) => void;
   incrementTurn: () => void;
-  recordTokens?: (inputTokens: number, outputTokens: number) => void;
+  recordTokens?: (inputTokens: number, outputTokens: number, cacheReadTokens?: number, cacheCreationTokens?: number) => void;
   captureCliSessionId?: (id: string) => void;
 }
 
@@ -771,25 +775,33 @@ function processStreamEvent(
       if (handlers.recordTokens) {
         let inputTk = 0;
         let outputTk = 0;
+        let cacheReadTk = 0;
+        let cacheCreationTk = 0;
 
         const modelUsage = event.modelUsage as Record<string, Record<string, number>> | undefined;
         if (modelUsage) {
           // Sum across all models (usually just one)
           for (const mu of Object.values(modelUsage)) {
-            inputTk += (mu.inputTokens ?? 0) + (mu.cacheReadInputTokens ?? 0) + (mu.cacheCreationInputTokens ?? 0);
+            inputTk += mu.inputTokens ?? 0;
+            cacheReadTk += mu.cacheReadInputTokens ?? 0;
+            cacheCreationTk += mu.cacheCreationInputTokens ?? 0;
             outputTk += mu.outputTokens ?? 0;
           }
         } else {
           // Fallback to usage field
           const usage = event.usage as Record<string, number> | undefined;
           if (usage) {
-            inputTk = (usage.input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
+            inputTk = usage.input_tokens ?? 0;
+            cacheReadTk = usage.cache_read_input_tokens ?? 0;
+            cacheCreationTk = usage.cache_creation_input_tokens ?? 0;
             outputTk = usage.output_tokens ?? 0;
           }
         }
 
-        if (inputTk > 0 || outputTk > 0) {
-          handlers.recordTokens(inputTk, outputTk);
+        // Pass total input (miss + cache) for backward compat, plus cache breakdown
+        const totalInput = inputTk + cacheReadTk + cacheCreationTk;
+        if (totalInput > 0 || outputTk > 0) {
+          handlers.recordTokens(totalInput, outputTk, cacheReadTk, cacheCreationTk);
         }
       }
       // Capture CLI session ID for --resume support

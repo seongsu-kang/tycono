@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { COMPANY_ROOT } from '../services/file-reader.js';
 import { getTokenLedger } from '../services/token-ledger.js';
-import { estimateCost } from '../services/pricing.js';
+import { estimateCost, estimateCostFromEntry } from '../services/pricing.js';
 
 export const costRouter = Router();
 
@@ -27,7 +27,7 @@ costRouter.get('/summary', (req: Request, res: Response, next: NextFunction) => 
       }
       byRole[entry.roleId].inputTokens += entry.inputTokens;
       byRole[entry.roleId].outputTokens += entry.outputTokens;
-      byRole[entry.roleId].costUsd += estimateCost(entry.inputTokens, entry.outputTokens, entry.model);
+      byRole[entry.roleId].costUsd += estimateCostFromEntry(entry);
 
       // By model
       if (!byModel[entry.model]) {
@@ -35,7 +35,7 @@ costRouter.get('/summary', (req: Request, res: Response, next: NextFunction) => 
       }
       byModel[entry.model].inputTokens += entry.inputTokens;
       byModel[entry.model].outputTokens += entry.outputTokens;
-      byModel[entry.model].costUsd += estimateCost(entry.inputTokens, entry.outputTokens, entry.model);
+      byModel[entry.model].costUsd += estimateCostFromEntry(entry);
     }
 
     const totalCostUsd = estimateCost(summary.totalInput, summary.totalOutput, '');
@@ -43,7 +43,7 @@ costRouter.get('/summary', (req: Request, res: Response, next: NextFunction) => 
     // Compute total cost from individual entries (more accurate with mixed models)
     let totalCostFromEntries = 0;
     for (const entry of summary.entries) {
-      totalCostFromEntries += estimateCost(entry.inputTokens, entry.outputTokens, entry.model);
+      totalCostFromEntries += estimateCostFromEntry(entry);
     }
 
     res.json({
@@ -76,7 +76,7 @@ costRouter.get('/jobs/:jobId', (req: Request, res: Response, next: NextFunction)
 
     let totalCostUsd = 0;
     for (const entry of summary.entries) {
-      totalCostUsd += estimateCost(entry.inputTokens, entry.outputTokens, entry.model);
+      totalCostUsd += estimateCostFromEntry(entry);
     }
 
     res.json({
@@ -118,7 +118,7 @@ costRouter.get('/sessions/:sessionId', (req: Request, res: Response, next: NextF
 
     let totalCostUsd = 0;
     for (const entry of summary.entries) {
-      totalCostUsd += estimateCost(entry.inputTokens, entry.outputTokens, entry.model);
+      totalCostUsd += estimateCostFromEntry(entry);
     }
 
     res.json({

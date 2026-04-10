@@ -6,7 +6,7 @@ import { COMPANY_ROOT } from '../services/file-reader.js';
 import { buildOrgTree, type RoleSource } from '../engine/org-tree.js';
 import { RoleLifecycleManager } from '../engine/role-lifecycle.js';
 import { getTokenLedger } from '../services/token-ledger.js';
-import { estimateCost } from '../services/pricing.js';
+import { estimateCost, estimateCostFromEntry } from '../services/pricing.js';
 import { calcLevel, calcProgress, formatTokens } from '../utils/role-level.js';
 
 export const syncRouter = Router();
@@ -97,14 +97,14 @@ syncRouter.get('/stats', (_req: Request, res: Response, next: NextFunction) => {
       }
       byRole[entry.roleId].inputTokens += entry.inputTokens;
       byRole[entry.roleId].outputTokens += entry.outputTokens;
-      byRole[entry.roleId].costUsd += estimateCost(entry.inputTokens, entry.outputTokens, entry.model);
+      byRole[entry.roleId].costUsd += estimateCostFromEntry(entry);
 
       if (!byModel[entry.model]) {
         byModel[entry.model] = { inputTokens: 0, outputTokens: 0, costUsd: 0 };
       }
       byModel[entry.model].inputTokens += entry.inputTokens;
       byModel[entry.model].outputTokens += entry.outputTokens;
-      byModel[entry.model].costUsd += estimateCost(entry.inputTokens, entry.outputTokens, entry.model);
+      byModel[entry.model].costUsd += estimateCostFromEntry(entry);
     }
 
     // Role count (excluding CEO)
@@ -143,7 +143,7 @@ syncRouter.get('/stats', (_req: Request, res: Response, next: NextFunction) => {
     const totalTokens = summary.totalInput + summary.totalOutput;
     let totalCostUsd = 0;
     for (const entry of summary.entries) {
-      totalCostUsd += estimateCost(entry.inputTokens, entry.outputTokens, entry.model);
+      totalCostUsd += estimateCostFromEntry(entry);
     }
 
     res.json({

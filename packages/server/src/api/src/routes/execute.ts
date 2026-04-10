@@ -4,7 +4,7 @@ import path from 'node:path';
 import { COMPANY_ROOT } from '../services/file-reader.js';
 import { autoSelectPreset, getPresetById } from '../services/preset-loader.js';
 import { readConfig } from '../services/company-config.js';
-import { MODEL_PRICING, estimateCost } from '../services/pricing.js';
+import { MODEL_PRICING, estimateCost, estimateCostFromEntry } from '../services/pricing.js';
 import { getTokenLedger } from '../services/token-ledger.js';
 // activity-tracker removed — executionManager is Single Source of Truth
 import { buildOrgTree, canDispatchTo, getSubordinates } from '../engine/org-tree.js';
@@ -1240,7 +1240,7 @@ function handleWaveAnalysis(waveId: string, res: ServerResponse): void {
     const tokenData = ledger.query({ sessionId: ses.id });
     let costUsd = 0;
     for (const entry of tokenData.entries) {
-      costUsd += estimateCost(entry.inputTokens, entry.outputTokens, entry.model);
+      costUsd += estimateCostFromEntry(entry);
     }
 
     // Merge running tokens from active execution (real-time, not yet in ledger)
@@ -1357,7 +1357,7 @@ function handleWaveReport(waveId: string, res: ServerResponse): void {
     const tokenData = ledger.query({ sessionId: ses.id });
     let costUsd = 0;
     for (const entry of tokenData.entries) {
-      costUsd += estimateCost(entry.inputTokens, entry.outputTokens, entry.model);
+      costUsd += estimateCostFromEntry(entry);
     }
     const model = tokenData.entries.length > 0 ? tokenData.entries[tokenData.entries.length - 1].model : '';
     totalCost += costUsd;

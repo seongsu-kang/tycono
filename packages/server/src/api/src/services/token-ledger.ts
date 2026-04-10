@@ -13,6 +13,9 @@ export interface TokenEntry {
   model: string;
   inputTokens: number;
   outputTokens: number;
+  /** Prompt caching breakdown (when available) */
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
 }
 
 export interface TokenSummary {
