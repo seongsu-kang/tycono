@@ -10,6 +10,5 @@
   "homepage": "https://tycono.ai",
   "repository": "https://github.com/seongsu-kang/tycono",
   "license": "MIT",
-  "keywords": ["ai-team", "orchestration", "agency", "gamedev", "startup", "multi-agent"],
-  "hooks": "./hooks/hooks.json"
+  "keywords": ["ai-team", "orchestration", "agency", "gamedev", "startup", "multi-agent"]
 }
