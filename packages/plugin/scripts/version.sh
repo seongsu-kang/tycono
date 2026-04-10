@@ -22,7 +22,7 @@ elif command -v tycono-server &>/dev/null; then
   SERVER_VER=$(tycono-server --version 2>/dev/null || echo "unknown")
   SERVER_SRC="global"
 else
-  SERVER_VER=$(npm view tycono-server version --prefer-offline 2>/dev/null || echo "not installed")
+  SERVER_VER=$(npm view tycono-server version --prefer-online 2>/dev/null || echo "not installed")
   SERVER_SRC="npm (not installed locally)"
 fi
 echo "  Server:  $SERVER_VER ($SERVER_SRC)"

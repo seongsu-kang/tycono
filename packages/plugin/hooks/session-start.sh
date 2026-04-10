@@ -49,7 +49,7 @@ TYCONO_CONTEXT
   fi
 
   # Check latest version (prefer offline cache for speed)
-  LATEST_VER=$(npm view tycono-server version --prefer-offline 2>/dev/null || echo "")
+  LATEST_VER=$(npm view tycono-server version 2>/dev/null || echo "")
 
   if [[ -z "$LATEST_VER" ]]; then
     exit 0  # Can't reach npm, skip update
