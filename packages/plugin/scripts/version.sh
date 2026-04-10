@@ -12,9 +12,20 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 PLUGIN_VER=$(python3 -c "import json; print(json.load(open('$PLUGIN_ROOT/package.json'))['version'])" 2>/dev/null || echo "unknown")
 echo "  Plugin:  $PLUGIN_VER"
 
-# Server version
-SERVER_VER=$(npx tycono-server@latest --version 2>/dev/null || echo "not installed")
-echo "  Server:  $SERVER_VER"
+# Server version (check PLUGIN_DATA first, then global, then npm)
+PLUGIN_DATA="${CLAUDE_PLUGIN_DATA:-$HOME/.tycono/plugin-data}"
+PLUGIN_SERVER="$PLUGIN_DATA/server/node_modules/.bin/tycono-server"
+if [[ -f "$PLUGIN_SERVER" ]]; then
+  SERVER_VER=$(node "$PLUGIN_SERVER" --version 2>/dev/null || echo "unknown")
+  SERVER_SRC="plugin-data"
+elif command -v tycono-server &>/dev/null; then
+  SERVER_VER=$(tycono-server --version 2>/dev/null || echo "unknown")
+  SERVER_SRC="global"
+else
+  SERVER_VER=$(npm view tycono-server version --prefer-offline 2>/dev/null || echo "not installed")
+  SERVER_SRC="npm (not installed locally)"
+fi
+echo "  Server:  $SERVER_VER ($SERVER_SRC)"
 
 # Hook status
 HOOK_FILE="$PLUGIN_ROOT/hooks/wave-confirm.sh"

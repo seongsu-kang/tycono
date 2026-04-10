@@ -200,17 +200,24 @@ fi
 if [[ -z "$API_URL" ]]; then
   echo "🚀 Starting Tycono server..."
 
-  # Find tycono binary
-  TYCONO_BIN=$(which tycono-server 2>/dev/null || echo "")
-  if [[ -z "$TYCONO_BIN" ]]; then
-    # Use npx as fallback — @latest ensures the newest server features
-    # (dispatch, 2-Layer Knowledge, etc.) without manual version bumps
-    # BUG-HEADLESS-PATH: pass COMPANY_ROOT explicitly so server writes
-    # headless.json to the same directory start-wave.sh polls
-    COMPANY_ROOT="$COMPANY_ROOT" npx tycono-server@latest &
+  # Find tycono-server binary (priority: PLUGIN_DATA > global > npx fallback)
+  PLUGIN_DATA="${CLAUDE_PLUGIN_DATA:-$HOME/.tycono/plugin-data}"
+  PLUGIN_SERVER="$PLUGIN_DATA/server/node_modules/.bin/tycono-server"
+  TYCONO_BIN=""
+
+  if [[ -x "$PLUGIN_SERVER" ]] || [[ -f "$PLUGIN_SERVER" ]]; then
+    TYCONO_BIN="$PLUGIN_SERVER"
+  else
+    TYCONO_BIN=$(which tycono-server 2>/dev/null || echo "")
+  fi
+
+  if [[ -n "$TYCONO_BIN" ]]; then
+    COMPANY_ROOT="$COMPANY_ROOT" node "$TYCONO_BIN" &
     SERVER_PID=$!
   else
-    COMPANY_ROOT="$COMPANY_ROOT" "$TYCONO_BIN" &
+    # Fallback: npx (slower, but works without pre-install)
+    # BUG-HEADLESS-PATH: pass COMPANY_ROOT explicitly
+    COMPANY_ROOT="$COMPANY_ROOT" npx tycono-server@latest &
     SERVER_PID=$!
   fi
 

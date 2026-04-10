@@ -60,7 +60,7 @@ if [[ -f "$START_WAVE" ]]; then
   assert_contains "modelOverrides payload" "$SW" "modelOverrides"
   assert_contains "structured PID directory" "$SW" ".tycono/pids"
   assert_contains "COMPANY_ROOT passed to server (npx)" "$SW" 'COMPANY_ROOT="$COMPANY_ROOT" npx'
-  assert_contains "COMPANY_ROOT passed to server (bin)" "$SW" 'COMPANY_ROOT="$COMPANY_ROOT" "$TYCONO_BIN"'
+  assert_contains "COMPANY_ROOT passed to server (bin)" "$SW" 'COMPANY_ROOT="$COMPANY_ROOT" node "$TYCONO_BIN"'
 else
   echo "  [SKIP] start-wave.sh not found"
   SKIP=$((SKIP + 1))
