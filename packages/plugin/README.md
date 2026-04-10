@@ -9,12 +9,14 @@ Give Claude Code an AI team that plans, builds, tests, and ships — while you w
 ## Quick Start
 
 ```bash
-# From official marketplace (after approval):
-/plugin install tycono@claude-plugins-official
-
-# Or from GitHub (available now):
+# 1. Add marketplace (one-time)
 /plugin marketplace add seongsu-kang/tycono
-/plugin install tycono@tycono
+
+# 2. Install
+/plugin install tycono@seongsu-kang-tycono
+
+# Update anytime
+/plugin update tycono
 ```
 
 Then:

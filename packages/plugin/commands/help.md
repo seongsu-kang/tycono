@@ -102,17 +102,20 @@ No need to poll `/tycono:tycono-status` — events come to you.
   { "defaultAgency": "your-agency-id" }
   ```
 
-## Headless / API Only Environment
+## Installation
 
-Plugin은 headless 서버에서도 동작합니다. **서버를 직접 띄울 필요 없음** — `/tycono`가 알아서 시작합니다.
+```bash
+# 1. Add marketplace (one-time)
+/plugin marketplace add seongsu-kang/tycono
 
+# 2. Install plugin
+/plugin install tycono@seongsu-kang-tycono
+
+# 3. Update (when new version available)
+/plugin update tycono
 ```
-# plugin만 설치하면 끝
-claude plugin install tycono
 
-# 바로 사용
-/tycono --agency research-discovery "가설 검증해"
-```
+서버는 자동으로 시작됩니다 — `/tycono`가 알아서 관리합니다.
 
 서버 수동 관리가 필요할 때:
 ```
