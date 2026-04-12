@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 
 const typeColors = {
   'dispatch:start': '#3b82f6',
@@ -18,7 +18,7 @@ function formatEvent(e) {
   if (type === 'tool:start') return `tool: ${e.data?.name || '?'}`;
   if (type === 'tool:result') return `result: ${(e.data?.output || '').slice(0, 40)}`;
   if (type === 'msg:done') return 'done';
-  if (type === 'msg:error') return `error: ${e.data?.error || ''}`;
+  if (type === 'msg:error') return `error:`;
   if (type === 'msg:start') return `started (${e.data?.type || ''})`;
   if (type === 'text') return (e.data?.text || '').slice(0, 60);
   if (type === 'msg:turn-complete') return `turn ${e.data?.turn || '?'}`;
@@ -27,6 +27,7 @@ function formatEvent(e) {
 
 export default function ActivityFeed({ events }) {
   const scrollRef = useRef(null);
+  const [roleFilter, setRoleFilter] = useState('all');
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -38,16 +39,45 @@ export default function ActivityFeed({ events }) {
     e.type !== 'thinking' && e.type !== 'prompt:assembled' && e.type !== 'trace:response'
   );
 
-  const reversed = [...filtered].reverse();
+  // Get unique roles
+  const roles = [...new Set(filtered.map(e => e.roleId).filter(Boolean))];
+
+  // Apply role filter
+  const displayed = roleFilter === 'all'
+    ? filtered
+    : filtered.filter(e => e.roleId === roleFilter);
+
+  const reversed = [...displayed].reverse();
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{
         padding: '10px 14px', borderBottom: '1px solid #1a1a1a', background: '#111',
         fontSize: '0.85em', color: '#888', fontWeight: 600,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       }}>
-        Activity Feed ({filtered.length})
+        <span>Activity Feed ({displayed.length})</span>
       </div>
+
+      {/* Role filter tabs */}
+      {roles.length > 1 && (
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', gap: 4, padding: '6px 10px',
+          borderBottom: '1px solid #1a1a1a', background: '#0e0e0e',
+        }}>
+          <FilterTab label="All" active={roleFilter === 'all'} onClick={() => setRoleFilter('all')} />
+          {roles.map(r => (
+            <FilterTab
+              key={r}
+              label={r}
+              active={roleFilter === r}
+              onClick={() => setRoleFilter(r)}
+              count={filtered.filter(e => e.roleId === r).length}
+            />
+          ))}
+        </div>
+      )}
+
       <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', fontSize: '0.75em', fontFamily: 'monospace' }}>
         {reversed.map((e, i) => {
           const time = e.ts ? new Date(e.ts).toLocaleTimeString() : '';
@@ -64,12 +94,32 @@ export default function ActivityFeed({ events }) {
             </div>
           );
         })}
-        {filtered.length === 0 && (
+        {displayed.length === 0 && (
           <div style={{ padding: 20, textAlign: 'center', color: '#444' }}>
-            No events yet
+            {roleFilter !== 'all' ? `No events for ${roleFilter}` : 'No events yet'}
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+function FilterTab({ label, active, onClick, count }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: '2px 8px',
+        fontSize: '0.8em',
+        border: active ? '1px solid #a78bfa' : '1px solid #333',
+        background: active ? '#a78bfa22' : 'transparent',
+        color: active ? '#a78bfa' : '#666',
+        borderRadius: 3,
+        cursor: 'pointer',
+        textTransform: 'uppercase',
+      }}
+    >
+      {label}{count !== undefined ? ` (${count})` : ''}
+    </button>
   );
 }

@@ -171,6 +171,30 @@ export default function App() {
     setSelectedTask(task || null);
   }, []);
 
+  // Extract latest activity per role from events
+  const getRoleActivity = useCallback((roleId) => {
+    const evts = events || [];
+    for (let i = evts.length - 1; i >= 0; i--) {
+      const e = evts[i];
+      if (e.roleId !== roleId) continue;
+      if (e.type === 'text' && e.data?.text) return e.data.text.slice(0, 60);
+      if (e.type === 'tool:start' && e.data?.name) {
+        const name = e.data.name;
+        const input = e.data.input || {};
+        if (name === 'Read' && input.file_path) return `Reading ${input.file_path.split('/').pop()}`;
+        if (name === 'Write' && input.file_path) return `Writing ${input.file_path.split('/').pop()}`;
+        if (name === 'Edit' && input.file_path) return `Editing ${input.file_path.split('/').pop()}`;
+        if (name === 'Bash' && input.command) return `$ ${input.command.slice(0, 50)}`;
+        if (name === 'Grep') return `Searching: ${input.pattern || ''}`;
+        if (name === 'Glob') return `Finding: ${input.pattern || ''}`;
+        return `${name}`;
+      }
+      if (e.type === 'dispatch:start') return `→ Dispatching ${e.data?.targetRoleId || ''}`;
+      if (e.type === 'dispatch:done') return `← ${e.data?.targetRoleId || ''} completed`;
+    }
+    return null;
+  }, [events]);
+
   // Build React Flow graph from board (dagre layout)
   const buildGraph = useCallback((boardData) => {
     if (!boardData?.tasks?.length) { setNodes([]); setEdges([]); return; }
@@ -182,6 +206,7 @@ export default function App() {
       position: { x: 0, y: 0 }, // dagre will override
       data: {
         label: t.title,
+        lastActivity: getRoleActivity(t.assignee),
         role: t.assignee,
         status: t.status,
         criteria: t.criteria,
@@ -211,7 +236,7 @@ export default function App() {
     const layoutNodes = applyDagreLayout(rawNodes, newEdges);
     setNodes(layoutNodes);
     setEdges(newEdges);
-  }, [skipTask, selectTask]);
+  }, [skipTask, selectTask, getRoleActivity]);
 
   // Build graph from wave summary (no board)
   const buildGraphFromWave = useCallback((wave) => {
