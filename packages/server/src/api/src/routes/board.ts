@@ -279,3 +279,87 @@ boardRouter.get('/benchmarks/:agencyId/:waveId', async (req: Request, res: Respo
     next(err);
   }
 });
+
+/* ─── Experiment API ──────────────────── */
+
+import {
+  listExperiments, loadExperiment, saveExperiment as saveExp,
+  runExperiment, cleanupExperiment,
+  type Experiment as ExpType,
+} from '../services/experiment-runner.js';
+
+// POST /api/experiments — create and start an experiment
+boardRouter.post('/experiments', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { directive, agencyId, runs } = req.body;
+    if (!directive || !runs || !Array.isArray(runs)) {
+      res.status(400).json({ error: 'directive and runs[] required' });
+      return;
+    }
+
+    const experiment: ExpType = {
+      id: `exp-${Date.now()}`,
+      ts: new Date().toISOString(),
+      directive,
+      agencyId: agencyId || 'default',
+      status: 'pending',
+      runs: runs.map((r: { serverVersion: string; features?: string[]; config?: Record<string, unknown> }, i: number) => ({
+        id: `run-${String.fromCharCode(97 + i)}`,
+        serverVersion: r.serverVersion,
+        features: r.features || [],
+        configOverrides: r.config || {},
+        sandboxDir: '',
+        port: 0,
+        waveId: '',
+        pid: 0,
+        status: 'pending' as const,
+      })),
+    };
+
+    saveExp(experiment);
+
+    // Start in background
+    runExperiment(experiment).catch(err => {
+      experiment.status = 'error';
+      saveExp(experiment);
+      console.error(`[Experiment] ${experiment.id} failed:`, err);
+    });
+
+    res.status(201).json({ experimentId: experiment.id, runs: experiment.runs.length });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/experiments — list all experiments
+boardRouter.get('/experiments', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json({ experiments: listExperiments() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/experiments/:id — get experiment details
+boardRouter.get('/experiments/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const exp = loadExperiment(req.params.id);
+    if (!exp) {
+      res.status(404).json({ error: 'Experiment not found' });
+      return;
+    }
+    res.json(exp);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/experiments/:id — cleanup experiment (kill servers, remove sandboxes)
+boardRouter.delete('/experiments/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    cleanupExperiment(req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
