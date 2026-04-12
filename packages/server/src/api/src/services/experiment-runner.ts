@@ -100,9 +100,14 @@ function installServer(sandboxDir: string, version: string): void {
   const serverDir = path.join(sandboxDir, 'server');
   fs.mkdirSync(serverDir, { recursive: true });
   fs.writeFileSync(path.join(serverDir, 'package.json'), '{"private":true}');
-  execSync(`npm install tycono-server@${version} --save --loglevel=error`, {
+
+  // Use shared npm cache to speed up installs
+  const cacheDir = path.join(os.tmpdir(), 'tycono-exp-npm-cache');
+  fs.mkdirSync(cacheDir, { recursive: true });
+
+  execSync(`npm install tycono-server@${version} --save --loglevel=error --cache "${cacheDir}"`, {
     cwd: serverDir,
-    timeout: 120_000,
+    timeout: 300_000,  // 5min — npm install can be slow
     stdio: 'pipe',
   });
 }
@@ -139,8 +144,8 @@ export async function runExperiment(experiment: Experiment): Promise<void> {
   experiment.status = 'running';
   saveExperiment(experiment);
 
-  // Run all sandbox setups in parallel
-  const setupPromises = experiment.runs.map(async (run) => {
+  // Setup sandboxes sequentially (npm install is resource-heavy, parallel causes timeouts)
+  for (const run of experiment.runs) {
     try {
       run.status = 'installing';
       saveExperiment(experiment);
@@ -149,6 +154,7 @@ export async function runExperiment(experiment: Experiment): Promise<void> {
       run.sandboxDir = createSandbox(experiment.agencyId);
 
       // Install specific server version
+      console.log(`[Experiment] Installing tycono-server@${run.serverVersion} in ${run.sandboxDir}`);
       installServer(run.sandboxDir, run.serverVersion);
 
       // Apply config overrides (ceo_prompt, context_mode, etc.)
@@ -156,14 +162,14 @@ export async function runExperiment(experiment: Experiment): Promise<void> {
 
       run.status = 'pending';
       saveExperiment(experiment);
+      console.log(`[Experiment] ${run.id} sandbox ready`);
     } catch (err) {
       run.status = 'error';
       run.error = String(err);
       saveExperiment(experiment);
+      console.error(`[Experiment] ${run.id} setup failed:`, err);
     }
-  });
-
-  await Promise.all(setupPromises);
+  }
 
   // Start servers and waves sequentially to avoid port conflicts
   for (const run of experiment.runs) {
@@ -172,10 +178,15 @@ export async function runExperiment(experiment: Experiment): Promise<void> {
     try {
       // Start server
       const serverBin = path.join(run.sandboxDir, 'server', 'node_modules', '.bin', 'tycono-server');
+      // Clean env: remove PORT (auto-detect), remove conflicting paths
+      const cleanEnv = { ...process.env };
+      delete cleanEnv.PORT;  // Force auto-detect free port
+      delete cleanEnv.__TYCONO_HEAP_SET;  // Allow heap re-config
+
       const serverProc = spawn('node', [serverBin], {
         cwd: run.sandboxDir,
         env: {
-          ...process.env,
+          ...cleanEnv,
           COMPANY_ROOT: run.sandboxDir,
           NODE_ENV: 'production',
         },
