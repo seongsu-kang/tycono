@@ -256,7 +256,7 @@ boardRouter.get('/templates/:id', (req: Request, res: Response, next: NextFuncti
 import { loadBenchmarks, listAllBenchmarks, getBenchmark } from '../services/benchmark-store.js';
 
 // GET /api/benchmarks — list all benchmarks (optionally filtered by agencyId)
-boardRouter.get('/api/benchmarks', async (req: Request, res: Response, next: NextFunction) => {
+boardRouter.get('/benchmarks', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const agencyId = req.query.agencyId as string;
     const benchmarks = agencyId ? loadBenchmarks(agencyId) : listAllBenchmarks();
@@ -267,7 +267,7 @@ boardRouter.get('/api/benchmarks', async (req: Request, res: Response, next: Nex
 });
 
 // GET /api/benchmarks/:agencyId/:waveId — get specific benchmark
-boardRouter.get('/api/benchmarks/:agencyId/:waveId', async (req: Request, res: Response, next: NextFunction) => {
+boardRouter.get('/benchmarks/:agencyId/:waveId', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const benchmark = getBenchmark(req.params.agencyId, req.params.waveId);
     if (!benchmark) {
