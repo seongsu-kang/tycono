@@ -17,6 +17,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { ClaudeCliProvider } from '../engine/llm-adapter.js';
 import { buildOrgTree, getSubordinates } from '../engine/org-tree.js';
 import { readConfig } from './company-config.js';
+import { extractLessons, saveLessons } from './lesson-store.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { COMPANY_ROOT } from './file-reader.js';
@@ -956,6 +957,19 @@ ${state.continuous ? `## Continuous Improvement Mode (ON)
         }
       } catch (err) {
         console.error(`[Supervisor] Failed to auto-save wave ${state.waveId}:`, err);
+      }
+
+      // M3: Extract and save lessons from this wave (Episodic Memory)
+      try {
+        // extractLessons/saveLessons imported at top level
+        const agencyId = state.preset || 'default';
+        const lessons = extractLessons(state.waveId, agencyId);
+        if (lessons.length > 0) {
+          saveLessons(agencyId, lessons);
+          console.log(`[Supervisor] Extracted ${lessons.length} lesson(s) for agency "${agencyId}"`);
+        }
+      } catch (err) {
+        console.error(`[Supervisor] Lesson extraction failed:`, err);
       }
 
       // NOTE: session.status is NOT updated here — orphan detection uses

@@ -12,6 +12,7 @@ import {
   canConsult,
 } from './org-tree.js';
 import { extractKeywords, searchRelatedDocs } from './knowledge-gate.js';
+import { formatLessonsForContext } from '../services/lesson-store.js';
 
 /* ─── Types ──────────────────────────────────── */
 
@@ -140,6 +141,16 @@ Use the code repository path for all source code work (reading, writing, buildin
     if (presetKnowledge) {
       pushSection('# Preset Knowledge\n\n' + presetKnowledge, true);
     }
+  }
+
+  // 11b. Episodic Memory — lessons from previous waves (M3)
+  if (options?.presetId) {
+    try {
+      const lessonsSection = formatLessonsForContext(options.presetId, roleId);
+      if (lessonsSection) {
+        pushSection(lessonsSection, false);
+      }
+    } catch { /* lesson-store not available — skip */ }
   }
 
   // 12. Handoff Summary — NOT cacheable (dynamic per dispatch)
