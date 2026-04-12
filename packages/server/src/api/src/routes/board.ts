@@ -280,6 +280,36 @@ boardRouter.get('/benchmarks/:agencyId/:waveId', async (req: Request, res: Respo
   }
 });
 
+/* ─── Blackboard API (M4 Memory Bus) ──── */
+
+import * as blackboardStore from '../services/blackboard-store.js';
+
+/** POST /api/waves/:waveId/blackboard — Write an entry */
+boardRouter.post('/waves/:waveId/blackboard', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { waveId } = req.params;
+    const { roleId, key, content, type } = req.body;
+    if (!roleId || !key || !content) {
+      res.status(400).json({ error: 'roleId, key, content required' });
+      return;
+    }
+    const entry = blackboardStore.writeEntry(waveId, {
+      roleId, key, content,
+      type: type || 'finding',
+    });
+    res.status(201).json(entry);
+  } catch (err) { next(err); }
+});
+
+/** GET /api/waves/:waveId/blackboard — Read all entries */
+boardRouter.get('/waves/:waveId/blackboard', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { waveId } = req.params;
+    const entries = blackboardStore.readEntries(waveId);
+    res.json({ waveId, entries, count: entries.length });
+  } catch (err) { next(err); }
+});
+
 /* ─── Experiment API ──────────────────── */
 
 import {

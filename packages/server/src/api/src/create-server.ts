@@ -140,7 +140,7 @@ export function createHttpServer(): http.Server {
     // SSE 엔드포인트: Express 우회하여 raw HTTP로 처리
     // BUG-008: /api/waves/:waveId/directive and /api/waves/:waveId/question POST도 포함
     // Board API는 Express router로 처리 (raw handler 제외)
-    const isBoardRoute = url.match(/^\/api\/waves\/[^/]+\/(board|events)/);
+    const isBoardRoute = url.match(/^\/api\/waves\/[^/]+\/(board|events|blackboard)/);
     if (!isBoardRoute && (url.startsWith('/api/exec/') || url.startsWith('/api/jobs') || url.startsWith('/api/waves/') || url === '/api/waves/save' || url === '/api/setup/import-knowledge') && method === 'POST') {
       setExecCors(req, res);
       if (url === '/api/setup/import-knowledge') {

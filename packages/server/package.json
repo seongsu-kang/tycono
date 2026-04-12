@@ -1,6 +1,6 @@
 {
   "name": "tycono-server",
-  "version": "0.2.10",
+  "version": "0.2.11-beta.2",
   "description": "Tycono AI team orchestration server. Dispatch, supervise, and observe AI agents working as a team.",
   "type": "module",
   "bin": {

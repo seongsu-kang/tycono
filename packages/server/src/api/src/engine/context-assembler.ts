@@ -13,6 +13,7 @@ import {
 } from './org-tree.js';
 import { extractKeywords, searchRelatedDocs } from './knowledge-gate.js';
 import { formatLessonsForContext } from '../services/lesson-store.js';
+import { formatForContext as formatBlackboardForContext } from '../services/blackboard-store.js';
 
 /* ─── Types ──────────────────────────────────── */
 
@@ -207,6 +208,14 @@ ${full}
 
 > Build on team findings. Focus your effort on YOUR specific task, not re-collecting context.`, false);
       }
+    }
+  }
+
+  // 12c. Blackboard (M4 Memory Bus): live shared findings from running roles
+  if (options?.waveId) {
+    const bbContent = formatBlackboardForContext(options.waveId, roleId);
+    if (bbContent) {
+      pushSection(bbContent, false);
     }
   }
 
