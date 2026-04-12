@@ -18,6 +18,7 @@ import { ClaudeCliProvider } from '../engine/llm-adapter.js';
 import { buildOrgTree, getSubordinates } from '../engine/org-tree.js';
 import { readConfig } from './company-config.js';
 import { extractLessons, saveLessons } from './lesson-store.js';
+import { collectBenchmark, saveBenchmark } from './benchmark-store.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { COMPANY_ROOT } from './file-reader.js';
@@ -960,16 +961,52 @@ ${state.continuous ? `## Continuous Improvement Mode (ON)
       }
 
       // M3: Extract and save lessons from this wave (Episodic Memory)
+      let lessonsCount = 0;
       try {
         // extractLessons/saveLessons imported at top level
         const agencyId = state.preset || 'default';
         const lessons = extractLessons(state.waveId, agencyId);
+        lessonsCount = lessons.length;
         if (lessons.length > 0) {
           saveLessons(agencyId, lessons);
           console.log(`[Supervisor] Extracted ${lessons.length} lesson(s) for agency "${agencyId}"`);
         }
       } catch (err) {
         console.error(`[Supervisor] Lesson extraction failed:`, err);
+      }
+
+      // Wave Benchmark: auto-collect metrics for cross-wave comparison
+      try {
+        // collectBenchmark/saveBenchmark — static import below
+        const bmAgencyId = state.preset || 'default';
+        const features: string[] = [];
+        if (orgTree.ceoPromptOverride) features.push('ceo-prompt');
+        if (orgTree.contextMode === 'briefing-first') features.push('briefing-first');
+        features.push('wave-briefing'); // always on since 0.2.5
+
+        // Read server version from package.json
+        let serverVer = 'unknown';
+        try {
+          const pkgPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../../../package.json');
+          serverVer = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).version;
+        } catch {}
+
+        const waveStart = typeof state.startedAt === 'string' ? new Date(state.startedAt).getTime() : (state.startedAt || Date.now());
+        const benchmark = collectBenchmark(
+          state.waveId,
+          bmAgencyId,
+          state.directive,
+          serverVer,
+          waveStart,
+          lessonsCount,
+          features,
+        );
+        if (benchmark) {
+          saveBenchmark(benchmark);
+          console.log(`[Supervisor] Benchmark saved: ${state.waveId} ($${benchmark.totalCostUsd.toFixed(2)})`);
+        }
+      } catch (err) {
+        console.error(`[Supervisor] Benchmark collection failed:`, err);
       }
 
       // NOTE: session.status is NOT updated here — orphan detection uses

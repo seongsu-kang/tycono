@@ -250,3 +250,32 @@ boardRouter.get('/templates/:id', (req: Request, res: Response, next: NextFuncti
     next(err);
   }
 });
+
+/* ─── Benchmark API ──────────────────── */
+
+import { loadBenchmarks, listAllBenchmarks, getBenchmark } from '../services/benchmark-store.js';
+
+// GET /api/benchmarks — list all benchmarks (optionally filtered by agencyId)
+boardRouter.get('/api/benchmarks', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const agencyId = req.query.agencyId as string;
+    const benchmarks = agencyId ? loadBenchmarks(agencyId) : listAllBenchmarks();
+    res.json({ benchmarks });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/benchmarks/:agencyId/:waveId — get specific benchmark
+boardRouter.get('/api/benchmarks/:agencyId/:waveId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const benchmark = getBenchmark(req.params.agencyId, req.params.waveId);
+    if (!benchmark) {
+      res.status(404).json({ error: 'Benchmark not found' });
+      return;
+    }
+    res.json(benchmark);
+  } catch (err) {
+    next(err);
+  }
+});
