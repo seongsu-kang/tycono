@@ -1,0 +1,22 @@
+{
+  "C1": {
+    "name": "Tower Defense Game",
+    "directive": "타워 디펜스 게임 Sentinel을 만들어라. Phaser.js 사용. 브라우저에서 바로 플레이 가능한 완성도 높은 게임이 목표다.",
+    "preset": "gamedev"
+  },
+  "C2": {
+    "name": "Todo CRUD Web App",
+    "directive": "Todo CRUD 웹앱을 만들어라. React 프론트엔드 + Express 백엔드 + SQLite DB. 할 일 추가/삭제/완료 체크/필터(전체/미완료/완료). 브라우저에서 작동해야 한다.",
+    "preset": "gamedev"
+  },
+  "C3": {
+    "name": "Markdown CLI Tool",
+    "directive": "Markdown을 HTML로 변환하는 CLI 도구를 만들어라. Node.js. 헤더, 리스트, 코드블록, 링크, 이미지 지원. 입력: md파일 경로, 출력: html파일. 테스트 포함.",
+    "preset": "gamedev"
+  },
+  "C4": {
+    "name": "Tech Blog Post",
+    "directive": "AI 멀티에이전트 시스템의 메모리 아키텍처에 대한 기술 블로그 포스트를 작성해라. 2000자 이상. 코드 예제 포함. knowledge/blog/ 폴더에 저장.",
+    "preset": "gamedev"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "case": "C3",
+  "version": "0.2.10",
+  "run": 1,
+  "waveId": "wave-1776008508766",
+  "completed": true,
+  "durationSeconds": 256,
+  "turns": 66,
+  "reads": 5,
+  "writes": 3,
+  "tools": 38,
+  "sessions": 4,
+  "dispatches": 3,
+  "errors": 0,
+  "roles": [
+    "ceo",
+    "cto",
+    "engineer",
+    "qa"
+  ],
+  "roleTurns": {
+    "ceo": 17,
+    "cto": 21,
+    "engineer": 14,
+    "qa": 14
+  },
+  "totalEvents": 154
+}
