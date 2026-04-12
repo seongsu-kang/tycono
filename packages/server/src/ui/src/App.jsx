@@ -17,6 +17,26 @@ import { applyDagreLayout } from './layout';
 const API = window.location.origin;
 const nodeTypes = { agent: AgentNode };
 
+export class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 20, color: '#ef4444', background: '#1a1a1a', minHeight: '100vh' }}>
+          <h2>Dashboard Error</h2>
+          <pre style={{ color: '#888', fontSize: '0.8em' }}>{this.state.error.message}</pre>
+          <button onClick={() => { this.setState({ error: null }); window.location.reload(); }}
+            style={{ marginTop: 12, padding: '8px 16px', background: '#333', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
+            Reload
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const STATUS_COLORS = {
   waiting: '#444',
   running: '#3b82f6',
@@ -36,9 +56,11 @@ export default function App() {
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const sseRef = useRef(null);
   const boardRef = useRef(null);
+  const currentWaveIdRef = useRef(null);
 
-  // Keep boardRef in sync
+  // Keep refs in sync
   useEffect(() => { boardRef.current = board; }, [board]);
+  useEffect(() => { currentWaveIdRef.current = currentWaveId; }, [currentWaveId]);
 
   // Load waves
   useEffect(() => {
@@ -113,6 +135,21 @@ export default function App() {
           if (b) { setBoard(b); buildGraph(b); }
         });
       };
+      // BUG-DASHBOARD-LIVE: listen for named wave:done event
+      source.addEventListener('wave:done', (e) => {
+        setSseStatus('Completed');
+        try {
+          const data = JSON.parse(e.data);
+          setEvents(prev => [...prev, { type: 'wave:done', ...data }].slice(-200));
+        } catch {}
+        // Final board refresh
+        const wid = currentWaveIdRef.current;
+        if (wid) {
+          fetch(`${API}/api/waves/${wid}/board`).then(r => r.ok ? r.json() : null).then(b => {
+            if (b) { setBoard(b); buildGraph(b); }
+          });
+        }
+      });
       source.onerror = () => setSseStatus('Offline');
       sseRef.current = source;
     } catch { setSseStatus('--'); }

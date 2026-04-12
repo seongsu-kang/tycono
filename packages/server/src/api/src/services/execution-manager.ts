@@ -318,6 +318,29 @@ class ExecutionManager {
           childSessionId: params.sessionId,
           parentSessionId: parentExec.sessionId,
         });
+
+        // BUG-DASHBOARD-NODES: Add dispatched sub-role as board task
+        if (sessionForBoard?.waveId) {
+          try {
+            const existingTasks = boardStore.getTasksForRole(sessionForBoard.waveId, params.roleId);
+            if (existingTasks.length === 0) {
+              const board = boardStore.getBoard(sessionForBoard.waveId);
+              const parentTask = board?.tasks.find(t => t.assignee === parentExec.roleId);
+              const taskId = `t${(board?.tasks.length ?? 0) + 1}`;
+              const taskSnippet = typeof params.task === 'string'
+                ? params.task.slice(0, 80)
+                : 'Dispatched task';
+              boardStore.addTask(sessionForBoard.waveId, {
+                id: taskId,
+                title: `${params.roleId.toUpperCase()}: ${taskSnippet}`,
+                assignee: params.roleId,
+                status: 'running',
+                criteria: '',
+                dependsOn: parentTask ? [parentTask.id] : [],
+              });
+            }
+          } catch { /* non-fatal */ }
+        }
       }
     }
 
@@ -728,12 +751,13 @@ class ExecutionManager {
           }
 
           // Auto-update board task status → done
-          if (session?.waveId) {
+          const doneSession = getSession(execution.sessionId);
+          if (doneSession?.waveId) {
             try {
-              const myTasks = boardStore.getTasksForRole(session.waveId, params.roleId);
+              const myTasks = boardStore.getTasksForRole(doneSession.waveId, params.roleId);
               const runningTask = myTasks.find(t => t.status === 'running');
               if (runningTask) {
-                boardStore.completeTask(session.waveId, runningTask.id, 'pass', result.output.slice(-200));
+                boardStore.completeTask(doneSession.waveId, runningTask.id, 'pass', result.output.slice(-200));
               }
             } catch { /* non-fatal */ }
           }
@@ -793,6 +817,18 @@ class ExecutionManager {
         execution.stream.emit('msg:error', params.roleId, { message: err.message });
         if (execution.sessionId) {
           this.finalizeSessionMessage(execution, 'error');
+        }
+
+        // Auto-update board task status → done (even on error)
+        const errSession = getSession(execution.sessionId);
+        if (errSession?.waveId) {
+          try {
+            const myTasks = boardStore.getTasksForRole(errSession.waveId, params.roleId);
+            const runningTask = myTasks.find(t => t.status === 'running');
+            if (runningTask) {
+              boardStore.completeTask(errSession.waveId, runningTask.id, 'fail', err.message.slice(0, 200));
+            }
+          } catch { /* non-fatal */ }
         }
 
         // SV: If C-Level crashed with running children, restart supervision

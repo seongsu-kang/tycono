@@ -605,16 +605,25 @@ You are the CEO Supervisor responding to the CEO's follow-up question.
             qa: 'Quality Assurance & Testing',
             designer: 'Design & UX',
           };
-          const boardTasks: BoardTask[] = cLevelRoles.map((roleId, i) => {
+          // CEO as root node
+          const ceoTask: BoardTask = {
+            id: 't0',
+            title: 'CEO: Orchestration & Supervision',
+            assignee: 'ceo',
+            status: 'running' as const,
+            dependsOn: [],
+            criteria: state.directive,
+          };
+          const boardTasks: BoardTask[] = [ceoTask, ...cLevelRoles.map((roleId, i) => {
             return {
               id: `t${i + 1}`,
               title: `${roleId.toUpperCase()}: ${roleLabels[roleId] || 'Task'}`,
               assignee: roleId,
               status: 'waiting' as const,
-              dependsOn: [],
+              dependsOn: ['t0'],
               criteria: state.directive,
             };
-          });
+          })];
           boardStore.createBoard(state.waveId, state.directive, boardTasks);
         }
       } catch (err) {
@@ -935,6 +944,20 @@ ${state.continuous ? `## Continuous Improvement Mode (ON)
     } else {
       console.log(`[Supervisor] Wave ${state.waveId} complete. All subordinates done.`);
       state.status = 'stopped';
+
+      // Mark CEO board task as done + skip remaining waiting tasks
+      try {
+        const board = boardStore.getBoard(state.waveId);
+        if (board) {
+          for (const t of board.tasks) {
+            if (t.assignee === 'ceo' && t.status === 'running') {
+              boardStore.completeTask(state.waveId, t.id, 'pass', 'Wave completed');
+            } else if (t.status === 'waiting') {
+              boardStore.updateTaskStatus(state.waveId, t.id, 'skipped');
+            }
+          }
+        }
+      } catch { /* non-fatal */ }
 
       // Record assistant response in wave conversation history
       if (state.executionId) {

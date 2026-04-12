@@ -25,6 +25,8 @@ export default function TaskDetail({ task, waveId, api, onClose, onAction }) {
   const toolCalls = events.filter(e => e.type === 'tool:start');
   const errors = events.filter(e => e.type === 'msg:error');
   const dispatches = events.filter(e => e.type === 'dispatch:start' || e.type === 'dispatch:done');
+  const textEvents = events.filter(e => e.type === 'text' || e.type === 'trace:response');
+  const lastText = textEvents.length > 0 ? textEvents[textEvents.length - 1] : null;
 
   const handleSave = async () => {
     const body = {};
@@ -55,6 +57,14 @@ export default function TaskDetail({ task, waveId, api, onClose, onAction }) {
     setEditCriteria(task.criteria || '');
     setEditMode(true);
   };
+
+  // Format result safely (can be string or object)
+  const resultText = task.result
+    ? (typeof task.result === 'string' ? task.result : task.result.verdict || JSON.stringify(task.result))
+    : null;
+  const resultNote = task.resultNote
+    || (typeof task.result === 'object' && task.result?.note)
+    || null;
 
   return (
     <div style={{
@@ -112,12 +122,9 @@ export default function TaskDetail({ task, waveId, api, onClose, onAction }) {
               Status: <span style={{ color: statusColor(task.status) }}>{task.status}</span>
               {task.dependsOn?.length > 0 && ` · Depends: ${task.dependsOn.join(', ')}`}
             </div>
-            {task.criteria && (
-              <div style={{ color: '#666', fontSize: '0.8em', marginTop: 4 }}>{task.criteria}</div>
-            )}
-            {task.result && (
-              <div style={{ marginTop: 6, fontSize: '0.8em', color: task.result === 'pass' ? '#22c55e' : '#ef4444' }}>
-                Result: {task.result} {task.resultNote && `— ${task.resultNote}`}
+            {resultText && (
+              <div style={{ marginTop: 6, fontSize: '0.8em', color: resultText === 'pass' ? '#22c55e' : '#ef4444' }}>
+                Result: {resultText} {resultNote && `— ${resultNote}`}
               </div>
             )}
           </div>
@@ -129,6 +136,19 @@ export default function TaskDetail({ task, waveId, api, onClose, onAction }) {
             <button onClick={startEdit} style={actionBtn('#3b82f6')}>Edit</button>
             <button onClick={handleSkip} style={actionBtn('#ef4444')}>Skip</button>
           </div>
+        )}
+
+        {/* Latest Output */}
+        {lastText && (
+          <Section title="Latest Output">
+            <div style={{
+              background: '#1a1a1a', borderRadius: 6, padding: '10px 12px',
+              fontSize: '0.8em', color: '#ccc', lineHeight: 1.5, maxHeight: 120, overflow: 'auto',
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            }}>
+              {extractText(lastText)}
+            </div>
+          </Section>
         )}
 
         {/* Stats */}
@@ -145,41 +165,109 @@ export default function TaskDetail({ task, waveId, api, onClose, onAction }) {
           )}
         </Section>
 
-        {/* Tool Calls */}
+        {/* Dispatches */}
+        {dispatches.length > 0 && (
+          <Section title={`Dispatches (${dispatches.length})`}>
+            {dispatches.map((e, i) => (
+              <div key={i} style={{ padding: '4px 0', fontSize: '0.8em', color: '#ccc' }}>
+                <span style={{ color: e.type === 'dispatch:start' ? '#3b82f6' : '#22c55e' }}>
+                  {e.type === 'dispatch:start' ? '→' : '✓'}
+                </span>
+                {' '}
+                <span style={{ color: '#a78bfa', fontWeight: 600 }}>
+                  {e.data?.targetRoleId || e.data?.roleId || 'unknown'}
+                </span>
+                {e.data?.task && (
+                  <span style={{ color: '#666', marginLeft: 6 }}>
+                    {String(e.data.task).slice(0, 80)}
+                  </span>
+                )}
+              </div>
+            ))}
+          </Section>
+        )}
+
+        {/* Tool Calls - human readable */}
         {toolCalls.length > 0 && (
           <Section title={`Tool Calls (${toolCalls.length})`}>
-            {toolCalls.slice(0, 20).map((e, i) => (
-              <div key={i} style={{ padding: '3px 0', fontSize: '0.75em', color: '#888', fontFamily: 'monospace' }}>
-                <span style={{ color: '#60a5fa' }}>{e.data?.name}</span>
-                {e.data?.input && <span style={{ color: '#555' }}> {JSON.stringify(e.data.input).slice(0, 60)}</span>}
+            {toolCalls.slice(-20).map((e, i) => (
+              <div key={i} style={{ padding: '3px 0', fontSize: '0.8em', display: 'flex', gap: 6 }}>
+                <span style={{ color: '#60a5fa', fontWeight: 600, minWidth: 50 }}>
+                  {e.data?.name || 'tool'}
+                </span>
+                <span style={{ color: '#888' }}>
+                  {formatToolCall(e.data)}
+                </span>
               </div>
             ))}
             {toolCalls.length > 20 && (
-              <div style={{ color: '#555', fontSize: '0.75em' }}>+{toolCalls.length - 20} more</div>
+              <div style={{ color: '#555', fontSize: '0.75em', marginTop: 4 }}>
+                ... {toolCalls.length - 20} earlier calls
+              </div>
             )}
           </Section>
         )}
 
-        {/* Recent Events */}
-        <Section title={`Recent Events (${events.length})`}>
-          {events.slice(-15).reverse().map((e, i) => (
-            <div key={i} style={{
-              padding: '2px 0', fontSize: '0.72em', fontFamily: 'monospace',
-              display: 'flex', gap: 8,
-            }}>
-              <span style={{ color: '#555', minWidth: 55 }}>
-                {e.ts ? new Date(e.ts).toLocaleTimeString() : ''}
-              </span>
-              <span style={{ color: typeColor(e.type) }}>{e.type}</span>
-            </div>
-          ))}
-          {events.length === 0 && !loading && (
-            <div style={{ color: '#444', fontSize: '0.8em' }}>No events for this role</div>
-          )}
-        </Section>
+        {/* Errors */}
+        {errors.length > 0 && (
+          <Section title={`Errors (${errors.length})`}>
+            {errors.map((e, i) => (
+              <div key={i} style={{
+                padding: '6px 8px', fontSize: '0.8em', color: '#ef4444',
+                background: '#1a1a1a', borderRadius: 4, marginBottom: 4,
+              }}>
+                {e.data?.error || e.data?.message || 'Unknown error'}
+              </div>
+            ))}
+          </Section>
+        )}
       </div>
     </div>
   );
+}
+
+/** Extract human-readable text from a text/trace event */
+function extractText(event) {
+  if (!event?.data) return '';
+  if (typeof event.data === 'string') return event.data.slice(0, 500);
+  if (event.data.fullOutput) return event.data.fullOutput.slice(0, 500);
+  if (event.data.text) return event.data.text.slice(0, 500);
+  if (event.data.content) return String(event.data.content).slice(0, 500);
+  if (event.data.output) return String(event.data.output).slice(0, 500);
+  if (event.data.message) return String(event.data.message).slice(0, 500);
+  return '';
+}
+
+/** Format a tool call into human-readable description */
+function formatToolCall(data) {
+  if (!data) return '';
+  const name = data.name || '';
+  const input = data.input || {};
+
+  if (name === 'Read' && input.file_path) {
+    return input.file_path.split('/').slice(-2).join('/');
+  }
+  if (name === 'Write' && input.file_path) {
+    return `→ ${input.file_path.split('/').slice(-2).join('/')}`;
+  }
+  if (name === 'Edit' && input.file_path) {
+    return `${input.file_path.split('/').slice(-2).join('/')}`;
+  }
+  if (name === 'Bash' && input.command) {
+    return input.command.length > 80 ? input.command.slice(0, 77) + '...' : input.command;
+  }
+  if (name === 'Grep' && input.pattern) {
+    return `/${input.pattern}/ ${input.path ? 'in ' + input.path.split('/').pop() : ''}`;
+  }
+  if (name === 'Glob' && input.pattern) {
+    return input.pattern;
+  }
+  if (input.file_path) {
+    return input.file_path.split('/').slice(-2).join('/');
+  }
+  if (typeof input === 'string') return input.slice(0, 80);
+  const str = JSON.stringify(input);
+  return str.length > 80 ? str.slice(0, 77) + '...' : str;
 }
 
 function Section({ title, children }) {
@@ -211,12 +299,4 @@ function actionBtn(color) {
 
 function statusColor(status) {
   return { waiting: '#888', running: '#3b82f6', done: '#22c55e', skipped: '#666', blocked: '#ef4444' }[status] || '#888';
-}
-
-function typeColor(type) {
-  return {
-    'dispatch:start': '#3b82f6', 'dispatch:done': '#22c55e',
-    'tool:start': '#60a5fa', 'tool:result': '#60a5fa',
-    'msg:done': '#22c55e', 'msg:error': '#ef4444',
-  }[type] || '#666';
 }
