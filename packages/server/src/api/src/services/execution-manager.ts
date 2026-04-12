@@ -72,6 +72,45 @@ function extractParentFindings(sessionId: string): string {
   return `[Parent Findings — do NOT re-collect this information]\n${findings.join('\n')}`;
 }
 
+/**
+ * M4 Passive Sibling Awareness: extract completed sibling role results.
+ * When a parent dispatches child B, include findings from already-completed child A.
+ */
+function extractSiblingFindings(parentExec: { childSessionIds: string[]; roleId: string }, currentRoleId: string): string {
+  const sections: string[] = [];
+  let budget = 1200;
+
+  for (const siblingSessionId of parentExec.childSessionIds) {
+    if (budget <= 0) break;
+
+    const events = ActivityStream.readAll(siblingSessionId);
+    if (events.length === 0) continue;
+
+    // Find the role ID and completion status from events
+    const startEvent = events.find(e => e.type === 'msg:start');
+    const siblingRole = startEvent?.roleId || '';
+    if (!siblingRole || siblingRole === currentRoleId) continue;
+
+    const doneEvent = events.find(e => e.type === 'msg:done' || e.type === 'trace:response');
+    if (!doneEvent) continue; // Only include completed siblings
+
+    // Extract output summary
+    const output = doneEvent.data?.fullOutput || doneEvent.data?.output || '';
+    if (!output || output.length < 20) continue;
+
+    const summary = String(output).slice(-400).replace(/\n/g, ' ').trim();
+    const line = `[${siblingRole} result]: ${summary}`;
+    if (line.length > budget) continue;
+
+    sections.push(line);
+    budget -= line.length;
+  }
+
+  if (sections.length === 0) return '';
+
+  return `[Sibling Results — completed team members' work]\n${sections.join('\n')}`;
+}
+
 /* ─── Types ─── */
 
 export type ExecStatus = 'idle' | 'running' | 'done' | 'error' | 'awaiting_input' | 'interrupted';
@@ -504,12 +543,15 @@ class ExecutionManager {
           }
 
           // M2: Inject parent findings into child task (Memory System)
+          // M4: Inject sibling results (completed team members' work)
           // Skip for independent roles (critic, validator) to preserve judgment
           const roleNode = orgTree?.nodes?.get(subRoleId);
           const isIndependent = roleNode?.persona?.toLowerCase().match(/critic|validator|auditor|devil/);
           const parentFindings = !isIndependent ? extractParentFindings(execution.sessionId) : '';
-          const enrichedTask = parentFindings
-            ? `${parentFindings}\n\n${subTask}`
+          const siblingFindings = !isIndependent ? extractSiblingFindings(execution, subRoleId) : '';
+          const contextPrefix = [parentFindings, siblingFindings].filter(Boolean).join('\n\n');
+          const enrichedTask = contextPrefix
+            ? `${contextPrefix}\n\n${subTask}`
             : subTask;
 
           const childSession = createSession(subRoleId, {

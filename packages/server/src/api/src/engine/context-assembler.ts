@@ -13,7 +13,7 @@ import {
 } from './org-tree.js';
 import { extractKeywords, searchRelatedDocs } from './knowledge-gate.js';
 import { formatLessonsForContext } from '../services/lesson-store.js';
-import { formatForContext as formatBlackboardForContext } from '../services/blackboard-store.js';
+// M4 blackboard removed — sibling findings now injected at dispatch time (execution-manager.ts)
 
 /* ─── Types ──────────────────────────────────── */
 
@@ -211,13 +211,8 @@ ${full}
     }
   }
 
-  // 12c. Blackboard (M4 Memory Bus): live shared findings from running roles
-  if (options?.waveId) {
-    const bbContent = formatBlackboardForContext(options.waveId, roleId);
-    if (bbContent) {
-      pushSection(bbContent, false);
-    }
-  }
+  // 12c. M4 Passive Sibling Awareness — injected at dispatch time via execution-manager,
+  // not here. Sibling findings are prepended to the task payload.
 
   // 13. Context Mode (briefing-first) — reduces redundant AKB exploration
   if (orgTree.contextMode === 'briefing-first' && roleId !== 'ceo') {
