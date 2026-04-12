@@ -977,11 +977,11 @@ ${state.continuous ? `## Continuous Improvement Mode (ON)
 
       // Wave Benchmark: auto-collect metrics for cross-wave comparison
       try {
-        // collectBenchmark/saveBenchmark — static import below
         const bmAgencyId = state.preset || 'default';
+        const bmOrgTree = buildOrgTree(COMPANY_ROOT, state.preset);
         const features: string[] = [];
-        if (orgTree.ceoPromptOverride) features.push('ceo-prompt');
-        if (orgTree.contextMode === 'briefing-first') features.push('briefing-first');
+        if (bmOrgTree.ceoPromptOverride) features.push('ceo-prompt');
+        if (bmOrgTree.contextMode === 'briefing-first') features.push('briefing-first');
         features.push('wave-briefing'); // always on since 0.2.5
 
         // Read server version from package.json
