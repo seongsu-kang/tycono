@@ -72,6 +72,15 @@ function createSandbox(agencyId: string): string {
   fs.mkdirSync(path.join(sandboxDir, 'knowledge'), { recursive: true });
   fs.mkdirSync(path.join(sandboxDir, '.tycono'), { recursive: true });
 
+  // Create code root with git init (critical — without this, agents can't write code)
+  const codeDir = path.join(sandboxDir, 'code');
+  fs.mkdirSync(codeDir, { recursive: true });
+  execSync('git init', { cwd: codeDir, stdio: 'pipe' });
+
+  // Write config pointing to code root
+  const configPath = path.join(sandboxDir, '.tycono', 'config.json');
+  fs.writeFileSync(configPath, JSON.stringify({ codeRoot: codeDir }, null, 2));
+
   // Copy CLAUDE.md
   const claudeMd = path.join(COMPANY_ROOT, 'knowledge', 'CLAUDE.md');
   if (fs.existsSync(claudeMd)) {
