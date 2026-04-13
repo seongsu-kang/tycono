@@ -183,7 +183,8 @@ cost_cache = cache_read_tokens * 0.3 / 1_000_000
 estimated_cost = cost_input + cost_output + cost_cache
 
 # --- Code Quality ---
-code_dir = os.path.join(run_dir, 'code')
+# Server creates code root at {COMPANY_ROOT}-code (not code/ subdir)
+code_dir = run_dir + '-code' if os.path.isdir(run_dir + '-code') else os.path.join(run_dir, 'code')
 code_files = []
 code_lines = 0
 for root, dirs, files in os.walk(code_dir):
