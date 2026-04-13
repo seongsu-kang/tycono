@@ -133,10 +133,11 @@ except: print('error')
   echo "  [5/5] Collecting metrics (${duration}s elapsed)..."
 
   python3 - "$case_id" "$version" "$run_num" "$wave_id" "$completed" "$duration" "$result_file" "$port" "$run_dir" <<'PYEOF'
-import json, sys, urllib.request
+import json, sys, urllib.request, os, subprocess
 
 case_id, version, run_num, wave_id, completed, duration, result_file, port, run_dir = sys.argv[1:10]
 
+# --- Events ---
 try:
     resp = urllib.request.urlopen(f'http://localhost:{port}/api/waves/{wave_id}/events?limit=9999')
     data = json.loads(resp.read())
@@ -161,14 +162,62 @@ for e in events:
         r = e.get('roleId', 'unknown')
         role_turns[r] = role_turns.get(r, 0) + 1
 
-# Count output files
-import os, subprocess
+# --- Tokens & Cost (from msg:done events) ---
+input_tokens = 0
+output_tokens = 0
+cache_read_tokens = 0
+model_name = ''
+for e in events:
+    if e.get('type') == 'msg:done':
+        tokens = e.get('data', {}).get('tokens', {})
+        input_tokens += tokens.get('input', 0)
+        output_tokens += tokens.get('output', 0)
+        cache_read_tokens += tokens.get('cacheRead', 0) or tokens.get('cache_read', 0) or 0
+    if not model_name and e.get('data', {}).get('model'):
+        model_name = e['data']['model']
+
+# Estimate cost (Sonnet pricing: $3/M input, $15/M output, $0.30/M cache read)
+cost_input = input_tokens * 3.0 / 1_000_000
+cost_output = output_tokens * 15.0 / 1_000_000
+cost_cache = cache_read_tokens * 0.3 / 1_000_000
+estimated_cost = cost_input + cost_output + cost_cache
+
+# --- Code Quality ---
 code_dir = os.path.join(run_dir, 'code')
 code_files = []
+code_lines = 0
 for root, dirs, files in os.walk(code_dir):
-    dirs[:] = [d for d in dirs if d not in ('.git', 'node_modules')]
+    dirs[:] = [d for d in dirs if d not in ('.git', 'node_modules', 'dist', '.worktrees')]
     for f in files:
-        code_files.append(os.path.relpath(os.path.join(root, f), code_dir))
+        fpath = os.path.join(root, f)
+        code_files.append(os.path.relpath(fpath, code_dir))
+        try:
+            with open(fpath, 'r', errors='ignore') as fh:
+                code_lines += sum(1 for _ in fh)
+        except: pass
+
+# Check for index.html or entry point
+has_index = any(f.endswith('index.html') for f in code_files)
+has_package = any(f.endswith('package.json') for f in code_files)
+
+# Try npm install + build (quick check, 30s timeout)
+build_success = False
+if has_package:
+    try:
+        pkg_dir = code_dir
+        # Find package.json location
+        for f in code_files:
+            if f == 'package.json':
+                pkg_dir = code_dir
+                break
+            elif f.endswith('/package.json'):
+                pkg_dir = os.path.join(code_dir, os.path.dirname(f))
+                break
+        r = subprocess.run(['npm', 'install', '--silent'], cwd=pkg_dir, capture_output=True, timeout=30)
+        build_success = r.returncode == 0
+    except: pass
+elif has_index:
+    build_success = True  # Static HTML, no build needed
 
 result = {
     'case': case_id,
@@ -177,6 +226,8 @@ result = {
     'waveId': wave_id,
     'completed': completed == 'true',
     'durationSeconds': int(duration),
+    'model': model_name or 'unknown',
+    # Efficiency
     'turns': turns,
     'reads': reads,
     'writes': writes,
@@ -188,15 +239,25 @@ result = {
     'roles': roles,
     'roleTurns': role_turns,
     'totalEvents': len(events),
+    # Cost
+    'inputTokens': input_tokens,
+    'outputTokens': output_tokens,
+    'cacheReadTokens': cache_read_tokens,
+    'estimatedCost': round(estimated_cost, 2),
+    # Quality
     'codeFiles': code_files,
     'codeFileCount': len(code_files),
+    'codeLines': code_lines,
+    'hasIndex': has_index,
+    'buildSuccess': build_success,
     'runDir': run_dir,
 }
 
 with open(result_file, 'w') as f:
     json.dump(result, f, indent=2)
 
-print(f'  Turns: {turns} | Reads: {reads} | Tools: {tools} | Sessions: {sessions} | Files: {len(code_files)} | Duration: {duration}s')
+print(f'  Turns: {turns} | Reads: {reads} | Tools: {tools} | Files: {len(code_files)} ({code_lines} lines)')
+print(f'  Tokens: {input_tokens}in/{output_tokens}out | Cost: ${estimated_cost:.2f} | Build: {"OK" if build_success else "FAIL"}')
 PYEOF
 
   # Kill server (sandbox stays)
@@ -219,7 +280,7 @@ import json, sys, os
 from pathlib import Path
 
 runs_dir = Path(sys.argv[1])
-data = {}
+all_runs = []
 
 for run_dir in sorted(runs_dir.iterdir()):
     if not run_dir.is_dir(): continue
@@ -228,14 +289,57 @@ for run_dir in sorted(runs_dir.iterdir()):
     try:
         r = json.loads(result_file.read_text())
         if 'error' in r: continue
-        case_id = r['case']
-        version = r['version']
-        data.setdefault(case_id, {}).setdefault(version, []).append(r)
+        all_runs.append(r)
     except: pass
 
-if not data:
+if not all_runs:
     print("  No results found.")
     sys.exit(0)
+
+# ── Part 1: Individual Results ──
+print("\n  ═══ Individual Run Results ═══")
+for r in sorted(all_runs, key=lambda x: f"{x['case']}-{x['version']}-{x['run']}"):
+    run_name = f"{r['case']}-{r['version']}-run{r['run']}"
+    status = "✅ completed" if r.get('completed') else "⏱ timeout"
+    build = "✅" if r.get('buildSuccess') else "❌"
+
+    print(f"\n  ── {run_name} ──")
+    print(f"  Status:   {status:<20} Duration:  {r.get('durationSeconds',0)}s")
+    print(f"  Model:    {r.get('model','unknown')}")
+    print(f"  Turns:    {r.get('turns',0):<8} Sessions:  {r.get('sessions',0)}")
+    print(f"  Reads:    {r.get('reads',0):<8} Writes:    {r.get('writes',0):<8} Tools:     {r.get('tools',0)}")
+    print(f"  Dispatch: {r.get('dispatches',0):<8} Errors:    {r.get('errors',0)}")
+
+    it = r.get('inputTokens', 0)
+    ot = r.get('outputTokens', 0)
+    ct = r.get('cacheReadTokens', 0)
+    cost = r.get('estimatedCost', 0)
+    print(f"  Tokens:   {it:,}in / {ot:,}out / {ct:,}cache")
+    print(f"  Cost:     ${cost:.2f}")
+
+    fc = r.get('codeFileCount', 0)
+    lc = r.get('codeLines', 0)
+    print(f"  Files:    {fc:<8} Lines:     {lc:<8} Build:     {build}")
+
+    rt = r.get('roleTurns', {})
+    if rt:
+        parts = [f"{role}({t})" for role, t in sorted(rt.items())]
+        print(f"  Roles:    {' '.join(parts)}")
+
+    print(f"  Dir:      {os.path.basename(r.get('runDir',''))}/")
+
+# ── Part 2: Comparison ──
+data = {}
+for r in all_runs:
+    data.setdefault(r['case'], {}).setdefault(r['version'], []).append(r)
+
+print("\n\n  ═══ Comparison ═══")
+
+def avg_std(vals):
+    if not vals: return 0, 0
+    a = sum(vals) / len(vals)
+    s = (sum((x - a)**2 for x in vals) / len(vals))**0.5 if len(vals) > 1 else 0
+    return a, s
 
 for case_id, versions in sorted(data.items()):
     print(f"\n  ── {case_id} ──")
@@ -243,66 +347,84 @@ for case_id, versions in sorted(data.items()):
 
     header = f"  {'Metric':<18}"
     for v in ver_list:
-        n = len(versions[v])
-        header += f"  {v:>16} (N={n})"
+        header += f"  {v:>16} (N={len(versions[v])})"
     if len(ver_list) == 2: header += f"  {'Delta':>8}"
     print(header)
 
-    for metric in ['turns', 'reads', 'writes', 'tools', 'sessions', 'dispatches', 'codeFileCount', 'durationSeconds']:
+    metrics = [
+        ('turns', 'EFFICIENCY'),
+        ('reads', None), ('tools', None), ('sessions', None),
+        ('dispatches', None), ('durationSeconds', None),
+        ('inputTokens', 'COST'), ('outputTokens', None),
+        ('cacheReadTokens', None), ('estimatedCost', None),
+        ('codeFileCount', 'QUALITY'), ('codeLines', None),
+    ]
+
+    last_section = None
+    for metric, section in metrics:
+        if section and section != last_section:
+            print(f"  --- {section} ---")
+            last_section = section
+
         line = f"  {metric:<18}"
         avgs = []
         for v in ver_list:
             vals = [r.get(metric, 0) for r in versions[v]]
-            avg = sum(vals) / len(vals) if vals else 0
-            avgs.append(avg)
-            std = (sum((x - avg)**2 for x in vals) / len(vals))**0.5 if len(vals) > 1 else 0
-            line += f"  {avg:>8.0f} ±{std:>4.0f}    "
+            a, s = avg_std(vals)
+            avgs.append(a)
+            if metric == 'estimatedCost':
+                line += f"  ${a:>7.2f} ±{s:>4.2f}    "
+            elif a >= 10000:
+                line += f"  {a/1000:>6.0f}k ±{s/1000:>3.0f}k    "
+            else:
+                line += f"  {a:>8.0f} ±{s:>4.0f}    "
         if len(avgs) == 2 and avgs[0] > 0:
             delta = (avgs[1] - avgs[0]) / avgs[0] * 100
             line += f"  {delta:>+6.0f}%"
         print(line)
 
-    comp_line = f"  {'completed':<18}"
+    # Build/completion rates
+    for label, key in [('completed', 'completed'), ('buildSuccess', 'buildSuccess')]:
+        line = f"  {label:<18}"
+        for v in ver_list:
+            ok = sum(1 for r in versions[v] if r.get(key))
+            tot = len(versions[v])
+            line += f"     {ok}/{tot}             "
+        print(line)
+
+# ── Part 3: Overall ──
+print("\n  ═══ Overall ═══")
+all_by_ver = {}
+for r in all_runs:
+    all_by_ver.setdefault(r['version'], []).append(r)
+
+ver_list = sorted(all_by_ver.keys())
+header = f"  {'Metric':<18}"
+for v in ver_list:
+    header += f"  {v:>16} (N={len(all_by_ver[v])})"
+if len(ver_list) == 2: header += f"  {'Delta':>8}"
+print(header)
+
+for metric in ['turns', 'reads', 'estimatedCost', 'codeLines']:
+    line = f"  {metric:<18}"
+    avgs = []
     for v in ver_list:
-        c = sum(1 for r in versions[v] if r.get('completed'))
-        t = len(versions[v])
-        comp_line += f"     {c}/{t}             "
-    print(comp_line)
-
-    # Show run dirs for inspection
-    print(f"  {'runs':<18}", end="")
-    for v in ver_list:
-        dirs = [os.path.basename(r['runDir']) for r in versions[v]]
-        print(f"  {', '.join(dirs)[:40]}", end="")
-    print()
-
-print("\n  ── Overall (turns) ──")
-all_data = {}
-for case_id, versions in data.items():
-    for v, runs in versions.items():
-        all_data.setdefault(v, []).extend(r['turns'] for r in runs)
-
-for v in sorted(all_data.keys()):
-    vals = all_data[v]
-    avg = sum(vals)/len(vals)
-    std = (sum((x-avg)**2 for x in vals)/len(vals))**0.5 if len(vals)>1 else 0
-    print(f"  {v}: avg={avg:.0f} ±{std:.0f} (N={len(vals)})")
-
-ver_list = sorted(all_data.keys())
-if len(ver_list) == 2:
-    a = sum(all_data[ver_list[0]])/len(all_data[ver_list[0]])
-    b = sum(all_data[ver_list[1]])/len(all_data[ver_list[1]])
-    print(f"  Delta: {(b-a)/a*100:+.0f}%")
+        vals = [r.get(metric, 0) for r in all_by_ver[v]]
+        a, s = avg_std(vals)
+        avgs.append(a)
+        if metric == 'estimatedCost':
+            line += f"  ${a:>7.2f} ±{s:>4.2f}    "
+        else:
+            line += f"  {a:>8.0f} ±{s:>4.0f}    "
+    if len(avgs) == 2 and avgs[0] > 0:
+        delta = (avgs[1] - avgs[0]) / avgs[0] * 100
+        line += f"  {delta:>+6.0f}%"
+    print(line)
 
 # Save report JSON
-report = {'generated': sys.argv[0], 'cases': {}}
-for case_id, versions in data.items():
-    report['cases'][case_id] = {}
-    for v, runs in versions.items():
-        report['cases'][case_id][v] = runs
 report_path = Path(sys.argv[1]).parent / 'report.json'
 with open(report_path, 'w') as f:
-    json.dump(report, f, indent=2)
+    json.dump({'runs': all_runs}, f, indent=2)
 print(f"\n  Report saved: {report_path}")
 PYEOF
 }
