@@ -31,6 +31,7 @@ You see real-time updates in your Claude Code session as background notification
 | `/tycono:analysis` | Role별 토큰/비용/모델 실시간 분석 |
 | `/tycono:report` | Wave 결과 마크다운 리포트 |
 | `/tycono:version` | Show version info (plugin, server, hook status) |
+| `/tycono:board` | Task board 조회/관리 (skip, edit, add) |
 | `/tycono:help` | This help page |
 
 ## Quick Start (3 steps)
@@ -91,6 +92,21 @@ No need to poll `/tycono:tycono-status` — events come to you.
 ```
 /tycono --agency gamedev "Create an RPG with combat and inventory"
 ```
+
+## Dashboard (Web UI)
+
+Wave 진행 상황을 브라우저에서 실시간으로 볼 수 있습니다:
+
+```
+http://localhost:{PORT}/ui/
+```
+
+포트는 `/tycono:version`에서 확인. 대시보드에서:
+- **노드 트리**: CEO → CTO → Engineer → QA 전체 dispatch 구조
+- **실시간 상태**: 각 role의 running/done/skipped 상태
+- **노드 클릭**: 해당 role의 최신 출력, tool calls, dispatches 상세
+- **Activity Feed**: 전체 이벤트 스트림 (role별 필터 가능)
+- **개입**: Skip, Edit 버튼으로 wave 진행 중 개입
 
 ## Tips
 

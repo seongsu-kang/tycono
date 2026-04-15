@@ -231,6 +231,9 @@ export function createExpressApp(): express.Application {
     res.json({ status: 'ok', companyRoot: COMPANY_ROOT });
   });
 
+  // Root → Dashboard redirect
+  app.get('/', (_req, res) => { res.redirect('/ui/'); });
+
   // Board Dashboard UI — React app (built with Vite)
   const uiDistPath = path.resolve(__dirname, '../../ui/dist');
   if (fs.existsSync(uiDistPath)) {
