@@ -1,6 +1,6 @@
 {
   "name": "tycono-server",
-  "version": "0.2.11-beta.4",
+  "version": "0.2.11-beta.6",
   "description": "Tycono AI team orchestration server. Dispatch, supervise, and observe AI agents working as a team.",
   "type": "module",
   "bin": {
@@ -28,10 +28,10 @@
     "@anthropic-ai/sdk": "^0.78.0",
     "@vitejs/plugin-react": "^6.0.1",
     "@xyflow/react": "^12.10.2",
-    "better-sqlite3": "^12.8.0",
-    "cors": "^2.8.5",
+    "better-sqlite3": "^12.9.0",
+    "cors": "^2.8.6",
     "dotenv": "^16.4.7",
-    "express": "^5.0.1",
+    "express": "^5.2.1",
     "glob": "^13.0.6",
     "gray-matter": "^4.0.3",
     "marked": "^15.0.6",
