@@ -693,20 +693,31 @@ class ExecutionManager {
 
         const targetRole = resolveTargetRole(params.sourceRole, params.parentSessionId, this.executions);
 
-        // ── [APPROVAL_NEEDED] detection — notify user when agent is blocked ──
+        // ── [APPROVAL_NEEDED] detection — hold session open for user response ──
         const approvalQuestion = extractApprovalQuestion(result.output);
         if (approvalQuestion) {
-          console.log(`[Approval] ${params.roleId} (${execution.sessionId}) output contains approval tag`);
+          console.log(`[Approval] ${params.roleId} (${execution.sessionId}) output contains approval tag — holding session`);
+
+          const targetRole = resolveTargetRole(params.sourceRole, params.parentSessionId, this.executions);
+          execution.status = 'awaiting_input';
+          execution.targetRole = targetRole;
+
           execution.stream.emit('approval:needed', params.roleId, {
             roleId: params.roleId,
             sessionId: execution.sessionId,
             question: approvalQuestion,
             timestamp: Date.now(),
           });
+          execution.stream.emit('msg:awaiting_input', params.roleId, {
+            ...doneData,
+            question: approvalQuestion,
+            awaitingInput: true,
+            targetRole,
+            reason: 'approval_needed',
+          });
           sendApprovalNotification(params.roleId, approvalQuestion);
 
-          // BUG-APPROVAL belt-and-suspenders: directly notify supervisor (don't rely solely on stream)
-          // This ensures approval state is set even if stream watcher was lost (e.g., stream closed by cleanup)
+          // Notify supervisor
           if (params.roleId === 'ceo') {
             const session = getSession(execution.sessionId);
             if (session?.waveId) {
@@ -719,6 +730,7 @@ class ExecutionManager {
               }).catch(() => { /* avoid circular import crash */ });
             }
           }
+          return; // Don't fall through to done — session stays alive
         }
 
         if (hardLimitReached) {
