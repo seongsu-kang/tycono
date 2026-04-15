@@ -27,6 +27,7 @@ interface WaveStreamClient {
   sentEvents: Set<string>;
   heartbeat: ReturnType<typeof setInterval>;
   closed: boolean;
+  waveDoneSent?: boolean;
 }
 
 /* ─── WaveMultiplexer ────────────────────── */
@@ -73,6 +74,20 @@ class WaveMultiplexer {
           return;
         }
         try { res.write(': heartbeat\n\n'); } catch { /* ignore */ }
+
+        // BUG #41: Periodic allDone re-check — catches race condition where
+        // session completes before registration, preventing wave:done from firing
+        const sessions = this.waveSessions.get(waveId);
+        if (sessions && sessions.size > 0) {
+          const allDone = Array.from(sessions.values()).every(
+            e => e.status === 'done' || e.status === 'error'
+          );
+          if (allDone && !client.waveDoneSent) {
+            client.waveDoneSent = true;
+            sendSSE(client, 'wave:done', { waveId, reason: 'all-roles-complete (heartbeat-check)' });
+            console.log(`[WaveMux] Heartbeat detected all roles done in wave ${waveId} — sent wave:done`);
+          }
+        }
       }, 15_000),
       closed: false,
     };

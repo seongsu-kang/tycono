@@ -788,46 +788,54 @@ class ExecutionManager {
 
           execution.status = 'done';
           execution.stream.emit('msg:done', params.roleId, doneData);
-          if (execution.sessionId) {
-            this.finalizeSessionMessage(execution, 'done', result);
-          }
 
-          // Auto-update board task status → done
-          const doneSession = getSession(execution.sessionId);
-          if (doneSession?.waveId) {
-            try {
-              const myTasks = boardStore.getTasksForRole(doneSession.waveId, params.roleId);
-              const runningTask = myTasks.find(t => t.status === 'running');
-              if (runningTask) {
-                boardStore.completeTask(doneSession.waveId, runningTask.id, 'pass', result.output.slice(-200));
-              }
-            } catch { /* non-fatal */ }
-          }
-
-          // Emit dispatch:done on parent's stream (monni VOC: parent needs completion signal)
-          if (params.parentSessionId) {
-            const parentExec = this.getActiveExecution(params.parentSessionId);
-            if (parentExec) {
-              parentExec.stream.emit('dispatch:done', parentExec.roleId, {
-                targetRoleId: params.roleId,
-                childSessionId: params.sessionId,
-                output: result.output.slice(-1000),
-                turns: result.turns,
-                tokens: result.totalTokens,
-              });
+          // Post-done cleanup — wrapped in try/catch to prevent msg:error after msg:done
+          // (BUG: seongsu-kang/tycono#41 — "session is not defined" error 25ms after done)
+          try {
+            if (execution.sessionId) {
+              this.finalizeSessionMessage(execution, 'done', result);
             }
-          }
 
-          if (!params.parentSessionId && result) {
-            const totalTokens = (result.totalTokens?.input ?? 0) + (result.totalTokens?.output ?? 0);
-            const bonus = Math.min(2000, Math.max(500, Math.round(totalTokens / 500)));
-            try {
-              earnCoinsInternal(bonus, `Execution done: ${params.roleId}`, `exec:${execution.id}`);
-            } catch { /* non-critical */ }
-          }
+            // Auto-update board task status → done
+            const doneSession = getSession(execution.sessionId);
+            if (doneSession?.waveId) {
+              try {
+                const myTasks = boardStore.getTasksForRole(doneSession.waveId, params.roleId);
+                const runningTask = myTasks.find(t => t.status === 'running');
+                if (runningTask) {
+                  boardStore.completeTask(doneSession.waveId, runningTask.id, 'pass', result.output.slice(-200));
+                }
+              } catch { /* non-fatal */ }
+            }
 
-          this.cleanupOrphanedChildren(execution.sessionId);
-          this.attemptSupervisionRecovery(execution);
+            // Emit dispatch:done on parent's stream
+            if (params.parentSessionId) {
+              const parentExec = this.getActiveExecution(params.parentSessionId);
+              if (parentExec) {
+                parentExec.stream.emit('dispatch:done', parentExec.roleId, {
+                  targetRoleId: params.roleId,
+                  childSessionId: params.sessionId,
+                  output: result.output.slice(-1000),
+                  turns: result.turns,
+                  tokens: result.totalTokens,
+                });
+              }
+            }
+
+            if (!params.parentSessionId && result) {
+              const totalTokens = (result.totalTokens?.input ?? 0) + (result.totalTokens?.output ?? 0);
+              const bonus = Math.min(2000, Math.max(500, Math.round(totalTokens / 500)));
+              try {
+                earnCoinsInternal(bonus, `Execution done: ${params.roleId}`, `exec:${execution.id}`);
+              } catch { /* non-critical */ }
+            }
+
+            this.cleanupOrphanedChildren(execution.sessionId);
+            this.attemptSupervisionRecovery(execution);
+          } catch (postDoneErr) {
+            // Log but do NOT re-emit msg:error — done is the final state
+            console.error(`[ExecMgr] Post-done cleanup error (${params.roleId}): ${postDoneErr}`);
+          }
         }
       })
       .catch((err: Error) => {
