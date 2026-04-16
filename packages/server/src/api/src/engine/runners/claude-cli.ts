@@ -653,6 +653,15 @@ export class ClaudeCliRunner implements ExecutionRunner {
       });
 
       proc.on('close', (code, signal) => {
+        // Kill child process tree (MCP servers, headless Chrome, etc.)
+        if (proc.pid) {
+          try {
+            process.kill(-proc.pid, 'SIGTERM');
+          } catch {
+            // Process group may already be gone — that's fine
+          }
+        }
+
         if (resolved) {
           console.log(`[Runner] 'close' fired after safety-net resolve (code=${code}, signal=${signal})`);
           return;
@@ -723,7 +732,10 @@ export class ClaudeCliRunner implements ExecutionRunner {
 
     return {
       promise,
-      abort: () => proc.kill('SIGTERM'),
+      abort: () => {
+        try { process.kill(-proc.pid!, 'SIGTERM'); } catch { /* group may not exist */ }
+        proc.kill('SIGTERM');
+      },
     };
   }
 }
