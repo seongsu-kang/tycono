@@ -1049,6 +1049,7 @@ ${state.continuous ? `## Continuous Improvement Mode (ON)
       if (decision.action === 'halt') {
         console.log(`[Supervisor] Continuous: halting wave ${state.waveId} — ${decision.reason}`);
         state.status = 'stopped';
+        this.finalizeWave(state);
         return;
       }
       console.log(`[Supervisor] Wave ${state.waveId} iteration #${decision.waveCount} done (${decision.turns}t, ${decision.dispatches}d, $${decision.costUsd.toFixed(2)} / ${Math.round(decision.elapsedMs / 1000)}s, fp=${decision.fingerprint}). Continuous ON — restarting.`);
@@ -1058,7 +1059,16 @@ ${state.continuous ? `## Continuous Improvement Mode (ON)
     } else {
       console.log(`[Supervisor] Wave ${state.waveId} complete. All subordinates done.`);
       state.status = 'stopped';
+      this.finalizeWave(state);
+    }
+  }
 
+  /**
+   * Wave cleanup shared between normal completion and continuous-loop halt:
+   * board tasks, wave file, lessons, benchmark, memory cleanup.
+   * Assumes `state.status` is already set to the terminal value by the caller.
+   */
+  private finalizeWave(state: SupervisorState): void {
       // Mark CEO board task as done + skip remaining waiting tasks
       try {
         const board = boardStore.getBoard(state.waveId);
@@ -1164,7 +1174,6 @@ ${state.continuous ? `## Continuous Improvement Mode (ON)
         console.log(`[Supervisor] Cleaned up wave ${state.waveId} from memory`);
       }, 60_000);
       state.cleanupTimer.unref();
-    }
   }
 
   private onSupervisorCrash(state: SupervisorState, error: string): void {
