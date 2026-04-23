@@ -316,6 +316,7 @@ async function handleStartJob(body: Record<string, unknown>, res: ServerResponse
 
     // Always use supervisor mode — CEO supervises C-Levels who supervise members
     {
+      const continuousOpts = extractContinuousOpts(body);
       const state = supervisorHeartbeat.start(
         `wave-${Date.now()}`,
         actualDirective,
@@ -323,6 +324,7 @@ async function handleStartJob(body: Record<string, unknown>, res: ServerResponse
         continuous,
         preset,
         modelOverrides,
+        continuousOpts,
       );
 
       if (state.status === 'error') {
@@ -1030,16 +1032,29 @@ function handleWave(body: Record<string, unknown>, req: IncomingMessage, res: Se
   }
 
   const modelOverrides = body.modelOverrides as Record<string, string> | undefined;
+  const continuousOpts = extractContinuousOpts(body);
 
   // Always supervisor mode — CEO supervises C-Levels
-  handleWaveSupervisor(directive, targetRoles, continuous, req, res, preset, modelOverrides, templateId);
+  handleWaveSupervisor(directive, targetRoles, continuous, req, res, preset, modelOverrides, templateId, continuousOpts);
 }
 
 /**
  * Supervisor mode: Start a single CEO Supervisor session that dispatches C-Levels.
  * The supervisor uses dispatch/watch/amend tools — same pattern as any supervisor node.
  */
-function handleWaveSupervisor(directive: string, targetRoles: string[] | undefined, continuous: boolean, req: IncomingMessage, res: ServerResponse, preset?: string, modelOverrides?: Record<string, string>, templateId?: string): void {
+function extractContinuousOpts(body: Record<string, unknown>): { maxContinuousWaves?: number; maxContinuousWallclockMs?: number; maxContinuousCostUsd?: number } | undefined {
+  const waves = body.maxContinuousWaves;
+  const wallclock = body.maxContinuousWallclockMs;
+  const cost = body.maxContinuousCostUsd;
+  if (waves === undefined && wallclock === undefined && cost === undefined) return undefined;
+  return {
+    maxContinuousWaves: typeof waves === 'number' ? waves : undefined,
+    maxContinuousWallclockMs: typeof wallclock === 'number' ? wallclock : undefined,
+    maxContinuousCostUsd: typeof cost === 'number' ? cost : undefined,
+  };
+}
+
+function handleWaveSupervisor(directive: string, targetRoles: string[] | undefined, continuous: boolean, req: IncomingMessage, res: ServerResponse, preset?: string, modelOverrides?: Record<string, string>, templateId?: string, continuousOpts?: { maxContinuousWaves?: number; maxContinuousWallclockMs?: number; maxContinuousCostUsd?: number }): void {
   const state = supervisorHeartbeat.start(
     `wave-${Date.now()}`,
     directive,
@@ -1047,6 +1062,7 @@ function handleWaveSupervisor(directive: string, targetRoles: string[] | undefin
     continuous,
     preset,
     modelOverrides,
+    continuousOpts,
   );
   // Attach templateId for board creation (used in spawnSupervisor)
   if (templateId) (state as Record<string, unknown>).templateId = templateId;
