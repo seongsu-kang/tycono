@@ -21,7 +21,10 @@ import { extractLessons, saveLessons } from './lesson-store.js';
 import { collectBenchmark, saveBenchmark } from './benchmark-store.js';
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { COMPANY_ROOT } from './file-reader.js';
+import { getTokenLedger } from './token-ledger.js';
+import { estimateCostFromEntry } from './pricing.js';
 import { ActivityStream } from './activity-stream.js';
 import { saveCompletedWave } from './wave-tracker.js';
 import { waveMultiplexer } from './wave-multiplexer.js';
@@ -47,6 +50,13 @@ interface SupervisorState {
   pendingDirectives: PendingDirective[];
   pendingQuestions: PendingQuestion[];
   createdAt: string;
+  /* BUG-NOOP-LOOP: continuous mode guards (Tier 1 fingerprint + Tier 2 ceiling) */
+  continuousWaveCount: number;
+  continuousStartedAt: number;
+  recentFingerprints: string[];
+  maxContinuousWaves: number;
+  maxContinuousWallclockMs: number;
+  maxContinuousCostUsd: number;
 }
 
 export interface PendingDirective {
@@ -66,6 +76,84 @@ export interface PendingQuestion {
   answeredAt?: string;
 }
 
+/* ─── Continuous guard (BUG-NOOP-LOOP) ─────────── */
+
+export interface ContinuousGuardState {
+  recentFingerprints: string[];
+  continuousWaveCount: number;
+  continuousStartedAt: number;
+  maxContinuousWaves: number;
+  maxContinuousWallclockMs: number;
+  maxContinuousCostUsd: number;
+}
+
+export interface ContinuousExecResult {
+  output?: string;
+  turns?: number;
+  dispatches?: Array<{ roleId: string; task: string }>;
+}
+
+export type ContinuousDecision =
+  | { action: 'halt'; reason: string }
+  | { action: 'restart'; waveCount: number; elapsedMs: number; costUsd: number; fingerprint: string; turns: number; dispatches: number };
+
+/**
+ * Pure decision function — given supervisor guard state + latest exec result,
+ * decide whether the `--continuous` loop should restart or halt.
+ *
+ * Mutates `state.recentFingerprints` and `state.continuousWaveCount` to reflect
+ * the new iteration. Leaves halting to the caller (no side-effects on wave/session).
+ */
+export function decideContinuousAction(
+  state: ContinuousGuardState,
+  exec: ContinuousExecResult | undefined,
+  loopCostUsd: number,
+  now: number = Date.now(),
+): ContinuousDecision {
+  const dispatches = exec?.dispatches?.length ?? 0;
+  const turns = exec?.turns ?? 0;
+
+  // Tier 1a: zero child dispatches → CEO did only self-reasoning → noop.
+  if (dispatches === 0) {
+    return { action: 'halt', reason: `zero-dispatch (turns=${turns})` };
+  }
+
+  // Tier 1b: output + dispatch-set fingerprint. Two consecutive identical → halt.
+  const output = exec?.output ?? '';
+  const dispatchSig = (exec?.dispatches ?? [])
+    .map((d) => `${d.roleId}:${d.task}`)
+    .sort()
+    .join('|');
+  const fingerprint = createHash('sha256')
+    .update(output.slice(-500))
+    .update('\n')
+    .update(dispatchSig)
+    .digest('hex')
+    .slice(0, 16);
+  state.recentFingerprints.push(fingerprint);
+  if (state.recentFingerprints.length > 3) state.recentFingerprints.shift();
+  const tail = state.recentFingerprints;
+  if (tail.length >= 2 && tail[tail.length - 1] === tail[tail.length - 2]) {
+    return { action: 'halt', reason: `fingerprint-repeat:${fingerprint}` };
+  }
+
+  // Tier 2: 3-axis loop ceiling.
+  state.continuousWaveCount += 1;
+  const elapsedMs = now - state.continuousStartedAt;
+
+  if (state.continuousWaveCount >= state.maxContinuousWaves) {
+    return { action: 'halt', reason: `max-waves:${state.continuousWaveCount}/${state.maxContinuousWaves}` };
+  }
+  if (elapsedMs >= state.maxContinuousWallclockMs) {
+    return { action: 'halt', reason: `wallclock:${Math.round(elapsedMs / 1000)}s/${Math.round(state.maxContinuousWallclockMs / 1000)}s` };
+  }
+  if (loopCostUsd >= state.maxContinuousCostUsd) {
+    return { action: 'halt', reason: `cost:$${loopCostUsd.toFixed(2)}/$${state.maxContinuousCostUsd}` };
+  }
+
+  return { action: 'restart', waveCount: state.continuousWaveCount, elapsedMs, costUsd: loopCostUsd, fingerprint, turns, dispatches };
+}
+
 /* ─── Supervisor Heartbeat Manager ───────────── */
 
 class SupervisorHeartbeat {
@@ -76,7 +164,15 @@ class SupervisorHeartbeat {
    * This creates a supervisor session and starts an execution.
    * If the execution dies, it auto-restarts (heartbeat).
    */
-  start(waveId: string, directive: string, targetRoles?: string[], continuous = false, preset?: string, modelOverrides?: Record<string, string>): SupervisorState {
+  start(
+    waveId: string,
+    directive: string,
+    targetRoles?: string[],
+    continuous = false,
+    preset?: string,
+    modelOverrides?: Record<string, string>,
+    opts?: { maxContinuousWaves?: number; maxContinuousWallclockMs?: number; maxContinuousCostUsd?: number },
+  ): SupervisorState {
     // Check if supervisor already running for this wave
     const existing = this.supervisors.get(waveId);
     if (existing && (existing.status === 'running' || existing.status === 'starting')) {
@@ -100,6 +196,12 @@ class SupervisorHeartbeat {
       pendingDirectives: [],
       pendingQuestions: [],
       createdAt: new Date().toISOString(),
+      continuousWaveCount: 0,
+      continuousStartedAt: Date.now(),
+      recentFingerprints: [],
+      maxContinuousWaves: opts?.maxContinuousWaves ?? parseInt(process.env.TYCONO_CONTINUOUS_MAX_WAVES ?? '20', 10),
+      maxContinuousWallclockMs: opts?.maxContinuousWallclockMs ?? parseInt(process.env.TYCONO_CONTINUOUS_MAX_WALLCLOCK_MS ?? '7200000', 10),
+      maxContinuousCostUsd: opts?.maxContinuousCostUsd ?? parseFloat(process.env.TYCONO_CONTINUOUS_MAX_COST_USD ?? '50'),
     };
 
     this.supervisors.set(waveId, state);
@@ -215,6 +317,12 @@ class SupervisorHeartbeat {
           pendingDirectives: [],
           pendingQuestions: [],
           createdAt: ceoSession?.createdAt ?? new Date().toISOString(),
+          continuousWaveCount: 0,
+          continuousStartedAt: Date.now(),
+          recentFingerprints: [],
+          maxContinuousWaves: parseInt(process.env.TYCONO_CONTINUOUS_MAX_WAVES ?? '20', 10),
+          maxContinuousWallclockMs: parseInt(process.env.TYCONO_CONTINUOUS_MAX_WALLCLOCK_MS ?? '7200000', 10),
+          maxContinuousCostUsd: parseFloat(process.env.TYCONO_CONTINUOUS_MAX_COST_USD ?? '50'),
         };
         this.supervisors.set(waveId, state);
         console.log(`[Supervisor] Restored wave ${waveId} from disk (${waveSessions.length} sessions, directive=${originalDirective ? 'yes' : 'no'})`);
@@ -923,24 +1031,30 @@ ${state.continuous ? `## Continuous Improvement Mode (ON)
       state.crashCount = 0; // Not a crash, intentional restart
       this.scheduleRestart(state, 5_000); // 5s delay
     } else if (state.continuous) {
-      // BUG-CONTINUOUS-TURN1-STORM: Check if CEO actually did meaningful work.
-      // If turn 1 + 0 dispatches → "nothing to do" → stop loop instead of infinite restart.
+      // BUG-NOOP-LOOP (supersedes BUG-CONTINUOUS-TURN1-STORM).
+      // See methodologies/agent-loop-termination-patterns.md (OpenHands StuckDetector pattern).
       const exec = state.executionId ? executionManager.getExecution(state.executionId) : undefined;
-      const turns = exec?.result?.turns ?? 0;
-      const dispatches = exec?.result?.dispatches?.length ?? 0;
-
-      if (turns <= 1 && dispatches === 0) {
-        console.log(`[Supervisor] Continuous mode: CEO finished in turn ${turns} with 0 dispatches. Stopping loop (nothing to do).`);
-        state.status = 'stopped';
-        // Don't restart — treat as normal wave completion (same as non-continuous done)
-        return;
-      } else {
-        // Continuous Improvement Mode: restart for next iteration
-        console.log(`[Supervisor] Wave ${state.waveId} iteration complete (${turns} turns, ${dispatches} dispatches). Continuous mode ON — restarting.`);
-        state.crashCount = 0;
-        this.scheduleRestart(state, 5_000);
-        return; // Don't fall through to completion
+      let loopCostUsd = 0;
+      try {
+        const ledger = getTokenLedger(COMPANY_ROOT);
+        const summary = ledger.query({ from: new Date(state.continuousStartedAt).toISOString() });
+        for (const entry of summary.entries) {
+          loopCostUsd += estimateCostFromEntry(entry);
+        }
+      } catch (err) {
+        console.warn(`[Supervisor] Could not compute continuous-loop cost:`, err);
       }
+
+      const decision = decideContinuousAction(state, exec?.result, loopCostUsd);
+      if (decision.action === 'halt') {
+        console.log(`[Supervisor] Continuous: halting wave ${state.waveId} — ${decision.reason}`);
+        state.status = 'stopped';
+        return;
+      }
+      console.log(`[Supervisor] Wave ${state.waveId} iteration #${decision.waveCount} done (${decision.turns}t, ${decision.dispatches}d, $${decision.costUsd.toFixed(2)} / ${Math.round(decision.elapsedMs / 1000)}s, fp=${decision.fingerprint}). Continuous ON — restarting.`);
+      state.crashCount = 0;
+      this.scheduleRestart(state, 5_000);
+      return;
     } else {
       console.log(`[Supervisor] Wave ${state.waveId} complete. All subordinates done.`);
       state.status = 'stopped';

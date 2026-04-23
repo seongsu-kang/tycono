@@ -24,6 +24,9 @@ while [[ $# -gt 0 ]]; do
       echo "  Options:"
       echo "    --agency <id>    Load domain knowledge (gamedev, startup-mvp, solo-founder)"
       echo "    --continuous     Enable continuous improvement loop (CEO restarts after completion)"
+      echo "    --continuous-max-waves <n>         Loop cap: stop after N iterations (default 20)"
+      echo "    --continuous-max-wallclock <ms>    Loop cap: stop after wallclock ms (default 7200000 = 2h)"
+      echo "    --continuous-max-cost <usd>        Loop cap: stop when cumulative cost exceeds USD (default 50)"
       echo "    --model <spec>   Override models per role (e.g., cto=sonnet,engineer=haiku)"
       echo "    --safe           Enable model-based safety checks (blocks risky commands)"
       echo ""
@@ -45,6 +48,30 @@ while [[ $# -gt 0 ]]; do
     --continuous)
       CONTINUOUS="true"
       shift
+      ;;
+    --continuous-max-waves)
+      if [[ -z "${2:-}" ]]; then
+        echo "❌ Error: --continuous-max-waves requires a number" >&2
+        exit 1
+      fi
+      export TYCONO_CONTINUOUS_MAX_WAVES="$2"
+      shift 2
+      ;;
+    --continuous-max-wallclock)
+      if [[ -z "${2:-}" ]]; then
+        echo "❌ Error: --continuous-max-wallclock requires milliseconds" >&2
+        exit 1
+      fi
+      export TYCONO_CONTINUOUS_MAX_WALLCLOCK_MS="$2"
+      shift 2
+      ;;
+    --continuous-max-cost)
+      if [[ -z "${2:-}" ]]; then
+        echo "❌ Error: --continuous-max-cost requires a USD number" >&2
+        exit 1
+      fi
+      export TYCONO_CONTINUOUS_MAX_COST_USD="$2"
+      shift 2
       ;;
     --model)
       if [[ -z "${2:-}" ]]; then
@@ -272,6 +299,15 @@ if [[ -n "$PRESET" ]]; then
 fi
 if [[ -n "$CONTINUOUS" ]]; then
   PAYLOAD_PARTS="$PAYLOAD_PARTS, \"continuous\": true"
+fi
+if [[ -n "${TYCONO_CONTINUOUS_MAX_WAVES:-}" ]]; then
+  PAYLOAD_PARTS="$PAYLOAD_PARTS, \"maxContinuousWaves\": $TYCONO_CONTINUOUS_MAX_WAVES"
+fi
+if [[ -n "${TYCONO_CONTINUOUS_MAX_WALLCLOCK_MS:-}" ]]; then
+  PAYLOAD_PARTS="$PAYLOAD_PARTS, \"maxContinuousWallclockMs\": $TYCONO_CONTINUOUS_MAX_WALLCLOCK_MS"
+fi
+if [[ -n "${TYCONO_CONTINUOUS_MAX_COST_USD:-}" ]]; then
+  PAYLOAD_PARTS="$PAYLOAD_PARTS, \"maxContinuousCostUsd\": $TYCONO_CONTINUOUS_MAX_COST_USD"
 fi
 PAYLOAD_PARTS="$PAYLOAD_PARTS, \"permissionMode\": \"$PERMISSION_MODE\""
 if [[ -n "$MODEL_OVERRIDES" ]]; then
