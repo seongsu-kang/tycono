@@ -385,8 +385,8 @@ class ExecutionManager {
 
     // Model resolution: params.model > wave modelOverrides > role.yaml
     let model = params.model ?? orgTree.nodes.get(params.roleId)?.model;
-    // Effort resolution: role.yaml only for now (CLI/wave override = future PR)
-    const effort = orgTree.nodes.get(params.roleId)?.effort;
+    // Effort resolution: role.yaml > agency.yaml default_effort (wave/CLI override = future PR)
+    const effort = orgTree.nodes.get(params.roleId)?.effort ?? orgTree.defaultEffort;
     if (!params.model) {
       const session = getSession(params.sessionId);
       if (session?.waveId) {

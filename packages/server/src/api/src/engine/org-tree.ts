@@ -54,6 +54,8 @@ export interface OrgTree {
   nodes: Map<string, OrgNode>;
   ceoPromptOverride?: string;
   contextMode?: 'explore-first' | 'briefing-first';
+  /** agency.yaml `default_effort` — applied to roles that don't specify their own `effort`. */
+  defaultEffort?: EffortLevel;
 }
 
 /* ─── Raw YAML shape ─────────────────────────── */
@@ -78,7 +80,7 @@ interface RawRoleYaml {
   };
   skills?: string[];
   model?: string;
-  effort?: string;
+  effort?: EffortLevel;
   source?: {
     id?: string;
     sync?: string;
@@ -96,11 +98,21 @@ interface RawRoleYaml {
 
 const VALID_EFFORT_LEVELS: readonly EffortLevel[] = ['low', 'medium', 'high', 'xhigh', 'max'];
 
-/** Normalize a role.yaml effort field. Invalid values are dropped (undefined). */
-export function parseEffortLevel(raw: unknown): EffortLevel | undefined {
-  if (typeof raw !== 'string') return undefined;
+/** Normalize an `effort` YAML field. Invalid strings are dropped (undefined)
+ *  with a console.warn — so typos like `effort: extreeme` don't fail open
+ *  to model default without any user signal.
+ *  `context` is used to make the warning actionable (role id, file path, etc.). */
+export function parseEffortLevel(raw: unknown, context?: string): EffortLevel | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== 'string') {
+    console.warn(`[OrgTree] Invalid effort type (expected string): ${JSON.stringify(raw)}${context ? ` [${context}]` : ''}`);
+    return undefined;
+  }
   const v = raw.toLowerCase().trim();
-  return (VALID_EFFORT_LEVELS as readonly string[]).includes(v) ? (v as EffortLevel) : undefined;
+  if (v === '') return undefined;
+  if ((VALID_EFFORT_LEVELS as readonly string[]).includes(v)) return v as EffortLevel;
+  console.warn(`[OrgTree] Unknown effort level: "${raw}" (expected one of ${VALID_EFFORT_LEVELS.join('|')})${context ? ` [${context}]` : ''}`);
+  return undefined;
 }
 
 /** `max` is Opus-4-6 only per Claude API. On other models the CLI silently
@@ -194,7 +206,7 @@ export function buildOrgTree(companyRoot: string, presetId?: string): OrgTree {
           },
           skills: raw.skills,
           model: raw.model,
-          effort: parseEffortLevel(raw.effort),
+          effort: parseEffortLevel(raw.effort, `role.yaml id=${nodeId}`),
           source: raw.source ? {
             id: raw.source.id || '',
             sync: (raw.source.sync as RoleSource['sync']) || 'manual',
@@ -260,6 +272,10 @@ export function buildOrgTree(companyRoot: string, presetId?: string): OrgTree {
           }
           if (agencyConfig?.context_mode === 'briefing-first') {
             tree.contextMode = 'briefing-first';
+          }
+          const agencyEffort = parseEffortLevel(agencyConfig?.default_effort, `agency.yaml presetId=${presetId}`);
+          if (agencyEffort) {
+            tree.defaultEffort = agencyEffort;
           }
         } catch { /* skip malformed */ }
         break;

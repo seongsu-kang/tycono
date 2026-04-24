@@ -2,7 +2,7 @@
  * role.yaml `effort` field parsing + model compatibility.
  * See: feat/role-effort-config
  */
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { parseEffortLevel, isEffortCompatibleWithModel } from '../src/engine/org-tree.js';
 
 describe('parseEffortLevel', () => {
@@ -26,6 +26,42 @@ describe('parseEffortLevel', () => {
     expect(parseEffortLevel(null)).toBeUndefined();
     expect(parseEffortLevel(3)).toBeUndefined();
     expect(parseEffortLevel({})).toBeUndefined();
+  });
+
+  describe('warns on invalid input', () => {
+    let warnSpy: ReturnType<typeof vi.spyOn>;
+    beforeEach(() => {
+      warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+    afterEach(() => warnSpy.mockRestore());
+
+    test('unknown level string warns with context', () => {
+      parseEffortLevel('extreeme', 'role.yaml id=critic');
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Unknown effort level: "extreeme"'));
+      expect(warnSpy.mock.calls[0][0]).toMatch(/role\.yaml id=critic/);
+    });
+
+    test('non-string type warns', () => {
+      parseEffortLevel(3);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Invalid effort type'));
+    });
+
+    test('empty string does NOT warn (treat as unset)', () => {
+      parseEffortLevel('');
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    test('undefined/null do NOT warn (treat as unset)', () => {
+      parseEffortLevel(undefined);
+      parseEffortLevel(null);
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    test('valid level does NOT warn', () => {
+      parseEffortLevel('max');
+      parseEffortLevel('HIGH');
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
   });
 });
 

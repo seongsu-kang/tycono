@@ -65,13 +65,20 @@ This scans the project, suggests a team, and auto-generates + auto-verifies.
 → Add to `.tycono/config.json`: `{ "defaultAgency": "your-agency-id" }`
 
 **"How do I make a specific role think harder (or cheaper)?"**
-→ Add `effort` to that role's `role.yaml`:
+→ Add `effort` to that role's `role.yaml` (or an agency-wide default in `agency.yaml`):
 ```yaml
+# role.yaml
 id: critic
 model: claude-opus-4-6
 effort: max     # low | medium | high | xhigh | max
+
+# agency.yaml (applies to every role without its own `effort`)
+default_effort: high
 ```
+- Requires **Claude CLI ≥ 2.1** (older CLIs don't accept `--effort`; server must be started with a newer CLI on PATH)
 - Maps to Claude CLI `--effort` (API `output_config.effort`)
-- `max` is **Opus-4-6 only** — on other models the CLI silently downgrades to `high`; the server logs a warning when this happens
+- Priority: `role.yaml effort` > `agency.yaml default_effort` > model default
+- Tycono strips `CLAUDE_CODE_EFFORT_LEVEL` from the child env when a role has `effort` set — so a stray shell export doesn't silently override role settings
+- `max` is **Opus-4-6 only** — on other models the CLI silently downgrades to `high`; the server emits a once-per-role warning when this happens
 - Omit the field to use the model's default (≈ `high` for external users)
 - Good picks: reasoning-heavy roles (Critic / Verdict-Judge) → `max`, low-stakes roles (log scribe / notifier) → `low`
