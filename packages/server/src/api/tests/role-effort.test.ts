@@ -77,15 +77,20 @@ describe('isEffortCompatibleWithModel', () => {
     expect(isEffortCompatibleWithModel('xhigh', 'claude-sonnet-4-6')).toBe(true);
   });
 
-  test('max with opus-4-6 is compatible', () => {
+  test('max with Opus-class (4-6, 4-7) is compatible', () => {
+    // Verified empirically against Claude CLI 2.1.119 — opus-4-7 + max
+    // emits a `thinking` block and +23% output tokens over `high`, so the
+    // CLI passes max through rather than silently downgrading.
     expect(isEffortCompatibleWithModel('max', 'claude-opus-4-6')).toBe(true);
-    expect(isEffortCompatibleWithModel('max', 'CLAUDE-OPUS-4-6')).toBe(true);
+    expect(isEffortCompatibleWithModel('max', 'claude-opus-4-7')).toBe(true);
+    expect(isEffortCompatibleWithModel('max', 'CLAUDE-OPUS-4-7')).toBe(true);
   });
 
   test('max with sonnet/haiku/older-opus is incompatible (silent downgrade)', () => {
     expect(isEffortCompatibleWithModel('max', 'claude-sonnet-4-6')).toBe(false);
     expect(isEffortCompatibleWithModel('max', 'claude-haiku-4-5')).toBe(false);
     expect(isEffortCompatibleWithModel('max', 'claude-opus-4-5')).toBe(false);
+    expect(isEffortCompatibleWithModel('max', 'claude-opus-3')).toBe(false);
   });
 
   test('unknown model: permissive (let CLI decide)', () => {
