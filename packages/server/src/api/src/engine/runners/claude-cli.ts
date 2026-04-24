@@ -490,7 +490,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
           '--output-format', 'stream-json',
           '--verbose',
           '--permission-mode', process.env.TYCONO_PERMISSION_MODE || 'bypassPermissions',
-          '--model', config.model ?? 'claude-opus-4-6',
+          '--model', config.model ?? 'claude-opus-4-7',
           '--max-turns', String(maxTurns),
           '--mcp-config', mcpConfig,
           '--strict-mcp-config',
@@ -529,7 +529,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
       cleanEnv.SUPERVISION_CMD = supervisionScript;
     }
 
-    const modelName = config.model ?? 'claude-opus-4-6';
+    const modelName = config.model ?? 'claude-opus-4-7';
     const codeRoot = resolveCodeRoot(companyRoot);
     // Run claude -p inside knowledge/ — CLAUDE.md is there, grep searches knowledge only
     const knowledgeDir = path.join(companyRoot, 'knowledge');
