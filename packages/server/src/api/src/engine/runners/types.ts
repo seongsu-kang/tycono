@@ -37,6 +37,8 @@ export interface RunnerConfig {
   model?: string;
   /** D-014: Session ID for tracking (required — primary identifier for token ledger). */
   sessionId: string;
+  /** Claude CLI --effort level (low/medium/high/xhigh/max). Resolved from role.yaml. */
+  effort?: string;
   teamStatus?: TeamStatus;
   attachments?: ImageAttachment[];
   /** Selective dispatch scope — only these roles can be dispatched to */

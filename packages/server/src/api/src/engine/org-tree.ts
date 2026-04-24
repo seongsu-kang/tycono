@@ -28,6 +28,8 @@ export interface HeartbeatConfig {
   maxTicks: number;      // default 60
 }
 
+export type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
 export interface OrgNode {
   id: string;
   name: string;
@@ -40,6 +42,9 @@ export interface OrgNode {
   reports: { daily: string; weekly: string };
   skills?: string[];
   model?: string;
+  /** Claude CLI --effort level. Maps to API output_config.effort.
+   *  `max` is Opus-4-6 only; on other models the CLI silently downgrades to 'high'. */
+  effort?: EffortLevel;
   source?: RoleSource;
   heartbeat?: HeartbeatConfig;
 }
@@ -73,6 +78,7 @@ interface RawRoleYaml {
   };
   skills?: string[];
   model?: string;
+  effort?: string;
   source?: {
     id?: string;
     sync?: string;
@@ -84,6 +90,25 @@ interface RawRoleYaml {
     intervalSec?: number;
     maxTicks?: number;
   };
+}
+
+/* ─── Effort helpers ─────────────────────────── */
+
+const VALID_EFFORT_LEVELS: readonly EffortLevel[] = ['low', 'medium', 'high', 'xhigh', 'max'];
+
+/** Normalize a role.yaml effort field. Invalid values are dropped (undefined). */
+export function parseEffortLevel(raw: unknown): EffortLevel | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const v = raw.toLowerCase().trim();
+  return (VALID_EFFORT_LEVELS as readonly string[]).includes(v) ? (v as EffortLevel) : undefined;
+}
+
+/** `max` is Opus-4-6 only per Claude API. On other models the CLI silently
+ *  downgrades to 'high'. Return true if the combination is usable as-is. */
+export function isEffortCompatibleWithModel(effort: EffortLevel | undefined, model: string | undefined): boolean {
+  if (!effort || effort !== 'max') return true;
+  if (!model) return true; // unknown model — let CLI decide
+  return model.toLowerCase().includes('opus-4-6');
 }
 
 /* ─── Default Roles (fallback when no roles/ directory) ── */
@@ -169,6 +194,7 @@ export function buildOrgTree(companyRoot: string, presetId?: string): OrgTree {
           },
           skills: raw.skills,
           model: raw.model,
+          effort: parseEffortLevel(raw.effort),
           source: raw.source ? {
             id: raw.source.id || '',
             sync: (raw.source.sync as RoleSource['sync']) || 'manual',

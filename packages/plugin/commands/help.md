@@ -166,6 +166,18 @@ curl http://localhost:{PORT}/api/waves/active
 | **Model Override** | `--model cto=sonnet,engineer=haiku` — role별 모델 변경 |
 | **Confirmation** | wave 시작 전 팀/비용 preview + 승인 (자동) |
 
+## New in 0.3.0+
+
+**Role-level effort** — `role.yaml` 에서 role 별 추론 강도 조절:
+```yaml
+id: critic
+model: claude-opus-4-6
+effort: max   # low | medium | high | xhigh | max
+```
+- Claude CLI `--effort` → Messages API `output_config.effort` 에 전달
+- `max` 는 **Opus-4-6 전용** — 다른 모델에 지정 시 CLI 가 조용히 `high` 로 downgrade (서버 로그에 경고)
+- Reasoning-heavy role (Critic / Verdict-Judge) 을 `max` 로, 저비용 role (scribe / notifier) 을 `low` 로 세팅해서 비용/품질 트레이드오프
+
 ## New in 0.2.0+
 
 `--continuous` loop runaway 방어 (BUG-NOOP-LOOP fix). 기본값은 켜져있고 필요 시 override:

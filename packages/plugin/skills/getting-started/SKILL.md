@@ -63,3 +63,15 @@ This scans the project, suggests a team, and auto-generates + auto-verifies.
 
 **"How do I set a default agency?"**
 → Add to `.tycono/config.json`: `{ "defaultAgency": "your-agency-id" }`
+
+**"How do I make a specific role think harder (or cheaper)?"**
+→ Add `effort` to that role's `role.yaml`:
+```yaml
+id: critic
+model: claude-opus-4-6
+effort: max     # low | medium | high | xhigh | max
+```
+- Maps to Claude CLI `--effort` (API `output_config.effort`)
+- `max` is **Opus-4-6 only** — on other models the CLI silently downgrades to `high`; the server logs a warning when this happens
+- Omit the field to use the model's default (≈ `high` for external users)
+- Good picks: reasoning-heavy roles (Critic / Verdict-Judge) → `max`, low-stakes roles (log scribe / notifier) → `low`
