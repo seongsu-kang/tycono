@@ -115,12 +115,18 @@ export function parseEffortLevel(raw: unknown, context?: string): EffortLevel | 
   return undefined;
 }
 
-/** `max` is Opus-4-6 only per Claude API. On other models the CLI silently
+/** Models that accept `effort: max`. Verified empirically against live CLI
+ *  (see knowledge base) — keep this list narrow; when a new Opus ships,
+ *  confirm it accepts max before adding it here. */
+const MAX_EFFORT_MODELS: readonly string[] = ['opus-4-6', 'opus-4-7'];
+
+/** `max` is Opus-class only per Claude API. On other models the CLI silently
  *  downgrades to 'high'. Return true if the combination is usable as-is. */
 export function isEffortCompatibleWithModel(effort: EffortLevel | undefined, model: string | undefined): boolean {
   if (!effort || effort !== 'max') return true;
   if (!model) return true; // unknown model — let CLI decide
-  return model.toLowerCase().includes('opus-4-6');
+  const m = model.toLowerCase();
+  return MAX_EFFORT_MODELS.some((tag) => m.includes(tag));
 }
 
 /* ─── Default Roles (fallback when no roles/ directory) ── */

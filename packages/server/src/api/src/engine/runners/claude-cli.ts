@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { assembleContext } from '../context-assembler.js';
-import { getSubordinates } from '../org-tree.js';
+import { getSubordinates, isEffortCompatibleWithModel } from '../org-tree.js';
 import { readConfig, resolveCodeRoot } from '../../services/company-config.js';
 import { getTokenLedger } from '../../services/token-ledger.js';
 import { getSession } from '../../services/session-store.js';
@@ -509,14 +509,13 @@ export class ClaudeCliRunner implements ExecutionRunner {
     args.push('--disallowed-tools', ...disallowed);
 
     // role.yaml/agency.yaml `effort` → `--effort <level>` (low/medium/high/xhigh/max).
-    // `max` is Opus-4-6 only; CLI silently downgrades on other models — warn once per role+model to surface the no-op.
+    // `max` is Opus-class only; CLI silently downgrades on other models — warn once per role+model to surface the no-op.
     if (config.effort) {
-      const modelLower = (config.model ?? '').toLowerCase();
-      if (config.effort === 'max' && modelLower && !modelLower.includes('opus-4-6')) {
-        const warnKey = `${config.roleId}:${modelLower}`;
+      if (!isEffortCompatibleWithModel(config.effort, config.model)) {
+        const warnKey = `${config.roleId}:${(config.model ?? '').toLowerCase()}`;
         if (!warnedEffortIncompat.has(warnKey)) {
           warnedEffortIncompat.add(warnKey);
-          console.warn(`[Runner] Role ${config.roleId}: effort=max requested but model is ${config.model}. Claude CLI will silently downgrade to 'high' (max is Opus-4-6 only). Set model=claude-opus-4-6 or lower effort to use this setting meaningfully.`);
+          console.warn(`[Runner] Role ${config.roleId}: effort=max requested but model is ${config.model}. Claude CLI will silently downgrade to 'high' (max is Opus-class only). Pick an Opus model or lower effort to use this setting meaningfully.`);
         }
       }
       args.push('--effort', config.effort);

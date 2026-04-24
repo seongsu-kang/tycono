@@ -79,6 +79,6 @@ default_effort: high
 - Maps to Claude CLI `--effort` (API `output_config.effort`)
 - Priority: `role.yaml effort` > `agency.yaml default_effort` > model default
 - Tycono strips `CLAUDE_CODE_EFFORT_LEVEL` from the child env when a role has `effort` set — so a stray shell export doesn't silently override role settings
-- `max` is **Opus-4-6 only** — on other models the CLI silently downgrades to `high`; the server emits a once-per-role warning when this happens
+- `max` is **Opus-class only** (verified on opus-4-6 and opus-4-7; sonnet/haiku silently downgrade to `high`); the server emits a once-per-role warning when this happens
 - Omit the field to use the model's default (≈ `high` for external users)
 - Good picks: reasoning-heavy roles (Critic / Verdict-Judge) → `max`, low-stakes roles (log scribe / notifier) → `low`

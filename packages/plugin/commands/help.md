@@ -182,7 +182,7 @@ default_effort: high   # role.yaml 의 effort 가 없으면 이 값 사용
 - **요구사항**: Claude CLI ≥ 2.1 (flag 이 없는 구버전에서는 wave spawn 실패). `claude --version` 으로 확인
 - **우선순위**: `role.yaml effort` > `agency.yaml default_effort` > 모델 default
 - Tycono 는 role 설정이 있으면 `CLAUDE_CODE_EFFORT_LEVEL` 환경변수를 child process 에서 제거 — 유저 쉘 export 가 role 설정을 조용히 덮어쓰는 사고 방지
-- `max` 는 **Opus-4-6 전용** — 다른 모델에 지정 시 CLI 가 조용히 `high` 로 downgrade (서버 로그에 role 당 1회 경고)
+- `max` 는 **Opus-class 전용** (opus-4-6 / opus-4-7 empirically 확인) — sonnet/haiku/older-opus 에 지정 시 CLI 가 조용히 `high` 로 downgrade (서버 로그에 role 당 1회 경고)
 - Reasoning-heavy role (Critic / Verdict-Judge) 을 `max` 로, 저비용 role (scribe / notifier) 을 `low` 로 세팅해서 비용/품질 트레이드오프
 
 ## New in 0.2.0+
