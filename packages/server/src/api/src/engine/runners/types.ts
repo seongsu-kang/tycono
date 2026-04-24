@@ -1,4 +1,4 @@
-import type { OrgTree } from '../org-tree.js';
+import type { OrgTree, EffortLevel } from '../org-tree.js';
 
 /* ─── Runner Interface ──────────────────────── */
 
@@ -37,6 +37,8 @@ export interface RunnerConfig {
   model?: string;
   /** D-014: Session ID for tracking (required — primary identifier for token ledger). */
   sessionId: string;
+  /** Claude CLI --effort level. Resolved from role.yaml → agency.yaml default. */
+  effort?: EffortLevel;
   teamStatus?: TeamStatus;
   attachments?: ImageAttachment[];
   /** Selective dispatch scope — only these roles can be dispatched to */

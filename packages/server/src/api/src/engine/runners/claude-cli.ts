@@ -9,6 +9,9 @@ import { getTokenLedger } from '../../services/token-ledger.js';
 import { getSession } from '../../services/session-store.js';
 import type { ExecutionRunner, RunnerConfig, RunnerCallbacks, RunnerHandle, RunnerResult } from './types.js';
 
+/** dedupe `effort=max + non-opus-4-6` warnings per role+model to avoid log spam across repeated dispatches. */
+const warnedEffortIncompat = new Set<string>();
+
 /* ─── Dispatch Bridge Script (Python3) ────── */
 
 const DISPATCH_SCRIPT = `#!/usr/bin/env python3
@@ -505,9 +508,30 @@ export class ClaudeCliRunner implements ExecutionRunner {
     }
     args.push('--disallowed-tools', ...disallowed);
 
+    // role.yaml/agency.yaml `effort` → `--effort <level>` (low/medium/high/xhigh/max).
+    // `max` is Opus-4-6 only; CLI silently downgrades on other models — warn once per role+model to surface the no-op.
+    if (config.effort) {
+      const modelLower = (config.model ?? '').toLowerCase();
+      if (config.effort === 'max' && modelLower && !modelLower.includes('opus-4-6')) {
+        const warnKey = `${config.roleId}:${modelLower}`;
+        if (!warnedEffortIncompat.has(warnKey)) {
+          warnedEffortIncompat.add(warnKey);
+          console.warn(`[Runner] Role ${config.roleId}: effort=max requested but model is ${config.model}. Claude CLI will silently downgrade to 'high' (max is Opus-4-6 only). Set model=claude-opus-4-6 or lower effort to use this setting meaningfully.`);
+        }
+      }
+      args.push('--effort', config.effort);
+    }
+
     // 7. 프로세스 생성 — 중첩 세션 방지를 위해 CLAUDECODE 환경변수 제거
     const cleanEnv = { ...process.env };
     delete cleanEnv.CLAUDECODE;
+    // When we pass --effort explicitly, shield child from any shell-level
+    // CLAUDE_CODE_EFFORT_LEVEL that would otherwise override per-role config.
+    // (CLI precedence is env > flag, so without this delete a user's shell
+    //  export silently overrides role.yaml/agency.yaml for every role.)
+    if (config.effort) {
+      delete cleanEnv.CLAUDE_CODE_EFFORT_LEVEL;
+    }
 
     // Dispatch Bridge 환경변수 설정
     const apiPort = process.env.PORT || '3001';
@@ -542,7 +566,7 @@ export class ClaudeCliRunner implements ExecutionRunner {
     cleanEnv.TYCONO_ROLE_ID = roleId;
     if (cleanEnv.DISPATCH_WAVE_ID) cleanEnv.TYCONO_WAVE_ID = cleanEnv.DISPATCH_WAVE_ID;
     cleanEnv.TYCONO_API = cleanEnv.DISPATCH_API_URL || `http://localhost:${apiPort}`;
-    console.log(`[Runner] Spawning claude ${isResume ? '--resume ' + config.cliSessionId + ' ' : ''}-p: role=${roleId}, model=${modelName}, maxTurns=${maxTurns}, sessionId=${config.sessionId}, cwd=${cwd}, subordinates=[${subordinates.join(',')}]`);
+    console.log(`[Runner] Spawning claude ${isResume ? '--resume ' + config.cliSessionId + ' ' : ''}-p: role=${roleId}, model=${modelName}, maxTurns=${maxTurns}, sessionId=${config.sessionId}, cwd=${cwd}, subordinates=[${subordinates.join(',')}]${config.effort ? `, effort=${config.effort}` : ''}`);
 
     const proc = spawn('claude', args, {
       cwd,
