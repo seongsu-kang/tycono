@@ -1,6 +1,6 @@
 {
   "name": "tycono",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "AI team orchestration. Give Claude Code an AI team — CTO, Engineer, QA, Designer work together while you watch.",
   "author": {
     "name": "Tycono",

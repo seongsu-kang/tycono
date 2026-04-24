@@ -8,9 +8,24 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "  Tycono Version Info"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# Plugin version — from package.json
-PLUGIN_VER=$(python3 -c "import json; print(json.load(open('$PLUGIN_ROOT/package.json'))['version'])" 2>/dev/null || echo "unknown")
-echo "  Plugin:  $PLUGIN_VER"
+# Plugin version — .claude-plugin/plugin.json is the SSOT that Claude Code
+# actually reads for /plugin updates. package.json is only a secondary label.
+PLUGIN_VER=$(python3 -c "import json; print(json.load(open('$PLUGIN_ROOT/.claude-plugin/plugin.json'))['version'])" 2>/dev/null || echo "unknown")
+PKG_VER=$(python3 -c "import json; print(json.load(open('$PLUGIN_ROOT/package.json'))['version'])" 2>/dev/null || echo "?")
+if [[ "$PLUGIN_VER" != "unknown" && "$PKG_VER" != "?" && "$PLUGIN_VER" != "$PKG_VER" ]]; then
+  echo "  Plugin:  $PLUGIN_VER  ⚠️  package.json says $PKG_VER — version SSOT mismatch"
+else
+  echo "  Plugin:  $PLUGIN_VER"
+fi
+
+# Marketplace latest (from local marketplace clone, no network)
+MKT_MANIFEST="$HOME/.claude/plugins/marketplaces/tycono/.claude-plugin/marketplace.json"
+if [[ -f "$MKT_MANIFEST" ]]; then
+  MKT_VER=$(python3 -c "import json,sys; d=json.load(open('$MKT_MANIFEST')); p=[x for x in d.get('plugins',[]) if x.get('name')=='tycono']; print(p[0]['version'] if p else '?')" 2>/dev/null || echo "?")
+  if [[ "$MKT_VER" != "?" && "$MKT_VER" != "$PLUGIN_VER" ]]; then
+    echo "           marketplace has v$MKT_VER — run '/plugin' to update"
+  fi
+fi
 
 # Server version (check PLUGIN_DATA first, then global, then npm)
 PLUGIN_DATA="${CLAUDE_PLUGIN_DATA:-$HOME/.tycono/plugin-data}"

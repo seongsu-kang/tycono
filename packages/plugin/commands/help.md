@@ -166,6 +166,20 @@ curl http://localhost:{PORT}/api/waves/active
 | **Model Override** | `--model cto=sonnet,engineer=haiku` — role별 모델 변경 |
 | **Confirmation** | wave 시작 전 팀/비용 preview + 승인 (자동) |
 
+## New in 0.2.0+
+
+`--continuous` loop runaway 방어 (BUG-NOOP-LOOP fix). 기본값은 켜져있고 필요 시 override:
+
+| Flag | 기본값 | 역할 |
+|------|--------|------|
+| `--continuous-max-waves <N>` | 20 | N iteration 후 halt |
+| `--continuous-max-wallclock <ms>` | 7200000 (2h) | 누적 시간 초과 시 halt |
+| `--continuous-max-cost <usd>` | 50 | 누적 비용 초과 시 halt |
+
+자동 halt 조건 (유저 플래그 없이도 동작):
+- CEO 가 child role dispatch 없이 완료 → 즉시 halt (noop 판정)
+- 같은 output fingerprint 2회 연속 → halt (동일 판정 재방출 차단)
+
 ## Troubleshooting
 
 **Hook 충돌 (SessionStart error)**
