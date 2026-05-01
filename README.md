@@ -7,42 +7,47 @@ Define your org. Give one order. Your AI team plans, builds, and learns — and 
 Terminal-native. Local-first. Open source.
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/tycono"><img src="https://img.shields.io/npm/v/tycono.svg" alt="npm version" /></a>
-  <a href="https://www.npmjs.com/package/tycono-server"><img src="https://img.shields.io/npm/v/tycono-server.svg" alt="server version" /></a>
-  <a href="https://github.com/seongsu-kang/tycono/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/tycono.svg" alt="license" /></a>
+  <a href="https://www.npmjs.com/package/tycono-server"><img src="https://img.shields.io/npm/v/tycono-server.svg?label=server" alt="server version" /></a>
+  <a href="https://github.com/seongsu-kang/tycono/blob/main/LICENSE"><img src="https://img.shields.io/github/license/seongsu-kang/tycono.svg" alt="license" /></a>
 </p>
 
 <p align="center">
-  <img src=".github/assets/wave-center.png" alt="Tycono TUI — multi-wave workspace" width="700" />
+  <img src=".github/assets/wave-center.png" alt="Tycono — multi-wave workspace" width="700" />
 </p>
 
 ---
 
-## Quick Start
+## Install
 
-### Claude Code Plugin (Recommended)
-
-```bash
-claude plugin install tycono
-```
+Tycono runs as a [Claude Code](https://claude.ai/download) plugin. Inside Claude Code:
 
 ```
-You: /tycono "Build a landing page for my SaaS"
-
-CEO  → Breaks it down, dispatches CTO
-CTO  → Plans architecture, dispatches Engineer
-Engineer → Writes code
-QA   → Reviews and tests
-CEO  → Approves final result
+/plugin marketplace add seongsu-kang/tycono
+/plugin install tycono@seongsu-kang-tycono
 ```
 
-### Terminal (TUI)
+That's it. The first `/tycono` command auto-downloads `tycono-server` into your plugin data directory — no manual `npm install`, no extra config.
 
-```bash
-npx tycono
+```
+/plugin update tycono       # update later
+/tycono:version             # check installed versions
 ```
 
-A setup wizard walks you through naming your company, picking a team, and starting your first wave.
+---
+
+## First Wave
+
+```
+You: /tycono "Build a tower defense game"
+
+CEO       → Breaks it down, dispatches CTO
+CTO       → Plans architecture, dispatches Engineer
+Engineer  → Writes code
+QA        → Reviews and tests
+CEO       → Approves final result
+```
+
+Watch the team work in real time at `http://localhost:8765/ui` (browser dashboard) or with `/tycono:tycono-status`.
 
 ---
 
@@ -57,7 +62,8 @@ id: engineer
 name: "Alex"
 level: member
 reports_to: cto
-model: claude-sonnet-4
+model: claude-opus-4-7
+effort: medium
 
 authority:
   autonomous: ["Code implementation", "Bug fixes"]
@@ -76,15 +82,62 @@ One file defines who the agent is, what they can do, what they know, and who the
 
 ---
 
-## How It Works
+## Agencies
+
+Pre-built team configurations — pick one or design your own.
 
 ```
-1. Install     claude plugin install tycono
-2. Build team  Guided setup wizard — or pick an agency preset
-3. Give order  "Build a tower defense game"
-4. Watch       CEO dispatches CTO → Engineer → QA, in real time
-5. Learn       Knowledge persists. Next wave starts smarter.
+/tycono --agency gamedev "Build a browser game"
+/tycono --agency startup-mvp "Build an MVP"
+/tycono --agency solo-founder "Research and plan my next product"
 ```
+
+Need a custom team for *your* project?
+
+```
+/tycono:agency-create
+```
+
+Walks you through scanning your project, suggesting roles, auto-generating role files, and verifying the team works — all in one guided flow.
+
+Browse the marketplace at [tycono.ai/agencies](https://tycono.ai/agencies).
+
+---
+
+## Commands
+
+```
+/tycono "<task>"              Start a wave
+/tycono:tycono-status         Check current wave progress
+/tycono:tycono-cancel         Cancel active wave
+/tycono:board                 View task board for active wave
+/tycono:report                Generate wave report (markdown)
+/tycono:analysis              Wave cost + token breakdown by role
+/tycono:benchmark             Compare wave performance
+/tycono:version               Show plugin/server versions
+/tycono:help                  Full reference
+/tycono:agency-create         Build a custom agency for your project
+/tycono:agency-install        Install agency from marketplace
+/tycono:agency-list           List installed agencies
+/tycono:agency-publish        Publish to tycono.ai marketplace
+```
+
+---
+
+## Features
+
+| Feature | What it does |
+|---------|-------------|
+| **Wave Dispatch** | One order cascades through the entire org hierarchy. |
+| **Auto-Amend** | Follow-up work continues in the same session — major cost reduction. |
+| **Handoff Summary** | Re-dispatched roles get previous session context automatically. |
+| **Prompt Caching** | Static system prompt sections cached — up to 90% input cost reduction. |
+| **Critic Role** | Built-in Devil's Advocate that challenges team conclusions. |
+| **Memory System** | Pre/During/Post-K. Each wave reads relevant memory, writes new insights, persists across sessions. |
+| **Workflow Visibility** | Browser dashboard (`/ui`) — live org tree, dispatch flow, per-role streams. |
+| **Role-Level Effort** | `effort: low/medium/high` per role — match cognition budget to task. |
+| **AKB** | File-based knowledge system. Search-driven. Compounds over time. |
+| **Heartbeat Watch** | Real-time supervision. Redirect mid-execution if direction drifts. |
 
 ---
 
@@ -100,21 +153,15 @@ A crypto trading research team ran **13.5 hours of autonomous AI work** — zero
 | Cost | $54 total ($2.5/hypothesis) |
 | Critic role | Caught a false-positive before production |
 
-Cost trajectory: $1,342/wave (early beta) → **$4/wave** (current).
+**Cost trajectory across versions:**
 
----
+| Version | Cost per wave |
+|---------|--------------|
+| Early beta (0.1.0-beta.8) | $1,342 |
+| 0.2.0 | $19 |
+| **0.2.16 (current)** | **$4** |
 
-## Features
-
-| Feature | What it does |
-|---------|-------------|
-| **Wave Dispatch** | One order cascades through the entire org hierarchy |
-| **Auto-Amend** | Follow-up work continues in the same session — 70% cost reduction |
-| **Handoff Summary** | Re-dispatched roles get previous session context automatically |
-| **Prompt Caching** | Static system prompt sections cached — up to 90% input cost reduction |
-| **Critic Role** | Built-in Devil's Advocate that challenges team conclusions |
-| **AKB** | File-based knowledge system. Pre-K reads, Post-K writes. Compounds over time. |
-| **Heartbeat Watch** | Real-time supervision. Redirect mid-execution if direction drifts. |
+Auto-Amend + Handoff + Prompt Caching = 67–79% cost reduction per wave on identical workloads.
 
 ---
 
@@ -122,41 +169,14 @@ Cost trajectory: $1,342/wave (early beta) → **$4/wave** (current).
 
 | Surface | Status | What |
 |---------|--------|------|
-| **Plugin** | ✅ Active | Claude Code plugin. Primary entry point. |
-| **TUI** | ✅ Active | Terminal dashboard — org tree, agent streams, wave management. |
-| **Server** | ✅ Active | Headless API backend. All surfaces consume this. |
-| **Pixel** | ❄️ Frozen | Isometric pixel office UI. Kept for demos. |
-
-### Plugin
-
-```bash
-claude plugin install tycono
-/tycono "Build a landing page"
-/tycono --agency gamedev "Build a tower defense"
-```
-
-### TUI
-
-```bash
-npx tycono
-```
-
-```
-┌── W1 Build the API ──────┬── Stream ──────────────────────────┐
-│  3 sessions               │  cto     → dispatch engineer       │
-│  ── Org Tree ──           │  engineer → Write src/api/routes.ts│
-│  ● CEO                    │  qa       ▶ Running test suite...  │
-│  ├─ ● CTO               │                                     │
-│  │  ├─ ● engineer         │                                     │
-│  │  └─ ● qa               │                                     │
-│  └─ ○ CBO                │                                     │
-└───────────────────────────┴─────────────────────────────────────┘
-```
+| **Plugin** | ✅ Primary | Claude Code plugin. Recommended entry point. |
+| **Server** | ✅ Backbone | `tycono-server` headless API. All surfaces consume this. |
+| **TUI** | 🟡 Maintenance | Standalone terminal UI — `npx tycono`. |
+| **Pixel** | ❄️ Frozen | Isometric pixel office. Demo-only. |
 
 ### Pixel (Frozen)
 
-Isometric pixel office — watch your AI team walk around and collaborate visually.
-Not actively developed. See [tycono.ai](https://tycono.ai) for a preview.
+Watch your AI team walk around and collaborate in an isometric office. Not actively developed — kept for demos. See [tycono.ai](https://tycono.ai) for a preview.
 
 <p align="center">
   <img src=".github/assets/hero-office.png" alt="Pixel office" width="600" />
@@ -164,67 +184,10 @@ Not actively developed. See [tycono.ai](https://tycono.ai) for a preview.
 
 ---
 
-## Agencies
-
-Pre-built team configurations for common workflows.
-
-```bash
-/tycono --agency gamedev "Build a browser game"
-/tycono --agency startup-mvp "Build an MVP"
-/tycono --agency solo-founder "Research and plan my next product"
-```
-
-Create custom agencies or browse presets at [tycono.ai/agencies](https://tycono.ai/agencies)
-
----
-
-## Your Company Structure
-
-When you start Tycono, it scaffolds:
-
-```
-your-company/
-├── CLAUDE.md             ← AI operating rules
-├── roles/                ← Role definitions (role.yaml + skills)
-├── projects/             ← Specs, PRDs, tasks
-├── architecture/         ← Technical decisions
-├── knowledge/            ← Domain knowledge (compounds over time)
-└── .tycono/              ← Config
-```
-
----
-
-## CLI Reference
-
-```bash
-npx tycono                # Start TUI
-npx tycono ./my-company   # Specific directory
-npx tycono --classic      # Pixel office (frozen)
-npx tycono --attach       # Connect to running server
-```
-
-### TUI Commands
-
-```
-/new [text]       New wave
-/waves            List waves
-/focus <n>        Switch wave
-/agents           Org tree
-/sessions         Session list
-/kill <id>        Kill session
-/docs             Files from this wave
-/read <path>      Preview file
-/open <path>      Open in $EDITOR
-Tab               Panel mode
-/quit             Exit
-```
-
----
-
 ## Requirements
 
 - Node.js >= 18
-- [Claude Code CLI](https://claude.ai/download) (recommended) or Anthropic API key
+- [Claude Code CLI](https://claude.ai/download)
 
 ---
 
@@ -232,9 +195,8 @@ Tab               Panel mode
 
 ```bash
 git clone https://github.com/seongsu-kang/tycono.git
-cd tycono && npm install
-cd src/api && npm install && cd ../..
-cd src/web && npm install && cd ../..
+cd tycono
+npm install
 npm run dev
 ```
 
@@ -243,13 +205,11 @@ npm run dev
 ```
 tycono/
 ├── packages/
-│   ├── server/           ← tycono-server (headless API)
-│   ├── plugin/           ← Claude Code Plugin
-│   └── web/              ← tycono.ai
-├── src/
-│   ├── api/              ← Core Engine
-│   ├── tui/              ← Terminal UI
-│   └── web/              ← Pixel UI (frozen)
+│   ├── server/   ← tycono-server (headless API)
+│   ├── plugin/   ← Claude Code plugin
+│   ├── web/      ← tycono.ai
+│   ├── tui/      ← Terminal UI
+│   └── pixel/    ← Pixel office (frozen)
 └── README.md
 ```
 
@@ -260,5 +220,4 @@ tycono/
 - [tycono.ai](https://tycono.ai)
 - [Agencies](https://tycono.ai/agencies)
 - [npm: tycono-server](https://www.npmjs.com/package/tycono-server)
-- [GitHub](https://github.com/seongsu-kang/tycono)
 - License: [MIT](LICENSE)
