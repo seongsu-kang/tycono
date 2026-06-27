@@ -21,7 +21,6 @@ function printHelp(): void {
   Usage:
     tycono [path]       Start TUI (default, optionally point to a company directory)
     tycono --headless   Start API server only (no TUI, no browser)
-    tycono --classic    Start pixel office web UI
     tycono --attach     Connect TUI to existing API server
     tycono --help       Show this help message
     tycono --version    Show version
@@ -30,7 +29,6 @@ function printHelp(): void {
     tycono                      Start TUI in current directory
     tycono ./my-company         Start TUI with existing company folder
     tycono --headless           API server only (for plugin/external clients)
-    tycono --classic            Start pixel office web UI
     PORT=3000 tycono --attach   Attach TUI to running server
 
   AI Engine (auto-detected):
@@ -380,15 +378,6 @@ export async function main(args: string[]): Promise<void> {
     return;
   }
 
-  // --classic: legacy pixel office web UI
-  if (command === '--classic' || args.includes('--classic')) {
-    if (command === '--classic' && args[1] && !args[1].startsWith('-')) {
-      process.env.COMPANY_ROOT = path.resolve(args[1]);
-    }
-    await startServer();
-    return;
-  }
-
   // --attach: connect TUI to existing API server
   if (command === '--attach' || args.includes('--attach')) {
     const port = process.env.PORT ? Number(process.env.PORT) : 3000;
@@ -429,9 +418,6 @@ export async function main(args: string[]): Promise<void> {
     console.log('');
     console.log('  New: Terminal mode is now the default.');
     console.log('  Faster, scriptable, built for work.');
-    console.log('');
-    console.log('  Looking for the pixel office?');
-    console.log('  → npx tycono --classic');
     console.log('');
     prefs.tuiNoticeShown = true;
     try {
