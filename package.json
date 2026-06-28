@@ -8,7 +8,6 @@
   },
   "workspaces": [
     "packages/server",
-    "packages/pixel",
     "packages/tui",
     "packages/plugin"
   ],
@@ -20,20 +19,16 @@
     "packages/server/src/shared/",
     "packages/server/templates/",
     "packages/server/bin/",
-    "packages/tui/src/",
-    "packages/pixel/dist/"
+    "packages/tui/src/"
   ],
   "engines": {
     "node": ">=18"
   },
   "scripts": {
-    "dev": "npm run dev:api & npm run dev:web",
+    "dev": "npm run dev:api",
     "dev:api": "tsx watch packages/server/src/api/src/server.ts",
-    "dev:web": "npm run dev --prefix packages/pixel",
-    "build": "npm run build --prefix packages/pixel",
-    "typecheck": "npm run typecheck:api && npm run typecheck:web",
+    "typecheck": "npm run typecheck:api",
     "typecheck:api": "cd packages/server/src/api && npx tsc --noEmit",
-    "typecheck:web": "cd packages/pixel && npx tsc --noEmit",
     "start": "node bin/cli.js"
   },
   "dependencies": {
