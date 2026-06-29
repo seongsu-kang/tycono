@@ -133,24 +133,6 @@ fi
 # =============================================================================
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "S-05: TUI confirmation flow"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-TUI_SRC="${PLUGIN_ROOT}/../tui/src"
-if [[ -d "$TUI_SRC" ]]; then
-  assert_contains "previewWave import" "$(cat "$TUI_SRC"/hooks/useCommand.ts 2>/dev/null)" "previewWave"
-  assert_contains "wave_preview result" "$(cat "$TUI_SRC"/hooks/useCommand.ts 2>/dev/null)" "wave_preview"
-  assert_contains "pendingWaveConfirm state" "$(cat "$TUI_SRC"/app.tsx 2>/dev/null)" "pendingWaveConfirm"
-  assert_contains "Wave Confirmation text" "$(cat "$TUI_SRC"/app.tsx 2>/dev/null)" "Wave Confirmation"
-  assert_contains "Continuous mode help" "$(cat "$TUI_SRC"/app.tsx 2>/dev/null)" "Continuous mode"
-else
-  echo "  [SKIP] TUI source not found"
-  SKIP=$((SKIP + 1))
-fi
-
-# =============================================================================
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "S-06: Model override runtime"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 

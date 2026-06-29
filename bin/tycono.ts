@@ -19,17 +19,15 @@ function printHelp(): void {
   Build an AI company. Watch them work.
 
   Usage:
-    tycono [path]       Start TUI (default, optionally point to a company directory)
-    tycono --headless   Start API server only (no TUI, no browser)
-    tycono --attach     Connect TUI to existing API server
+    tycono [path]       Start server (default, optionally point to a company directory)
+    tycono --headless   Start API server only (no browser)
     tycono --help       Show this help message
     tycono --version    Show version
 
   Examples:
-    tycono                      Start TUI in current directory
-    tycono ./my-company         Start TUI with existing company folder
+    tycono                      Start server in current directory
+    tycono ./my-company         Start server with existing company folder
     tycono --headless           API server only (for plugin/external clients)
-    PORT=3000 tycono --attach   Attach TUI to running server
 
   AI Engine (auto-detected):
     1. Claude Code CLI       Install from https://claude.ai/download (recommended)
@@ -350,9 +348,6 @@ async function startServerForTui(): Promise<void> {
     logStream.write(`[TTY] stdout error: ${err.code ?? err.message}\n`);
   });
 
-  // Start TUI — stdout.write is NOT intercepted, Ink has full control
-  const { startTui } = await import('../packages/tui/src/index.tsx');
-  await startTui({ port });
 }
 
 export async function main(args: string[]): Promise<void> {
@@ -375,26 +370,6 @@ export async function main(args: string[]): Promise<void> {
     }
     process.env.__TYCONO_HEADLESS = '1';
     await startServer();
-    return;
-  }
-
-  // --attach: connect TUI to existing API server
-  if (command === '--attach' || args.includes('--attach')) {
-    const port = process.env.PORT ? Number(process.env.PORT) : 3000;
-    const { startTui } = await import('../packages/tui/src/index.tsx');
-    await startTui({ port });
-    return;
-  }
-
-  // Legacy: `tui` subcommand still works
-  if (command === 'tui') {
-    if (args.includes('--attach')) {
-      const port = process.env.PORT ? Number(process.env.PORT) : 3000;
-      const { startTui } = await import('../packages/tui/src/index.tsx');
-      await startTui({ port });
-      return;
-    }
-    await startServerForTui();
     return;
   }
 
