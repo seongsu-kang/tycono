@@ -223,17 +223,26 @@ function resolveTargetRole(sourceRole: string | undefined, parentSessionId: stri
 
 class ExecutionManager {
   private executions = new Map<string, Execution>();
-  private runner = createRunner();
+  // Lazy: createRunner() must NOT run at module-load. The singleton at file end
+  // (`new ExecutionManager()`) is constructed at import time, so an eager field
+  // initializer created a load-time import cycle
+  // (execution-manager → engine/runners → claude-cli → … → execution-manager) that
+  // threw under Vite SSR / vitest ("__vite_ssr_import_2__ before initialization").
+  // Deferring to first use breaks the cycle (TYC-8). Node/tsx tolerated it; vitest did not.
+  private _runner?: ExecutionRunner;
+  private get runner(): ExecutionRunner {
+    return (this._runner ??= createRunner());
+  }
   private nextId = 1;
   private executionCreatedListeners = new Set<(exec: Execution) => void>();
   private pendingAmendments = new Map<string, string[]>(); // sessionId → queued tasks
 
   setRunner(newRunner: ExecutionRunner): void {
-    this.runner = newRunner;
+    this._runner = newRunner;
   }
 
   refreshRunner(): void {
-    this.runner = createRunner();
+    this._runner = createRunner();
   }
 
   onExecutionCreated(listener: (exec: Execution) => void): () => void {
