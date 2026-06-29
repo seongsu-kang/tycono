@@ -13,8 +13,12 @@ import { COMPANY_ROOT } from './file-reader.js';
 import type { Board, BoardTask, BoardTaskStatus, BoardHistoryEntry, BoardTemplate } from '../../../shared/types.js';
 import { canBoardTaskTransition } from '../../../shared/types.js';
 
-const BOARDS_DIR = () => path.join(COMPANY_ROOT, '.tycono', 'boards');
-const TEMPLATES_DIR = () => path.join(COMPANY_ROOT, '.tycono', 'templates');
+// COMPANY_ROOT is frozen at file-reader module-load; read process.env at call-time so a
+// runtime root change (e.g. a test's beforeAll, or per-request root) is honored. Falls back
+// to the frozen default when env is unset → identical runtime behavior (TYC-8 board.json test).
+const companyRoot = (): string => process.env.COMPANY_ROOT || COMPANY_ROOT;
+const BOARDS_DIR = () => path.join(companyRoot(), '.tycono', 'boards');
+const TEMPLATES_DIR = () => path.join(companyRoot(), '.tycono', 'templates');
 
 function ensureBoardsDir(): string {
   const dir = BOARDS_DIR();
