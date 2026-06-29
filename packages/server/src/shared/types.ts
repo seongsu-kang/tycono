@@ -105,7 +105,7 @@ export interface ActivityEvent {
  *  Session — D-014 통합 세션
  * ═══════════════════════════════════════════════ */
 
-export type SessionStatus = 'active' | 'closed';
+export type SessionStatus = 'active' | 'closed' | 'awaiting_input' | 'done' | 'error';
 export type SessionSource = 'chat' | 'wave' | 'dispatch' | 'consult';
 
 /* ═══════════════════════════════════════════════

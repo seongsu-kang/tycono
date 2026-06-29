@@ -95,7 +95,7 @@ function extractSiblingFindings(parentExec: { childSessionIds: string[]; roleId:
     if (!doneEvent) continue; // Only include completed siblings
 
     // Extract output summary
-    const output = doneEvent.data?.fullOutput || doneEvent.data?.output || '';
+    const output = String(doneEvent.data?.fullOutput || doneEvent.data?.output || '');
     if (!output || output.length < 20) continue;
 
     const summary = String(output).slice(-400).replace(/\n/g, ' ').trim();
