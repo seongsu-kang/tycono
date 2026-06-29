@@ -164,7 +164,7 @@ export function handleExecRequest(req: IncomingMessage, res: ServerResponse): vo
     const waveId = waveDetailMatch[1];
     // Try active waves first
     const activeWaves = waveMultiplexer.getActiveWaves();
-    const active = activeWaves.find((w: { waveId: string }) => w.waveId === waveId);
+    const active = activeWaves.find((w: { id: string }) => w.id === waveId);
     if (active) {
       jsonResponse(res, 200, active);
       return;
@@ -1065,7 +1065,7 @@ function handleWaveSupervisor(directive: string, targetRoles: string[] | undefin
     continuousOpts,
   );
   // Attach templateId for board creation (used in spawnSupervisor)
-  if (templateId) (state as Record<string, unknown>).templateId = templateId;
+  if (templateId) state.templateId = templateId;
 
   if (state.status === 'error') {
     jsonResponse(res, 500, { error: 'Failed to start supervisor' });

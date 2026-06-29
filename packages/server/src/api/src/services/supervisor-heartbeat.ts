@@ -50,6 +50,8 @@ interface SupervisorState {
   pendingDirectives: PendingDirective[];
   pendingQuestions: PendingQuestion[];
   createdAt: string;
+  startedAt?: string | number;
+  templateId?: string;
   /* BUG-NOOP-LOOP: continuous mode guards (Tier 1 fingerprint + Tier 2 ceiling) */
   continuousWaveCount: number;
   continuousStartedAt: number;
@@ -696,7 +698,7 @@ You are the CEO Supervisor responding to the CEO's follow-up question.
     // If templateId provided (from wave API), use template. Otherwise, default from cLevelRoles.
     if (!boardStore.hasBoard(state.waveId)) {
       try {
-        const templateId = (state as Record<string, unknown>).templateId as string | undefined;
+        const templateId = state.templateId;
         if (templateId) {
           const result = boardStore.createBoardFromTemplate(state.waveId, state.directive, templateId);
           if (!result.ok) {
