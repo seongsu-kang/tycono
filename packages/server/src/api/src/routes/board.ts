@@ -18,7 +18,7 @@ export const boardRouter = Router();
 /** POST /api/waves/:waveId/board — Create board with tasks */
 boardRouter.post('/waves/:waveId/board', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { waveId } = req.params;
+    const waveId = String(req.params.waveId);
     const { directive, tasks } = req.body as { directive?: string; tasks?: BoardTask[] };
 
     if (!directive) {
@@ -45,7 +45,7 @@ boardRouter.post('/waves/:waveId/board', (req: Request, res: Response, next: Nex
 /** GET /api/waves/:waveId/board — Get board */
 boardRouter.get('/waves/:waveId/board', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { waveId } = req.params;
+    const waveId = String(req.params.waveId);
     const board = boardStore.getBoard(waveId);
     if (!board) {
       res.status(404).json({ error: 'Board not found' });
@@ -60,7 +60,7 @@ boardRouter.get('/waves/:waveId/board', (req: Request, res: Response, next: Next
 /** PATCH /api/waves/:waveId/board/tasks/:taskId — Update task */
 boardRouter.patch('/waves/:waveId/board/tasks/:taskId', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { waveId, taskId } = req.params;
+    const waveId = String(req.params.waveId); const taskId = String(req.params.taskId);
     const { status, title, description, criteria, assignee } = req.body as {
       status?: BoardTaskStatus;
       title?: string;
@@ -103,7 +103,7 @@ boardRouter.patch('/waves/:waveId/board/tasks/:taskId', (req: Request, res: Resp
 /** POST /api/waves/:waveId/board/tasks — Add new task */
 boardRouter.post('/waves/:waveId/board/tasks', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { waveId } = req.params;
+    const waveId = String(req.params.waveId);
     const task = req.body as BoardTask;
 
     if (!task.id || !task.title || !task.assignee) {
@@ -131,7 +131,7 @@ boardRouter.post('/waves/:waveId/board/tasks', (req: Request, res: Response, nex
 /** POST /api/waves/:waveId/board/tasks/:taskId/complete — Complete task */
 boardRouter.post('/waves/:waveId/board/tasks/:taskId/complete', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { waveId, taskId } = req.params;
+    const waveId = String(req.params.waveId); const taskId = String(req.params.taskId);
     const { result, note } = req.body as { result?: 'pass' | 'fail'; note?: string };
 
     if (!result || (result !== 'pass' && result !== 'fail')) {
@@ -185,7 +185,7 @@ boardRouter.get('/templates', (_req: Request, res: Response, next: NextFunction)
 /** GET /api/waves/:waveId/events — All activity events for a wave (for dashboard feed) */
 boardRouter.get('/waves/:waveId/events', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { waveId } = req.params;
+    const waveId = String(req.params.waveId);
     const limit = parseInt(req.query.limit as string) || 200;
 
     // Find all sessions belonging to this wave
@@ -240,7 +240,7 @@ boardRouter.get('/waves/:waveId/events', (req: Request, res: Response, next: Nex
 /** GET /api/templates/:id — Get template */
 boardRouter.get('/templates/:id', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const template = boardStore.getTemplate(req.params.id);
+    const template = boardStore.getTemplate(String(req.params.id));
     if (!template) {
       res.status(404).json({ error: 'Template not found' });
       return;
@@ -269,7 +269,7 @@ boardRouter.get('/benchmarks', async (req: Request, res: Response, next: NextFun
 // GET /api/benchmarks/:agencyId/:waveId — get specific benchmark
 boardRouter.get('/benchmarks/:agencyId/:waveId', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const benchmark = getBenchmark(req.params.agencyId, req.params.waveId);
+    const benchmark = getBenchmark(String(req.params.agencyId), String(req.params.waveId));
     if (!benchmark) {
       res.status(404).json({ error: 'Benchmark not found' });
       return;
@@ -287,7 +287,7 @@ import * as blackboardStore from '../services/blackboard-store.js';
 /** POST /api/waves/:waveId/blackboard — Write an entry */
 boardRouter.post('/waves/:waveId/blackboard', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { waveId } = req.params;
+    const waveId = String(req.params.waveId);
     const { roleId, key, content, type } = req.body;
     if (!roleId || !key || !content) {
       res.status(400).json({ error: 'roleId, key, content required' });
@@ -304,7 +304,7 @@ boardRouter.post('/waves/:waveId/blackboard', (req: Request, res: Response, next
 /** GET /api/waves/:waveId/blackboard — Read all entries */
 boardRouter.get('/waves/:waveId/blackboard', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { waveId } = req.params;
+    const waveId = String(req.params.waveId);
     const entries = blackboardStore.readEntries(waveId);
     res.json({ waveId, entries, count: entries.length });
   } catch (err) { next(err); }
@@ -373,7 +373,7 @@ boardRouter.get('/experiments', async (_req: Request, res: Response, next: NextF
 // GET /api/experiments/:id — get experiment details
 boardRouter.get('/experiments/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const exp = loadExperiment(req.params.id);
+    const exp = loadExperiment(String(req.params.id));
     if (!exp) {
       res.status(404).json({ error: 'Experiment not found' });
       return;
@@ -387,7 +387,7 @@ boardRouter.get('/experiments/:id', async (req: Request, res: Response, next: Ne
 // DELETE /api/experiments/:id — cleanup experiment (kill servers, remove sandboxes)
 boardRouter.delete('/experiments/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    cleanupExperiment(req.params.id);
+    cleanupExperiment(String(req.params.id));
     res.json({ ok: true });
   } catch (err) {
     next(err);
